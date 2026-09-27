@@ -5,22 +5,22 @@ choisie au hasard à chaque fois, {nom} est remplacé par l'identifiant de la fi
 import random
 
 CREER = [
-    "Fiche `{nom}` créée ! Un nouveau héros (ou monstre) vient de naître.",
-    "`{nom}` est officiellement invoqué·e sur les registres des CDT.",
-    "Nouvelle fiche `{nom}` ouverte. Que l'aventure commence !",
-    "`{nom}` sort de l'œuf. Encore un peu fragile, mais ça viendra.",
+    "`{nom}` a bien été créée. Le plus dur reste à faire.",
+    "`{nom}` a bien été créée. Contrairement à sa fiche sur le site, je crois...",
+    "Nouvelle fiche `{nom}` créée. Nous voilà dans les ennuis.",
+    "`{nom}` pop sur le serveur. Si seulement ça se remplissait automatiquement...",
 ]
 
 MODIFIER = [
-    "Section `{section}` de `{nom}` mise à jour. Beau travail, scribe !",
+    "Section `{section}` de `{nom}` mise à jour.",
     "`{nom}` change de visage : la section `{section}` a été retouchée.",
-    "Modification enregistrée sur `{nom}` (`{section}`). Le grimoire se souvient de tout.",
+    "Modification enregistrée sur `{nom}` (`{section}`). Tant d'éléments ajoutés!",
 ]
 
 SUPPRIMER = [
-    "Fiche `{nom}` supprimée. Repose en paix, cher personnage.",
-    "`{nom}` a été effacé·e des registres. Poussière tu étais...",
-    "`{nom}` disparaît dans les limbes. Adieu !",
+    "Fiche `{nom}` supprimée. Tu préférais le faire à la main ?",
+    "`{nom}` a été effacé·e des registres. Sérieux, nettoyer ? Tu dois être Fyb.",
+    "`{nom}` disparaît dans le couscous, babaye.",
 ]
 
 

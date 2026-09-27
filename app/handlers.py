@@ -51,7 +51,9 @@ async def handle_command(db: Database, data: dict, member_or_user: dict) -> tupl
         await db.create(nom_id, user_id)
         return _message(
             f"{pick(CREER, nom=nom_id)} Complète-la avec `/fiche modifier nom:{nom_id} section:<...>` "
-            "(architecture, identite, physique, apparence). Tu peux la remplir petit à petit.",
+            "(architecture, identite, physique, apparence). Pour l'architecture, pensez au spycolor, aux "
+            "liens (PAS DE LIENS DISCORD, PITIE), skin et compagnie. Je n'ai pas encore de features pour "
+            "les animains, courage.",
             ephemeral=True,
         ), None
 
