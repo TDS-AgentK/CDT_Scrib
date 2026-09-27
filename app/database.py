@@ -33,31 +33,40 @@ class Fiche:
 
 
 class Database:
+    """Connexion paresseuse : ouverte au premier appel, réutilisée tant que le
+    process reste chaud, rouverte automatiquement après un réveil (cold start)."""
+
     def __init__(self, path: str):
         self.path = path
         self._conn: Optional[aiosqlite.Connection] = None
 
-    async def connect(self):
-        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-        self._conn = await aiosqlite.connect(self.path)
-        self._conn.row_factory = aiosqlite.Row
-        await self._conn.execute(SCHEMA)
-        await self._conn.commit()
+    async def _get_conn(self) -> aiosqlite.Connection:
+        if self._conn is None:
+            os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+            self._conn = await aiosqlite.connect(self.path)
+            self._conn.row_factory = aiosqlite.Row
+            await self._conn.execute(SCHEMA)
+            await self._conn.commit()
+        return self._conn
 
     async def close(self):
         if self._conn:
             await self._conn.close()
+            self._conn = None
 
     async def get(self, name: str) -> Optional[Fiche]:
-        async with self._conn.execute(
+        conn = await self._get_conn()
+        async with conn.execute(
             "SELECT * FROM fiches WHERE name = ?", (name.lower(),)
         ) as cursor:
             row = await cursor.fetchone()
             return Fiche(**dict(row)) if row else None
 
-    async def list_names(self) -> list[str]:
-        async with self._conn.execute(
-            "SELECT name FROM fiches ORDER BY name"
+    async def list_names(self, prefix: str = "") -> list[str]:
+        conn = await self._get_conn()
+        async with conn.execute(
+            "SELECT name FROM fiches WHERE name LIKE ? ORDER BY name",
+            (f"{prefix.lower()}%",),
         ) as cursor:
             rows = await cursor.fetchall()
             return [row["name"] for row in rows]
@@ -72,7 +81,8 @@ class Database:
         footer: Optional[str],
         author_id: int,
     ) -> None:
-        await self._conn.execute(
+        conn = await self._get_conn()
+        await conn.execute(
             """
             INSERT INTO fiches (name, title, description, color, image_url, footer, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -86,11 +96,12 @@ class Database:
             """,
             (name.lower(), title, description, color, image_url, footer, author_id),
         )
-        await self._conn.commit()
+        await conn.commit()
 
     async def delete(self, name: str) -> bool:
-        cursor = await self._conn.execute(
+        conn = await self._get_conn()
+        cursor = await conn.execute(
             "DELETE FROM fiches WHERE name = ?", (name.lower(),)
         )
-        await self._conn.commit()
+        await conn.commit()
         return cursor.rowcount > 0
