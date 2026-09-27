@@ -13,41 +13,50 @@ TOKEN = os.environ["DISCORD_TOKEN"]
 APP_ID = os.environ["DISCORD_APPLICATION_ID"]
 GUILD_ID = os.getenv("GUILD_ID") or None
 
+SECTION_CHOICES = [
+    {"name": "Architecture", "value": "architecture"},
+    {"name": "Identité", "value": "identite"},
+    {"name": "Physique", "value": "physique"},
+    {"name": "Apparence", "value": "apparence"},
+]
+
 COMMANDS = [
     {
         "name": "fiche",
-        "description": "Gérer les fiches",
+        "description": "Gérer les fiches de personnage",
         "options": [
             {
                 "type": 1,  # SUB_COMMAND
-                "name": "ajouter",
-                "description": "Créer une nouvelle fiche",
+                "name": "creer",
+                "description": "Créer une nouvelle fiche de personnage",
                 "options": [
-                    {"type": 3, "name": "nom", "description": "Identifiant court (ex: regle-1)", "required": True}
+                    {"type": 3, "name": "nom", "description": "Identifiant court (ex: elena)", "required": True}
                 ],
             },
             {
                 "type": 1,
                 "name": "modifier",
-                "description": "Modifier une fiche existante",
+                "description": "Modifier une section d'une de vos fiches",
                 "options": [
-                    {"type": 3, "name": "nom", "description": "Identifiant de la fiche",
-                     "required": True, "autocomplete": True}
+                    {"type": 3, "name": "nom", "description": "Identifiant de votre fiche",
+                     "required": True, "autocomplete": True},
+                    {"type": 3, "name": "section", "description": "Section à modifier",
+                     "required": True, "choices": SECTION_CHOICES},
                 ],
             },
             {
                 "type": 1,
                 "name": "supprimer",
-                "description": "Supprimer une fiche",
+                "description": "Supprimer une de vos fiches",
                 "options": [
-                    {"type": 3, "name": "nom", "description": "Identifiant de la fiche",
+                    {"type": 3, "name": "nom", "description": "Identifiant de votre fiche",
                      "required": True, "autocomplete": True}
                 ],
             },
             {
                 "type": 1,
                 "name": "voir",
-                "description": "Afficher une fiche",
+                "description": "Afficher une fiche de personnage",
                 "options": [
                     {"type": 3, "name": "nom", "description": "Identifiant de la fiche",
                      "required": True, "autocomplete": True}

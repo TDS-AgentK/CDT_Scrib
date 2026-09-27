@@ -30,6 +30,8 @@ class TextInputStyle:
 
 EPHEMERAL_FLAG = 1 << 6
 
+SECTIONS = ["architecture", "identite", "physique", "apparence"]
+
 
 def valid_name(name: str) -> bool:
     return bool(NAME_RE.match(name))

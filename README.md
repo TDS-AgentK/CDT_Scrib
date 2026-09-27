@@ -1,6 +1,8 @@
 # CDT_Scrib
 
-Bot Discord qui stocke des fiches d'information (embeds) via des commandes slash, avec formulaire de saisie.
+Bot Discord qui permet aux joueurs de créer et gérer eux-mêmes leurs fiches de personnage
+(dans le style des embeds `cembed` utilisés sur les CDT), via des commandes slash et des
+formulaires de saisie.
 
 ## Architecture : HTTP Interactions (pas de Gateway)
 
@@ -10,13 +12,33 @@ Avantage principal : le serveur peut être **mis en veille entre deux usages** (
 
 ## Commandes
 
-- `/fiche ajouter nom:<nom>` — ouvre un formulaire (titre, description, couleur, image, footer).
-- `/fiche modifier nom:<nom>` — même formulaire, pré-rempli avec le contenu existant (autocomplétion du nom).
-- `/fiche supprimer nom:<nom>`
-- `/fiche voir nom:<nom>` — affiche la fiche.
+- `/fiche creer nom:<identifiant>` — crée une fiche vide, dont vous devenez propriétaire.
+- `/fiche modifier nom:<identifiant> section:<architecture|identite|physique|apparence>` —
+  ouvre le formulaire de la section choisie, pré-rempli avec le contenu existant.
+  Un modal Discord étant limité à 5 champs, la fiche est découpée en 4 sections à remplir
+  indépendamment, dans l'ordre voulu, petit à petit.
+- `/fiche supprimer nom:<identifiant>`
+- `/fiche voir nom:<identifiant>` — affiche la fiche (et un second message avec les
+  illustrations d'équipement, si un lien a été renseigné).
 - `/fiche liste` — liste toutes les fiches enregistrées.
 
-Noms de fiches : minuscules, lettres/chiffres/`-`/`_` uniquement. Aucune limite de nombre de fiches (elles ne sont pas enregistrées comme des commandes Discord, contrairement à la limite de 100 commandes slash).
+Seul le créateur d'une fiche peut la modifier ou la supprimer (`/fiche modifier` et
+`/fiche supprimer` ne proposent en autocomplétion que ses propres fiches ; `/fiche voir`
+propose toutes les fiches existantes).
+
+### Champs par section
+
+- **architecture** : couleur (valeur décimale, cf. [spycolor.com](https://www.spycolor.com/ff0000)),
+  lien de l'image du personnage, nom de la skin (ex: `Sei.png`), lien vers la fiche CDT,
+  lien de l'image des équipements (optionnel — déclenche le second message).
+- **identite** : nom, surnom, titre (ex: *Chasseuse de mages*), genre, race.
+- **physique** : taille, poids, tranche d'âge physique, morphologie, couleur et longueur des cheveux.
+- **apparence** : coiffure, couleur des yeux, tenue, armement & équipement.
+
+Tous les champs sont optionnels et peuvent être complétés ou vidés à tout moment : une fiche
+partielle s'affiche simplement sans les champs manquants. Identifiants de fiche : minuscules,
+lettres/chiffres/`-`/`_` uniquement. Aucune limite de nombre de fiches (elles ne sont pas
+enregistrées comme des commandes Discord, contrairement à la limite de 100 commandes slash).
 
 Les données sont persistées dans une base SQLite (`data/fiches.db` par défaut).
 

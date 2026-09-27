@@ -1,18 +1,24 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, fields as dataclass_fields
 from typing import Optional
 
 import aiosqlite
 
-SCHEMA = """
+SECTION_COLUMNS = {
+    "architecture": ["couleur", "image_personnage_url", "nom_skin", "lien_cdt", "equipement_image_url"],
+    "identite": ["nom", "surnom", "titre", "genre", "race"],
+    "physique": ["taille", "poids", "tranche_age", "morphologie", "couleur_cheveux"],
+    "apparence": ["coiffure", "couleur_yeux", "tenue", "armement_equipement"],
+}
+
+TEXT_COLUMNS = [c for cols in SECTION_COLUMNS.values() for c in cols if c != "couleur"]
+
+SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS fiches (
     name TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    color INTEGER NOT NULL DEFAULT 0x5865F2,
-    image_url TEXT,
-    footer TEXT,
-    created_by INTEGER NOT NULL,
+    owner_id INTEGER NOT NULL,
+    couleur INTEGER,
+    {", ".join(f"{c} TEXT" for c in TEXT_COLUMNS)},
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -22,14 +28,31 @@ CREATE TABLE IF NOT EXISTS fiches (
 @dataclass
 class Fiche:
     name: str
-    title: str
-    description: str
-    color: int
-    image_url: Optional[str]
-    footer: Optional[str]
-    created_by: int
+    owner_id: int
+    couleur: Optional[int]
+    image_personnage_url: Optional[str]
+    nom_skin: Optional[str]
+    lien_cdt: Optional[str]
+    equipement_image_url: Optional[str]
+    nom: Optional[str]
+    surnom: Optional[str]
+    titre: Optional[str]
+    genre: Optional[str]
+    race: Optional[str]
+    taille: Optional[str]
+    poids: Optional[str]
+    tranche_age: Optional[str]
+    morphologie: Optional[str]
+    couleur_cheveux: Optional[str]
+    coiffure: Optional[str]
+    couleur_yeux: Optional[str]
+    tenue: Optional[str]
+    armement_equipement: Optional[str]
     created_at: str
     updated_at: str
+
+
+FICHE_FIELD_NAMES = {f.name for f in dataclass_fields(Fiche)}
 
 
 class Database:
@@ -60,7 +83,7 @@ class Database:
             "SELECT * FROM fiches WHERE name = ?", (name.lower(),)
         ) as cursor:
             row = await cursor.fetchone()
-            return Fiche(**dict(row)) if row else None
+            return Fiche(**{k: row[k] for k in FICHE_FIELD_NAMES}) if row else None
 
     async def list_names(self, prefix: str = "") -> list[str]:
         conn = await self._get_conn()
@@ -71,30 +94,29 @@ class Database:
             rows = await cursor.fetchall()
             return [row["name"] for row in rows]
 
-    async def upsert(
-        self,
-        name: str,
-        title: str,
-        description: str,
-        color: int,
-        image_url: Optional[str],
-        footer: Optional[str],
-        author_id: int,
-    ) -> None:
+    async def list_names_by_owner(self, owner_id: int, prefix: str = "") -> list[str]:
+        conn = await self._get_conn()
+        async with conn.execute(
+            "SELECT name FROM fiches WHERE owner_id = ? AND name LIKE ? ORDER BY name",
+            (owner_id, f"{prefix.lower()}%"),
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [row["name"] for row in rows]
+
+    async def create(self, name: str, owner_id: int) -> None:
         conn = await self._get_conn()
         await conn.execute(
-            """
-            INSERT INTO fiches (name, title, description, color, image_url, footer, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(name) DO UPDATE SET
-                title = excluded.title,
-                description = excluded.description,
-                color = excluded.color,
-                image_url = excluded.image_url,
-                footer = excluded.footer,
-                updated_at = datetime('now')
-            """,
-            (name.lower(), title, description, color, image_url, footer, author_id),
+            "INSERT INTO fiches (name, owner_id) VALUES (?, ?)", (name.lower(), owner_id)
+        )
+        await conn.commit()
+
+    async def update_section(self, name: str, values: dict) -> None:
+        conn = await self._get_conn()
+        columns = list(values.keys())
+        assignments = ", ".join(f"{c} = ?" for c in columns)
+        await conn.execute(
+            f"UPDATE fiches SET {assignments}, updated_at = datetime('now') WHERE name = ?",
+            (*values.values(), name.lower()),
         )
         await conn.commit()
 

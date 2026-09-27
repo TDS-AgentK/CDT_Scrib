@@ -1,16 +1,16 @@
-from app.database import Database
-from app.discord_types import EPHEMERAL_FLAG, ResponseType, valid_name
-from app.embeds import build_embed, build_fiche_modal
+from app.database import SECTION_COLUMNS, Database
+from app.discord_types import EPHEMERAL_FLAG, SECTIONS, ResponseType, valid_name
+from app.embeds import build_character_embed, build_illustrations_embed, build_section_modal
 
-LOOKUP_LIMIT = 25
+AUTOCOMPLETE_LIMIT = 25
 
 
-def _message(content: str = None, *, embed: dict = None, ephemeral: bool = False) -> dict:
+def _message(content: str = None, *, embeds: list[dict] = None, ephemeral: bool = False) -> dict:
     data = {}
     if content is not None:
         data["content"] = content
-    if embed is not None:
-        data["embeds"] = [embed]
+    if embeds is not None:
+        data["embeds"] = embeds
     if ephemeral:
         data["flags"] = EPHEMERAL_FLAG
     return {"type": ResponseType.CHANNEL_MESSAGE_WITH_SOURCE, "data": data}
@@ -25,56 +25,78 @@ def _find_subcommand(options: list[dict]) -> tuple[str, dict]:
     return sub["name"], _extract_options(sub.get("options", []))
 
 
-async def handle_command(db: Database, data: dict, member_or_user: dict) -> dict:
+async def handle_command(db: Database, data: dict, member_or_user: dict) -> tuple[dict, dict | None]:
     sub_name, opts = _find_subcommand(data.get("options", []))
-    nom = (opts.get("nom") or "").strip().lower()
+    nom_id = (opts.get("nom") or "").strip().lower()
     user_id = int(member_or_user["id"])
 
     if sub_name == "liste":
         names = await db.list_names()
         if not names:
-            return _message("Aucune fiche enregistrée.", ephemeral=True)
+            return _message("Aucune fiche enregistrée.", ephemeral=True), None
         formatted = ", ".join(f"`{n}`" for n in names)
-        return _message(f"**{len(names)} fiche(s) :** {formatted}", ephemeral=True)
+        return _message(f"**{len(names)} fiche(s) :** {formatted}", ephemeral=True), None
 
-    if not valid_name(nom):
+    if not valid_name(nom_id):
         return _message(
-            "Nom invalide : lettres minuscules, chiffres, `-` et `_` uniquement (1-80 caractères).",
+            "Identifiant invalide : lettres minuscules, chiffres, `-` et `_` uniquement (1-80 caractères).",
             ephemeral=True,
-        )
+        ), None
 
-    if sub_name == "ajouter":
-        existing = await db.get(nom)
+    if sub_name == "creer":
+        existing = await db.get(nom_id)
         if existing:
-            return _message(f"Une fiche `{nom}` existe déjà. Utilise `/fiche modifier`.", ephemeral=True)
-        return {"type": ResponseType.MODAL, "data": build_fiche_modal(f"fiche_add:{nom}", nom, None)}
+            return _message(f"Une fiche `{nom_id}` existe déjà.", ephemeral=True), None
+        await db.create(nom_id, user_id)
+        return _message(
+            f"Fiche `{nom_id}` créée. Complète-la avec `/fiche modifier nom:{nom_id} section:<...>` "
+            "(architecture, identite, physique, apparence). Tu peux la remplir petit à petit.",
+            ephemeral=True,
+        ), None
 
     if sub_name == "modifier":
-        existing = await db.get(nom)
-        if not existing:
-            return _message(f"Aucune fiche `{nom}` trouvée.", ephemeral=True)
-        return {"type": ResponseType.MODAL, "data": build_fiche_modal(f"fiche_edit:{nom}", nom, existing)}
+        fiche = await db.get(nom_id)
+        if not fiche:
+            return _message(f"Aucune fiche `{nom_id}` trouvée.", ephemeral=True), None
+        if fiche.owner_id != user_id:
+            return _message("Cette fiche ne vous appartient pas.", ephemeral=True), None
+        section = opts.get("section")
+        if section not in SECTIONS:
+            return _message("Section invalide.", ephemeral=True), None
+        return {
+            "type": ResponseType.MODAL,
+            "data": build_section_modal(f"fiche_edit:{nom_id}:{section}", section, fiche),
+        }, None
 
     if sub_name == "supprimer":
-        deleted = await db.delete(nom)
-        if deleted:
-            return _message(f"Fiche `{nom}` supprimée.", ephemeral=True)
-        return _message(f"Aucune fiche `{nom}` trouvée.", ephemeral=True)
+        fiche = await db.get(nom_id)
+        if not fiche:
+            return _message(f"Aucune fiche `{nom_id}` trouvée.", ephemeral=True), None
+        if fiche.owner_id != user_id:
+            return _message("Cette fiche ne vous appartient pas.", ephemeral=True), None
+        await db.delete(nom_id)
+        return _message(f"Fiche `{nom_id}` supprimée.", ephemeral=True), None
 
     if sub_name == "voir":
-        fiche = await db.get(nom)
+        fiche = await db.get(nom_id)
         if not fiche:
-            return _message(f"Aucune fiche `{nom}` trouvée.", ephemeral=True)
-        return _message(embed=build_embed(fiche))
+            return _message(f"Aucune fiche `{nom_id}` trouvée.", ephemeral=True), None
+        return _message(embeds=[build_character_embed(fiche)]), build_illustrations_embed(fiche)
 
-    return _message("Commande inconnue.", ephemeral=True)
+    return _message("Commande inconnue.", ephemeral=True), None
 
 
-async def handle_autocomplete(db: Database, data: dict) -> dict:
+async def handle_autocomplete(db: Database, data: dict, member_or_user: dict) -> dict:
     sub_name, opts = _find_subcommand(data.get("options", []))
     current = (opts.get("nom") or "").strip().lower()
-    names = await db.list_names(prefix=current)
-    choices = [{"name": n, "value": n} for n in names[:LOOKUP_LIMIT]]
+
+    if sub_name == "voir":
+        names = await db.list_names(prefix=current)
+    else:
+        user_id = int(member_or_user["id"])
+        names = await db.list_names_by_owner(user_id, prefix=current)
+
+    choices = [{"name": n, "value": n} for n in names[:AUTOCOMPLETE_LIMIT]]
     return {"type": ResponseType.APPLICATION_COMMAND_AUTOCOMPLETE_RESULT, "data": {"choices": choices}}
 
 
@@ -86,28 +108,27 @@ def _modal_values(data: dict) -> dict:
     return values
 
 
-async def handle_modal_submit(db: Database, data: dict, member_or_user: dict) -> dict:
+async def handle_modal_submit(db: Database, data: dict, member_or_user: dict):
+    """Retourne (response, followup_embed_or_None)."""
     custom_id = data["custom_id"]
-    _, nom = custom_id.split(":", 1)
-    values = _modal_values(data)
+    _, nom_id, section = custom_id.split(":", 2)
+    raw_values = _modal_values(data)
 
-    try:
-        color = int(values.get("color") or "5865F2", 16)
-    except ValueError:
-        color = 0x5865F2
+    columns = SECTION_COLUMNS[section]
+    values = {}
+    for column in columns:
+        raw = raw_values.get(column, "")
+        if column == "couleur":
+            values[column] = int(raw) if raw.strip().isdigit() else None
+        else:
+            values[column] = raw.strip() or None
 
-    await db.upsert(
-        name=nom,
-        title=values.get("title", nom),
-        description=values.get("description", ""),
-        color=color,
-        image_url=values.get("image") or None,
-        footer=values.get("footer") or None,
-        author_id=int(member_or_user["id"]),
-    )
-    fiche = await db.get(nom)
-    return _message(
-        content=f"Fiche `{nom}` enregistrée.",
-        embed=build_embed(fiche),
+    await db.update_section(nom_id, values)
+    fiche = await db.get(nom_id)
+
+    response = _message(
+        content=f"Section `{section}` de la fiche `{nom_id}` mise à jour.",
+        embeds=[build_character_embed(fiche)],
         ephemeral=True,
     )
+    return response, None
