@@ -1,6 +1,7 @@
 from app.database import SECTION_COLUMNS, Database
 from app.discord_types import EPHEMERAL_FLAG, SECTIONS, ResponseType, valid_name
 from app.embeds import build_character_embed, build_illustrations_embed, build_section_modal
+from app.flavors import CREER, MODIFIER, SUPPRIMER, pick
 
 AUTOCOMPLETE_LIMIT = 25
 
@@ -49,8 +50,10 @@ async def handle_command(db: Database, data: dict, member_or_user: dict) -> tupl
             return _message(f"Une fiche `{nom_id}` existe déjà.", ephemeral=True), None
         await db.create(nom_id, user_id)
         return _message(
-            f"Fiche `{nom_id}` créée. Complète-la avec `/fiche modifier nom:{nom_id} section:<...>` "
-            "(architecture, identite, physique, apparence). Tu peux la remplir petit à petit.",
+            f"{pick(CREER, nom=nom_id)} Complète-la avec `/fiche modifier nom:{nom_id} section:<...>` "
+            "(architecture, identite, physique, apparence). Pour l'architecture, pensez au spycolor, aux "
+            "liens (PAS DE LIENS DISCORD, PITIE), skin et compagnie. Je n'ai pas encore de features pour "
+            "les animains, courage.",
             ephemeral=True,
         ), None
 
@@ -75,7 +78,7 @@ async def handle_command(db: Database, data: dict, member_or_user: dict) -> tupl
         if fiche.owner_id != user_id:
             return _message("Cette fiche ne vous appartient pas.", ephemeral=True), None
         await db.delete(nom_id)
-        return _message(f"Fiche `{nom_id}` supprimée.", ephemeral=True), None
+        return _message(pick(SUPPRIMER, nom=nom_id), ephemeral=True), None
 
     if sub_name == "voir":
         fiche = await db.get(nom_id)
@@ -127,7 +130,7 @@ async def handle_modal_submit(db: Database, data: dict, member_or_user: dict):
     fiche = await db.get(nom_id)
 
     response = _message(
-        content=f"Section `{section}` de la fiche `{nom_id}` mise à jour.",
+        content=pick(MODIFIER, nom=nom_id, section=section),
         embeds=[build_character_embed(fiche)],
         ephemeral=True,
     )
