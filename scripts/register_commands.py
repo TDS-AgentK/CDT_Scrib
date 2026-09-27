@@ -78,7 +78,10 @@ def main():
     headers = {"Authorization": f"Bot {TOKEN}"}
 
     response = httpx.put(url, headers=headers, json=COMMANDS, timeout=30)
-    response.raise_for_status()
+    if response.status_code >= 400:
+        print(f"Erreur {response.status_code} de l'API Discord :")
+        print(response.text)
+        response.raise_for_status()
     scope = f"serveur {GUILD_ID}" if GUILD_ID else "global (propagation jusqu'à 1h)"
     print(f"{len(response.json())} commande(s) enregistrée(s) — portée : {scope}")
 
