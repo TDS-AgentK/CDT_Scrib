@@ -5,15 +5,15 @@ SKIN_BASE_URL = "http://chipset.slayersonline.net/Miniature/"
 
 # (colonne, libellé affiché, inline)
 CHARACTER_FIELDS = [
-    ("genre", "Sexe", False),
-    ("race", "Race", False),
+    ("genre", "Sexe", True),
+    ("race", "Race", True),
     ("taille", "Taille", True),
     ("poids", "Poids", True),
-    ("morphologie", "Morphologie", False),
-    ("tranche_age", "Tranche d'âge physique", False),
-    ("couleur_cheveux", "Couleur des cheveux", False),
+    ("morphologie", "Morphologie", True),
+    ("tranche_age", "Tranche d'âge physique", True),
+    ("couleur_yeux", "Couleur des yeux", True),
+    ("couleur_cheveux", "Couleur et longueur des cheveux", False),
     ("coiffure", "Coiffure", False),
-    ("couleur_yeux", "Couleur des yeux", False),
     ("tenue", "Tenue", False),
     ("armement_equipement", "Armement & équipement", False),
 ]
@@ -24,10 +24,10 @@ def _skin_url(nom_skin: str | None) -> str | None:
 
 
 def build_character_embed(fiche: Fiche) -> dict:
-    embed: dict = {"description": "..."}
+    embed: dict = {"description": fiche.surnom if fiche.surnom else "..."}
 
-    if fiche.titre:
-        embed["title"] = fiche.titre
+    if fiche.nom:
+        embed["title"] = fiche.nom
     if fiche.couleur is not None:
         embed["color"] = fiche.couleur
 
@@ -103,7 +103,6 @@ SECTION_MODAL_DEFS = {
         "fields": [
             ("nom", "Nom du personnage", TextInputStyle.SHORT, 256),
             ("surnom", "Surnom (optionnel)", TextInputStyle.SHORT, 256),
-            ("titre", "Titre (ex: Chasseuse de mages)", TextInputStyle.SHORT, 256),
             ("genre", "Genre", TextInputStyle.SHORT, 64),
             ("race", "Race", TextInputStyle.SHORT, 64),
         ],
@@ -115,14 +114,14 @@ SECTION_MODAL_DEFS = {
             ("poids", "Poids", TextInputStyle.SHORT, 64),
             ("tranche_age", "Tranche d'âge physique", TextInputStyle.SHORT, 64),
             ("morphologie", "Morphologie", TextInputStyle.SHORT, 128),
-            ("couleur_cheveux", "Couleur et longueur des cheveux", TextInputStyle.SHORT, 256),
+            ("couleur_yeux", "Couleur des yeux", TextInputStyle.SHORT, 64),
         ],
     },
     "apparence": {
         "title": "Fiche · Apparence",
         "fields": [
+            ("couleur_cheveux", "Couleur et longueur des cheveux", TextInputStyle.SHORT, 256),
             ("coiffure", "Coiffure", TextInputStyle.PARAGRAPH, 1024),
-            ("couleur_yeux", "Couleur des yeux", TextInputStyle.SHORT, 64),
             ("tenue", "Tenue", TextInputStyle.PARAGRAPH, 1024),
             ("armement_equipement", "Armement & équipement", TextInputStyle.PARAGRAPH, 1024),
         ],
