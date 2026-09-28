@@ -6,12 +6,15 @@ import aiosqlite
 
 SECTION_COLUMNS = {
     "architecture": ["couleur", "image_personnage_url", "nom_skin", "lien_cdt", "equipement_image_url"],
-    "identite": ["nom", "surnom", "titre", "genre", "race"],
-    "physique": ["taille", "poids", "tranche_age", "morphologie", "couleur_cheveux"],
-    "apparence": ["coiffure", "couleur_yeux", "tenue", "armement_equipement"],
+    "identite": ["nom", "surnom", "genre", "race"],
+    "physique": ["taille", "poids", "tranche_age", "morphologie", "couleur_yeux"],
+    "apparence": ["couleur_cheveux", "coiffure", "tenue", "armement_equipement"],
 }
 
-TEXT_COLUMNS = [c for cols in SECTION_COLUMNS.values() for c in cols if c != "couleur"]
+# "titre" n'est plus éditable via un formulaire (le titre affiché est désormais
+# toujours le nom), mais la colonne reste en base pour compatibilité avec les
+# fiches existantes et le dataclass Fiche.
+TEXT_COLUMNS = ["titre"] + [c for cols in SECTION_COLUMNS.values() for c in cols if c != "couleur"]
 
 SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS fiches (

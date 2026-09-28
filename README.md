@@ -31,9 +31,13 @@ propose toutes les fiches existantes).
 - **architecture** : couleur (valeur décimale, cf. [spycolor.com](https://www.spycolor.com/ff0000)),
   lien de l'image du personnage, nom de la skin (ex: `Sei.png`), lien vers la fiche CDT,
   lien de l'image des équipements (optionnel — déclenche le second message).
-- **identite** : nom, surnom, titre (ex: *Chasseuse de mages*), genre, race.
-- **physique** : taille, poids, tranche d'âge physique, morphologie, couleur et longueur des cheveux.
-- **apparence** : coiffure, couleur des yeux, tenue, armement & équipement.
+- **identite** : nom, surnom, genre, race.
+- **physique** : taille, poids, tranche d'âge physique, morphologie, couleur des yeux.
+- **apparence** : couleur et longueur des cheveux, coiffure, tenue, armement & équipement.
+
+Le titre affiché en haut de la fiche est toujours le nom du personnage ; le surnom apparaît
+juste en-dessous (à la place d'un "..." par défaut si aucun surnom n'est renseigné), et le
+footer combine les deux ("Nom, Surnom").
 
 Tous les champs sont optionnels et peuvent être complétés ou vidés à tout moment : une fiche
 partielle s'affiche simplement sans les champs manquants. Identifiants de fiche : minuscules,
