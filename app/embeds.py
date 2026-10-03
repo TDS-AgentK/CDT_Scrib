@@ -91,7 +91,7 @@ SECTION_MODAL_DEFS = {
     "architecture": {
         "title": "Fiche · Architecture",
         "fields": [
-            ("couleur", "Couleur (valeur décimale, spycolor.com)", TextInputStyle.SHORT, 10),
+            ("couleur", "Couleur (code hex RGB, ex: 330033)", TextInputStyle.SHORT, 7),
             ("image_personnage_url", "Lien de l'image du personnage", TextInputStyle.SHORT, None),
             ("nom_skin", "Nom de la skin (ex: Sei.png)", TextInputStyle.SHORT, 128),
             ("lien_cdt", "Lien de la fiche sur les CDT", TextInputStyle.SHORT, None),
@@ -134,14 +134,12 @@ def build_section_modal(custom_id: str, section: str, fiche: Fiche | None) -> di
     rows = []
     for column, label, style, max_length in definition["fields"]:
         existing_value = getattr(fiche, column, None) if fiche else None
+        if column == "couleur":
+            display_value = f"{existing_value:06X}" if existing_value is not None else ""
+        else:
+            display_value = "" if existing_value is None else str(existing_value)
         rows.append(
-            text_input(
-                column,
-                label,
-                style=style,
-                value="" if existing_value is None else str(existing_value),
-                max_length=max_length,
-            )
+            text_input(column, label, style=style, value=display_value, max_length=max_length)
         )
     return {
         "custom_id": custom_id,

@@ -28,7 +28,7 @@ propose toutes les fiches existantes).
 
 ### Champs par section
 
-- **architecture** : couleur (valeur décimale, cf. [spycolor.com](https://www.spycolor.com/ff0000)),
+- **architecture** : couleur (code hexadécimal RGB, ex: `330033`, avec ou sans `#` — n'importe quel sélecteur de couleur en ligne convient),
   lien de l'image du personnage, nom de la skin (ex: `Sei.png`), lien vers la fiche CDT,
   lien de l'image des équipements (optionnel — déclenche le second message).
 - **identite** : nom, surnom, genre, race.
