@@ -111,6 +111,13 @@ def _modal_values(data: dict) -> dict:
     return values
 
 
+def _parse_hex_color(raw: str) -> int | None:
+    value = raw.strip().lstrip("#")
+    if len(value) == 6 and all(c in "0123456789abcdefABCDEF" for c in value):
+        return int(value, 16)
+    return None
+
+
 async def handle_modal_submit(db: Database, data: dict, member_or_user: dict):
     """Retourne (response, followup_embed_or_None)."""
     custom_id = data["custom_id"]
@@ -122,7 +129,7 @@ async def handle_modal_submit(db: Database, data: dict, member_or_user: dict):
     for column in columns:
         raw = raw_values.get(column, "")
         if column == "couleur":
-            values[column] = int(raw) if raw.strip().isdigit() else None
+            values[column] = _parse_hex_color(raw)
         else:
             values[column] = raw.strip() or None
 
