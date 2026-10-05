@@ -4,10 +4,12 @@ import os
 import httpx
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, Request, Response
+from fastapi.responses import FileResponse
 
 from app.database import Database
-from app.discord_types import InteractionType, ResponseType
-from app.handlers import handle_autocomplete, handle_command, handle_modal_submit
+from app.discord_types import EPHEMERAL_FLAG, InteractionType, ResponseType
+from app.handlers import find_subcommand, handle_autocomplete, handle_command, handle_modal_submit, validate_image_upload
+from app.uploads import build_filename, save_bytes
 from app.verify import verify_signature
 
 load_dotenv()
@@ -18,6 +20,7 @@ log = logging.getLogger("cdt_scrib")
 DISCORD_PUBLIC_KEY = os.getenv("DISCORD_PUBLIC_KEY")
 DISCORD_APPLICATION_ID = os.getenv("DISCORD_APPLICATION_ID")
 DATABASE_PATH = os.getenv("DATABASE_PATH", "data/fiches.db")
+UPLOADS_DIR = os.getenv("UPLOADS_DIR") or os.path.join(os.path.dirname(DATABASE_PATH) or ".", "uploads")
 
 if not DISCORD_PUBLIC_KEY:
     raise RuntimeError(
@@ -38,6 +41,15 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/images/{filename}")
+async def get_image(filename: str):
+    safe_name = os.path.basename(filename)
+    path = os.path.join(UPLOADS_DIR, safe_name)
+    if not os.path.isfile(path):
+        return Response(status_code=404)
+    return FileResponse(path)
+
+
 async def _send_followup(interaction_token: str, embed: dict):
     url = f"https://discord.com/api/v10/webhooks/{DISCORD_APPLICATION_ID}/{interaction_token}"
     try:
@@ -47,6 +59,38 @@ async def _send_followup(interaction_token: str, embed: dict):
                 log.error("Échec de l'envoi du message de suivi: %s %s", resp.status_code, resp.text)
     except httpx.HTTPError as exc:
         log.error("Erreur réseau lors de l'envoi du message de suivi: %s", exc)
+
+
+async def _edit_original(interaction_token: str, content: str):
+    url = f"https://discord.com/api/v10/webhooks/{DISCORD_APPLICATION_ID}/{interaction_token}/messages/@original"
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.patch(url, json={"content": content}, timeout=10)
+            if resp.status_code >= 400:
+                log.error("Échec de la mise à jour du message: %s %s", resp.status_code, resp.text)
+    except httpx.HTTPError as exc:
+        log.error("Erreur réseau lors de la mise à jour du message: %s", exc)
+
+
+async def _handle_image_upload(nom_id: str, column: str, attachment: dict, base_url: str, interaction_token: str):
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(attachment["url"], timeout=20)
+            resp.raise_for_status()
+            content = resp.content
+
+        filename = build_filename(attachment.get("content_type", ""))
+        save_bytes(UPLOADS_DIR, filename, content)
+        public_url = f"{base_url}/images/{filename}"
+
+        await db.update_section(nom_id, {column: public_url})
+        await _edit_original(interaction_token, f"Image enregistrée sur `{nom_id}` : {public_url}")
+    except httpx.HTTPError as exc:
+        log.error("Erreur réseau lors de l'upload d'image: %s", exc)
+        await _edit_original(interaction_token, "Erreur réseau pendant le téléchargement de l'image. Réessaie.")
+    except OSError as exc:
+        log.error("Erreur disque lors de l'upload d'image: %s", exc)
+        await _edit_original(interaction_token, "Erreur serveur pendant l'enregistrement de l'image. Réessaie.")
 
 
 @app.post("/interactions")
@@ -67,7 +111,23 @@ async def interactions(request: Request, background_tasks: BackgroundTasks):
     member_or_user = payload.get("member", {}).get("user") or payload.get("user")
 
     if interaction_type == InteractionType.APPLICATION_COMMAND:
-        response, followup_embed = await handle_command(db, payload["data"], member_or_user)
+        data = payload["data"]
+        sub_name, _ = find_subcommand(data.get("options", []))
+
+        if sub_name == "image":
+            error_response, nom_id, column, attachment = await validate_image_upload(db, data, member_or_user)
+            if error_response:
+                return error_response
+            base_url = f"https://{request.headers.get('host')}"
+            background_tasks.add_task(
+                _handle_image_upload, nom_id, column, attachment, base_url, payload["token"]
+            )
+            return {
+                "type": ResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+                "data": {"flags": EPHEMERAL_FLAG},
+            }
+
+        response, followup_embed = await handle_command(db, data, member_or_user)
         if followup_embed:
             background_tasks.add_task(_send_followup, payload["token"], followup_embed)
         return response
