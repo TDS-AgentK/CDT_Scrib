@@ -4,11 +4,29 @@ Bot Discord qui permet aux joueurs de créer et gérer eux-mêmes leurs fiches d
 (dans le style des embeds `cembed` utilisés sur les CDT), via des commandes slash et des
 formulaires de saisie.
 
-## Architecture : HTTP Interactions (pas de Gateway)
+## Architecture : HTTP Interactions + Gateway (économie)
 
 Contrairement à un bot Discord classique (connexion WebSocket permanente), ce bot répond aux commandes via un **endpoint HTTP** (`/interactions`) : Discord envoie une requête à chaque interaction, le serveur répond, point.
 
-Avantage principal : le serveur peut être **mis en veille entre deux usages** (ex: mode "Serverless" de Railway) et se réveille sur la première requête entrante, réduisant fortement le coût d'hébergement. La contrepartie : pas de détection de texte libre dans les messages (type `cdt-nomdelafiche`) — tout passe par des commandes slash.
+Les commandes `/fiche` passent par cet endpoint. L'**économie** (XP et Or par message, niveaux, boutiques, inventaire)
+a besoin de lire les messages : le même processus ouvre donc aussi une connexion **Gateway** permanente
+(discord.py), démarrée seulement si `DISCORD_TOKEN` et `PB_URL` sont définis. Le service ne doit **pas** être
+mis en veille (pas de mode Serverless sur Railway).
+
+## Économie (base PocketBase du site)
+
+Tous les réglages viennent de la page « Économie du bot » du site des Chroniques du Temps (collections `eco_*`
+de PocketBase), relus toutes les minutes : salons éligibles et boosters, XP min/max par message, rôles boosters
+et rôle exclu, multiplicateurs temporaires, courbe de niveau (exponentielle Draftbot par défaut), récompenses de
+niveau (Or, rôles, rôles temporaires retirés à échéance, objets, succès), boutiques (dont boutiques cachées
+réservées à un rôle), articles, inventaires. Les joueurs sont reconnus par leur ID Discord (fiche `joueurs`),
+ou à défaut par leur pseudo Discord (l'ID est alors enregistré automatiquement).
+
+Commandes (préfixe `ECO_PREFIX`, `??` par défaut) : `??niveau [@membre]`, `??classement`, `??inventaire`,
+`??boutique`, `??acheter <numéro ou nom>`.
+
+Prérequis côté Discord (Developer Portal → Bot) : activer **Message Content Intent** et **Server Members Intent** ;
+le bot doit avoir la permission **Gérer les rôles** et son rôle doit être placé au-dessus des rôles qu'il distribue.
 
 ## Commandes
 
@@ -84,7 +102,9 @@ Les données sont persistées dans une base SQLite (`data/fiches.db` par défaut
 2. Ajouter les variables d'environnement `DISCORD_TOKEN` (pour lancer `register_commands` une fois, ou en local), `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DATABASE_PATH` dans l'onglet **Variables** du service (jamais dans le code).
 3. Attacher un **Volume** monté sur le dossier de `DATABASE_PATH` (ex: `/data`) pour que la base SQLite *et* les images envoyées via `/fiche image` (stockées par défaut dans `<dossier de DATABASE_PATH>/uploads`) survivent aux redéploiements et réveils.
 4. Une fois déployé, récupérer l'URL publique du service, et la renseigner (+ `/interactions`) dans **Interactions Endpoint URL** sur le Developer Portal.
-5. Activer le mode veille : Service → **Settings → Deploy → Serverless**. Le service s'endort après ~10 min sans trafic sortant et se réveille sur la requête suivante (léger délai de démarrage à froid).
+5. Ne **pas** activer le mode Serverless (veille) : la connexion Gateway de l'économie doit rester ouverte.
+6. Pour l'économie, ajouter `DISCORD_TOKEN`, `PB_URL`, `PB_EMAIL`, `PB_PASSWORD` (compte superuser dédié au bot) et,
+   pendant les tests, `ECO_GUILD_ID` (serveur de test) pour que le bot ne réagisse que là.
 
 ## Structure
 
@@ -96,6 +116,8 @@ app/
   embeds.py          # construction des embeds et des modals (JSON brut, sans état)
   handlers.py        # logique métier de chaque commande / soumission de modal
   database.py        # couche SQLite (aiosqlite, connexion paresseuse)
+  economie.py        # économie (Gateway) : gains par message, niveaux, récompenses, commandes ??
+  pocketbase.py      # accès à la base PocketBase du site
 scripts/
   register_commands.py  # enregistre les commandes slash auprès de Discord (à lancer une fois)
 ```

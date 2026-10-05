@@ -30,10 +30,50 @@ if not DISCORD_PUBLIC_KEY:
 app = FastAPI()
 db = Database(DATABASE_PATH)
 
+# Économie (connexion Gateway permanente, en plus de l'endpoint /interactions) : démarrée seulement si
+# le jeton du bot et l'accès à la base du site sont configurés ; sinon le bot fonctionne comme avant.
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+PB_URL = os.getenv("PB_URL")
+gateway = None
+pocketbase = None
+
+
+@app.on_event("startup")
+async def startup():
+    global gateway, pocketbase
+    if not (DISCORD_TOKEN and PB_URL):
+        log.info("Économie désactivée (DISCORD_TOKEN ou PB_URL absent).")
+        return
+    import asyncio
+
+    import discord
+
+    from app.economie import Economie
+    from app.pocketbase import PocketBase
+
+    intents = discord.Intents.default()
+    intents.message_content = True
+    intents.members = True
+    gateway = discord.Client(intents=intents)
+    pocketbase = PocketBase(PB_URL, os.getenv("PB_EMAIL", ""), os.getenv("PB_PASSWORD", ""))
+    economie = Economie(pocketbase, gateway, os.getenv("ECO_PREFIX", "??"), os.getenv("ECO_GUILD_ID") or None)
+    gateway.event(economie.on_message)
+
+    @gateway.event
+    async def on_ready():
+        log.info("Économie connectée à Discord en tant que %s", gateway.user)
+
+    asyncio.create_task(gateway.start(DISCORD_TOKEN))
+    asyncio.create_task(economie.boucle_roles_temporaires())
+
 
 @app.on_event("shutdown")
 async def shutdown():
     await db.close()
+    if gateway:
+        await gateway.close()
+    if pocketbase:
+        await pocketbase.close()
 
 
 @app.get("/")
