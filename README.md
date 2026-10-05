@@ -17,6 +17,11 @@ Avantage principal : le serveur peut être **mis en veille entre deux usages** (
   ouvre le formulaire de la section choisie, pré-rempli avec le contenu existant.
   Un modal Discord étant limité à 5 champs, la fiche est découpée en 4 sections à remplir
   indépendamment, dans l'ordre voulu, petit à petit.
+- `/fiche image nom:<identifiant> cible:<personnage|equipement> fichier:<pièce jointe>` —
+  envoie directement une image depuis Discord (pas de lien à copier/héberger soi-même).
+  Le bot la télécharge, l'héberge lui-même sur son propre volume, et met à jour le champ
+  correspondant (`image_personnage_url` ou `equipement_image_url`) avec une URL stable.
+  PNG/JPEG/WEBP/GIF, 8 Mo max.
 - `/fiche supprimer nom:<identifiant>`
 - `/fiche voir nom:<identifiant>` — affiche la fiche (et un second message avec les
   illustrations d'équipement, si un lien a été renseigné).
@@ -30,7 +35,9 @@ propose toutes les fiches existantes).
 
 - **architecture** : couleur (code hexadécimal RGB, ex: `330033`, avec ou sans `#` — n'importe quel sélecteur de couleur en ligne convient),
   lien de l'image du personnage, nom de la skin (ex: `Sei.png`), lien vers la fiche CDT,
-  lien de l'image des équipements (optionnel — déclenche le second message).
+  lien de l'image des équipements (optionnel — déclenche le second message). Les deux liens
+  d'image peuvent aussi être renseignés directement via `/fiche image` (pièce jointe), sans
+  avoir à les héberger ailleurs au préalable.
 - **identite** : nom, surnom, genre, race.
 - **physique** : taille, poids, tranche d'âge physique, morphologie, couleur des yeux.
 - **apparence** : couleur et longueur des cheveux, coiffure, tenue, armement & équipement.
@@ -75,7 +82,7 @@ Les données sont persistées dans une base SQLite (`data/fiches.db` par défaut
 
 1. Créer un projet à partir de ce dépôt.
 2. Ajouter les variables d'environnement `DISCORD_TOKEN` (pour lancer `register_commands` une fois, ou en local), `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DATABASE_PATH` dans l'onglet **Variables** du service (jamais dans le code).
-3. Attacher un **Volume** monté sur le dossier de `DATABASE_PATH` (ex: `/data`) pour que la base SQLite survive aux redéploiements et réveils.
+3. Attacher un **Volume** monté sur le dossier de `DATABASE_PATH` (ex: `/data`) pour que la base SQLite *et* les images envoyées via `/fiche image` (stockées par défaut dans `<dossier de DATABASE_PATH>/uploads`) survivent aux redéploiements et réveils.
 4. Une fois déployé, récupérer l'URL publique du service, et la renseigner (+ `/interactions`) dans **Interactions Endpoint URL** sur le Developer Portal.
 5. Activer le mode veille : Service → **Settings → Deploy → Serverless**. Le service s'endort après ~10 min sans trafic sortant et se réveille sur la requête suivante (léger délai de démarrage à froid).
 

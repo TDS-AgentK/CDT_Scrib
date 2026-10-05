@@ -2,8 +2,14 @@ from app.database import SECTION_COLUMNS, Database
 from app.discord_types import EPHEMERAL_FLAG, SECTIONS, ResponseType, valid_name
 from app.embeds import build_character_embed, build_illustrations_embed, build_section_modal
 from app.flavors import CREER, MODIFIER, SUPPRIMER, pick
+from app.uploads import ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES
 
 AUTOCOMPLETE_LIMIT = 25
+
+IMAGE_TARGET_COLUMNS = {
+    "personnage": "image_personnage_url",
+    "equipement": "equipement_image_url",
+}
 
 
 def _message(content: str = None, *, embeds: list[dict] = None, ephemeral: bool = False) -> dict:
@@ -21,13 +27,13 @@ def _extract_options(options: list[dict]) -> dict:
     return {opt["name"]: opt.get("value") for opt in options or []}
 
 
-def _find_subcommand(options: list[dict]) -> tuple[str, dict]:
+def find_subcommand(options: list[dict]) -> tuple[str, dict]:
     sub = options[0]
     return sub["name"], _extract_options(sub.get("options", []))
 
 
 async def handle_command(db: Database, data: dict, member_or_user: dict) -> tuple[dict, dict | None]:
-    sub_name, opts = _find_subcommand(data.get("options", []))
+    sub_name, opts = find_subcommand(data.get("options", []))
     nom_id = (opts.get("nom") or "").strip().lower()
     user_id = int(member_or_user["id"])
 
@@ -89,8 +95,47 @@ async def handle_command(db: Database, data: dict, member_or_user: dict) -> tupl
     return _message("Commande inconnue.", ephemeral=True), None
 
 
+async def validate_image_upload(db: Database, data: dict, member_or_user: dict):
+    """Vérifie la demande d'upload (fiche, propriétaire, cible, fichier).
+    Retourne (réponse_erreur, None, None, None) si invalide, ou
+    (None, nom_id, colonne, attachment) si tout est bon — à charge de
+    l'appelant de différer la réponse et de traiter le téléchargement."""
+    _, opts = find_subcommand(data.get("options", []))
+    nom_id = (opts.get("nom") or "").strip().lower()
+    cible = opts.get("cible")
+    attachment_id = opts.get("fichier")
+    user_id = int(member_or_user["id"])
+
+    if not valid_name(nom_id):
+        return _message("Identifiant invalide.", ephemeral=True), None, None, None
+
+    fiche = await db.get(nom_id)
+    if not fiche:
+        return _message(f"Aucune fiche `{nom_id}` trouvée.", ephemeral=True), None, None, None
+    if fiche.owner_id != user_id:
+        return _message("Cette fiche ne vous appartient pas.", ephemeral=True), None, None, None
+
+    column = IMAGE_TARGET_COLUMNS.get(cible)
+    if not column:
+        return _message("Cible invalide.", ephemeral=True), None, None, None
+
+    attachment = data.get("resolved", {}).get("attachments", {}).get(attachment_id)
+    if not attachment:
+        return _message("Fichier introuvable.", ephemeral=True), None, None, None
+
+    content_type = (attachment.get("content_type") or "").split(";")[0].strip()
+    if content_type not in ALLOWED_IMAGE_TYPES:
+        return _message(
+            "Format non supporté. Utilise PNG, JPEG, WEBP ou GIF.", ephemeral=True
+        ), None, None, None
+    if attachment.get("size", 0) > MAX_IMAGE_BYTES:
+        return _message("Fichier trop volumineux (8 Mo max).", ephemeral=True), None, None, None
+
+    return None, nom_id, column, attachment
+
+
 async def handle_autocomplete(db: Database, data: dict, member_or_user: dict) -> dict:
-    sub_name, opts = _find_subcommand(data.get("options", []))
+    sub_name, opts = find_subcommand(data.get("options", []))
     current = (opts.get("nom") or "").strip().lower()
 
     if sub_name == "voir":

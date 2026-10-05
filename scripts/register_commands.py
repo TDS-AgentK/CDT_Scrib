@@ -46,6 +46,22 @@ COMMANDS = [
             },
             {
                 "type": 1,
+                "name": "image",
+                "description": "Envoyer directement une image (personnage ou équipement) pour une de vos fiches",
+                "options": [
+                    {"type": 3, "name": "nom", "description": "Identifiant de votre fiche",
+                     "required": True, "autocomplete": True},
+                    {"type": 3, "name": "cible", "description": "Quelle image remplacer", "required": True,
+                     "choices": [
+                         {"name": "Personnage", "value": "personnage"},
+                         {"name": "Équipement", "value": "equipement"},
+                     ]},
+                    {"type": 11, "name": "fichier",
+                     "description": "Image PNG/JPEG/WEBP/GIF, 8 Mo max", "required": True},
+                ],
+            },
+            {
+                "type": 1,
                 "name": "supprimer",
                 "description": "Supprimer une de vos fiches",
                 "options": [
