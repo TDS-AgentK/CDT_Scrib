@@ -49,6 +49,18 @@ def niveau_de(courbe: dict, xp: int) -> tuple[int, int, int]:
     return n, xp - total, 0
 
 
+def normaliser(nom: str | None) -> str:
+    """Nom comparable entre la base et Discord : sans accents, emojis, séparateurs ni majuscules
+    (« 📝・Textes-Libres » == « textes-libres », « Erudit » == « Érudit »)."""
+    import unicodedata
+    base = unicodedata.normalize("NFD", (nom or "").lstrip("@"))
+    return "".join(c for c in base.lower() if c.isascii() and c.isalnum())
+
+
+def meme_nom(a: str | None, b: str | None) -> bool:
+    return bool(normaliser(a)) and normaliser(a) == normaliser(b)
+
+
 def _date(v: str | None) -> datetime | None:
     if not v:
         return None
@@ -108,7 +120,7 @@ class Economie:
         for r in member.roles:
             if role_id and str(r.id) == str(role_id):
                 return True
-            if not role_id and role_nom and r.name.lower() == role_nom.lower():
+            if not role_id and role_nom and meme_nom(r.name, role_nom):
                 return True
         return False
 
@@ -118,8 +130,7 @@ class Economie:
             if r:
                 return r
         if role_nom:
-            nom = role_nom.lstrip("@").lower()
-            return next((r for r in guild.roles if r.name.lower() == nom), None)
+            return next((r for r in guild.roles if meme_nom(r.name, role_nom)), None)
         return None
 
     async def joueur_de(self, user: discord.abc.User) -> dict | None:
@@ -163,7 +174,7 @@ class Economie:
         for s in cfg["salons"]:
             if s.get("salon_id") and str(s["salon_id"]) == str(channel.id):
                 return s
-        return next((s for s in cfg["salons"] if not s.get("salon_id") and s.get("salon_nom") == channel.name), None)
+        return next((s for s in cfg["salons"] if not s.get("salon_id") and meme_nom(s.get("salon_nom"), channel.name)), None)
 
     async def gain(self, message: discord.Message):
         cfg = await self.config()
@@ -369,7 +380,7 @@ class Economie:
         sortie = []
         for b in cfg["boutiques"]:
             autorises, interdits = roles(b.get("roles_autorises")), roles(b.get("roles_interdits"))
-            a_role = lambda nom: any(str(r.id) == nom or r.name.lower() == nom.lower() for r in membre.roles)
+            a_role = lambda nom: any(str(r.id) == nom or meme_nom(r.name, nom) for r in membre.roles)
             if autorises and not any(a_role(r) for r in autorises):
                 continue
             if any(a_role(r) for r in interdits):
@@ -452,7 +463,7 @@ class Economie:
             })
             if boutique.get("retirer_roles_acces"):
                 for nom in [r.strip().lstrip("@") for r in (boutique.get("roles_autorises") or "").split(",") if r.strip()]:
-                    role = next((r for r in membre.roles if str(r.id) == nom or r.name.lower() == nom.lower()), None)
+                    role = next((r for r in membre.roles if str(r.id) == nom or meme_nom(r.name, nom)), None)
                     if role:
                         try:
                             await membre.remove_roles(role, reason="Achat dans une boutique à accès limité")

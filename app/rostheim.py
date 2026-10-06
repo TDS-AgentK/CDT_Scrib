@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 import discord
 
+from app.economie import meme_nom, normaliser
 from app.pocketbase import echapper
 
 log = logging.getLogger("cdt_scrib.rostheim")
@@ -84,14 +85,15 @@ class Rostheim:
         """Rôle requis et salon autorisé de la commande."""
         membre = message.author
         role = (cmd.get("role_requis") or "").strip()
-        if role and not any(r.name.lower() == role.lower() or r.name.lower().startswith(role.lower() + " ") for r in membre.roles):
+        # « Roi » accepte aussi un rôle « Roi / Reine » (nom qui commence par le rôle demandé).
+        if role and not any(meme_nom(r.name, role) or normaliser(r.name).startswith(normaliser(role)) for r in membre.roles):
             await message.reply(f"Cette commande demande le rôle {role}.", mention_author=False)
             return False
         salon = (cmd.get("salon_autorise") or "").strip()
         if salon:
             ch = message.channel.parent if isinstance(message.channel, discord.Thread) else message.channel
             ids = {str(domaine.get("salon_id"))} if domaine and domaine.get("salon_id") and domaine.get("salon_nom") == salon else set()
-            if str(ch.id) not in ids and ch.name != salon:
+            if str(ch.id) not in ids and not meme_nom(ch.name, salon):
                 await message.reply(f"Cette commande se lance dans le salon #{salon}.", mention_author=False)
                 return False
         return True
@@ -294,6 +296,5 @@ class Rostheim:
             if rp.get("message_salon_id") and str(rp["message_salon_id"]).isdigit():
                 salon = message.guild.get_channel(int(rp["message_salon_id"]))
             if not salon and rp.get("message_salon_nom"):
-                cible = rp["message_salon_nom"].lower()
-                salon = next((c for c in message.guild.text_channels if c.name.lower() == cible), None)
+                salon = next((c for c in message.guild.text_channels if meme_nom(c.name, rp["message_salon_nom"])), None)
             await (salon or message.channel).send(texte.replace("{args.all}", ", ".join(m.mention for m in concernes)))
