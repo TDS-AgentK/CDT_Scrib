@@ -30,6 +30,11 @@ class Rostheim:
         self.eco = eco
         self.pb = eco.pb
 
+    def _nom(self, cmd: dict) -> str:
+        """Nom de la commande tel qu'il se tape : le « ?? » enregistré dans la base suit le préfixe du bot (ECO_PREFIX)."""
+        nom = cmd.get("commande") or ""
+        return self.eco.prefixe + nom[2:] if nom.startswith("??") else nom
+
     async def _donnees(self) -> dict:
         reglages = (await self.eco.config())["reglages"]
         commandes, domaines, rp = await self._lire()
@@ -51,7 +56,7 @@ class Rostheim:
         if rp and rp.get("actif") and mot == f'{self.eco.prefixe}{(rp.get("commande") or "rp").lower()}':
             await self.commande_rp(message, rp)
             return True
-        cmd = next((c for c in d["commandes"] if (c.get("commande") or "").lower() == mot), None)
+        cmd = next((c for c in d["commandes"] if self._nom(c).lower() == mot), None)
         if not cmd:
             return False
         if not d["reglages"].get("rostheim_actif"):
@@ -202,7 +207,7 @@ class Rostheim:
             lignes = [f'`{i}` **{a["libelle"]}** — {a.get("prix") or 0} {"(toute monnaie)" if a.get("toute_monnaie") else domaine.get("monnaie_nom")} · {a.get("portee")}'
                       for i, a in enumerate(articles, 1)]
             embed = discord.Embed(title=f'{domaine.get("nom")} — {domaine.get("monnaie_nom")}', description="\n".join(lignes)[:4096] or "—", color=0xC5A24F)
-            embed.set_footer(text=f'{cmd["commande"]} <numéro>')
+            embed.set_footer(text=f'{self._nom(cmd)} <numéro>')
             await message.channel.send(embed=embed)
             return
         if not arg.isdigit() or not 1 <= int(arg) <= len(articles):
@@ -240,7 +245,7 @@ class Rostheim:
         if not arg:
             lignes = [f'`{i}` {a["libelle"][len("Obtenir le rôle "):]} — {a.get("prix") or 0} {d.get("monnaie_nom")}' for i, (d, a) in enumerate(offres, 1)]
             embed = discord.Embed(title="Boîte à rôles", description="\n".join(lignes) or "—", color=0xC5A24F)
-            embed.set_footer(text=f'{cmd["commande"]} <numéro>')
+            embed.set_footer(text=f'{self._nom(cmd)} <numéro>')
             await message.channel.send(embed=embed)
             return
         if not arg.isdigit() or not 1 <= int(arg) <= len(offres):
