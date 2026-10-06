@@ -84,6 +84,9 @@ class Economie:
         self._charge_a = 0.0
         self._dernier_gain: dict[int, float] = {}
         self._verrous: dict[int, asyncio.Lock] = {}
+        # ECO_DEBUG=1 : explique dans les journaux pourquoi chaque message rapporte (ou non) de l'XP.
+        import os
+        self.debug = os.getenv("ECO_DEBUG", "") not in ("", "0")
         from app.rostheim import Rostheim
         self.rostheim = Rostheim(self)
 
@@ -149,6 +152,8 @@ class Economie:
         if message.author.bot or not message.guild or not isinstance(message.author, discord.Member):
             return
         if self.guild_id and message.guild.id != self.guild_id:
+            if self.debug:
+                log.info("[XP] message ignoré : serveur %s différent d'ECO_GUILD_ID", message.guild.id)
             return
         try:
             if message.content.startswith(self.prefixe) or message.content.startswith("--"):
@@ -180,14 +185,22 @@ class Economie:
     async def gain(self, message: discord.Message):
         cfg = await self.config()
         reglages, membre = cfg["reglages"], message.author
+        def trace(raison: str):
+            if self.debug:
+                log.info("[XP] %s dans #%s (%s, type %s) : %s", membre.name, getattr(message.channel, "name", "?"),
+                         message.channel.id, type(message.channel).__name__, raison)
+
         salon = self._salon(cfg, message.channel)
         if not salon or not salon.get("gain_xp"):
+            trace("salon non éligible" if not salon else f'salon « {salon.get("salon_nom")} » sans gain d\'XP')
             return
         if any(r.get("sans_gain") and self._a_le_role(membre, r.get("role_id"), r.get("role_nom")) for r in cfg["roles"]):
+            trace("rôle exclu")
             return
         attente = max(reglages.get("xp_intervalle_s") or 0, salon.get("cooldown_s") or 0)
         maintenant = time.time()
         if attente and maintenant - self._dernier_gain.get(membre.id, 0) < attente:
+            trace(f"attente de {attente} s pas écoulée")
             return
 
         # Bonus de rôle : on garde le plus fort (pas de cumul entre rôles boosters).
@@ -218,12 +231,15 @@ class Economie:
         or_ = (salon.get("or_base") or 0) * (1 + pct_or / 100) * f_or
         xp, or_ = round(xp), round(or_)
         if xp <= 0 and or_ <= 0:
+            trace("gain calculé nul")
             return
 
         async with self._verrou(membre.id):
             joueur = await self.joueur_de(membre)
             if not joueur:
+                trace("aucune fiche joueur liée (ID Discord ni pseudo reconnus)")
                 return  # membre sans fiche joueur sur le site
+            trace(f'+{xp} XP, +{or_} Or (salon « {salon.get("salon_nom")} », bonus rôle {pct_xp} %)')
             self._dernier_gain[membre.id] = maintenant
             ancien = joueur.get("eco_xp") or 0
             joueur = await self.pb.maj("joueurs", joueur["id"], {"eco_xp": ancien + xp, "eco_or": (joueur.get("eco_or") or 0) + or_})
