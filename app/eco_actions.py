@@ -158,7 +158,84 @@ async def vendre(eco, membre: discord.Member, objet_id: str, q: int, origine: st
     return True, f"Vendu : **{q} × {objet['nom']}** pour **{_n(prix * q)}** {eco_vues.or_txt(cfg)}. Il te reste **{_n(j.get('eco_or'))}** {eco_vues.or_txt(cfg)}."
 
 
-async def utiliser(eco, membre: discord.Member, objet_id: str) -> tuple[bool, str]:
+def lire_tirage(texte: str) -> list[list[tuple[str, str]]]:
+    """Texte du champ « tirage » → groupes d'entrées (type, valeur). « # Groupe » ouvre un groupe."""
+    groupes, courant = [], []
+    for ligne in (texte or "").splitlines():
+        ligne = ligne.strip()
+        if not ligne:
+            continue
+        if ligne.startswith("#"):
+            if courant:
+                groupes.append(courant)
+            courant = []
+            continue
+        genre, _, valeur = ligne.partition(":")
+        if valeur.strip():
+            courant.append((genre.strip().lower(), valeur.strip()))
+    if courant:
+        groupes.append(courant)
+    return groupes
+
+
+async def _xp(eco, membre, joueur_id: str, xp: int, nom: str, salon) -> None:
+    from app.economie import niveau_de
+    j = await eco.pb.requete("GET", f"/api/collections/joueurs/records/{joueur_id}")
+    ancien = j.get("eco_xp") or 0
+    j = await eco.pb.maj("joueurs", joueur_id, {"eco_xp": ancien + xp})
+    await _gain(eco, joueur_id, f"utiliser : {nom}", "XP", xp, "")
+    cfg = await eco.config()
+    n0, n1 = niveau_de(cfg["courbe"], ancien)[0], niveau_de(cfg["courbe"], j["eco_xp"])[0]
+    if n1 > n0 and salon is not None:
+        await eco.monter_niveau(salon, membre, j, n0, n1)
+
+
+async def appliquer_effet(eco, membre: discord.Member, joueur: dict, objet: dict, salon=None) -> list[str]:
+    """Effet automatique d'un objet utilisé : lancer de dé (XP ou Or) ou tirage de récompenses. Lignes à afficher."""
+    import random
+    from app import eco_vues
+    cfg = await eco.config()
+    effet, lignes = objet.get("effet"), []
+    if effet in ("xp", "or") and (objet.get("de_faces") or 0) > 0:
+        jet = random.randint(1, int(objet["de_faces"]))
+        if effet == "xp":
+            await _xp(eco, membre, joueur["id"], jet, objet["nom"], salon)
+            lignes.append(f"🎲 1d{objet['de_faces']} → **{jet}** : +{jet} XP")
+        else:
+            await changer_or(eco, joueur["id"], jet)
+            await _gain(eco, joueur["id"], f"utiliser : {objet['nom']}", "Or", jet, "")
+            lignes.append(f"🎲 1d{objet['de_faces']} → **{jet}** : +{jet} {eco_vues.or_txt(cfg)}")
+    elif effet == "tirage":
+        groupes = [g for g in lire_tirage(objet.get("tirage")) if g]
+        objets = {o["nom"]: o for o in await eco.pb.lister("eco_objets")}
+        for _ in range(max(1, int(objet.get("tirage_nombre") or 1)) if groupes else 0):
+            genre, valeur = random.choice(random.choice(groupes))
+            if genre == "objet":
+                o = objets.get(valeur)
+                if o:
+                    await eco.ajouter_objet(joueur["id"], o["id"], 1, "utilisation", f"tiré de {objet['nom']}")
+                    lignes.append(f"🎁 {o.get('emoji') or ''} **{o['nom']}**".replace("  ", " "))
+                else:
+                    lignes.append(f"🎁 **{valeur}** (objet introuvable dans le catalogue, à attribuer par un admin)")
+            elif genre == "role":
+                echec = await eco.donner_role(membre, joueur, None, valeur, 0)
+                lignes.append(f"🎭 Rôle **{valeur}**" + (f" — à attribuer par un admin ({echec})" if echec else ""))
+            elif genre in ("or", "xp"):
+                montants = [int(v) for v in valeur.replace(";", ",").split(",") if v.strip().isdigit()]
+                if not montants:
+                    continue
+                m = random.choice(montants)
+                if genre == "or":
+                    await changer_or(eco, joueur["id"], m)
+                    await _gain(eco, joueur["id"], f"utiliser : {objet['nom']}", "Or", m, "")
+                    lignes.append(f"💰 +{m} {eco_vues.or_txt(cfg)}")
+                else:
+                    await _xp(eco, membre, joueur["id"], m, objet["nom"], salon)
+                    lignes.append(f"✨ +{m} XP")
+    return lignes
+
+
+async def utiliser(eco, membre: discord.Member, objet_id: str, salon=None) -> tuple[bool, str]:
     joueur = await eco.joueur_de(membre)
     if not joueur:
         return False, "Aucune fiche joueur liée à ton compte Discord."
@@ -172,8 +249,9 @@ async def utiliser(eco, membre: discord.Member, objet_id: str) -> tuple[bool, st
         if possede < 1:
             return False, f"Tu n'as pas de {objet['nom']}."
         await retirer_objet(eco, joueur["id"], objet["id"], 1, "utilisation")
+        effets = await appliquer_effet(eco, membre, joueur, objet, salon)
     nom = f"{objet.get('emoji') or ''} {objet['nom']}".strip()
-    return True, f"{membre.mention} utilise **{nom}**."
+    return True, f"{membre.mention} utilise **{nom}**." + ("\n" + "\n".join(effets) if effets else "")
 
 
 # ---------------------------------------------------------------- échanges (proposition puis acceptation)

@@ -148,7 +148,8 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             ok, txt = await eco_actions.vendre(eco, membre, opt.get("objet"), int(opt.get("quantite") or 1), _origine(payload))
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
         if nom == "utiliser":
-            ok, txt = await eco_actions.utiliser(eco, membre, opt.get("objet"))
+            salon = membre.guild.get_channel(int(payload["channel_id"])) if payload.get("channel_id") else None
+            ok, txt = await eco_actions.utiliser(eco, membre, opt.get("objet"), salon)
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
         if nom == "echanger":
             vers = await _membre(eco, payload, opt.get("membre"))
