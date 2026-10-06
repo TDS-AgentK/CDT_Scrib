@@ -31,9 +31,12 @@ class Rostheim:
         self.pb = eco.pb
 
     def _nom(self, cmd: dict) -> str:
-        """Nom de la commande tel qu'il se tape : le « ?? » enregistré dans la base suit le préfixe du bot (ECO_PREFIX)."""
+        """Nom de la commande tel qu'il se tape : le « ?? » enregistré dans la base suit le préfixe du bot (ECO_PREFIX),
+        et le « -- » aussi quand un préfixe autre que « ?? » est choisi (--wut devient !!wut)."""
         nom = cmd.get("commande") or ""
-        return self.eco.prefixe + nom[2:] if nom.startswith("??") else nom
+        if nom.startswith("??") or (nom.startswith("--") and self.eco.prefixe != "??"):
+            return self.eco.prefixe + nom[2:]
+        return nom
 
     async def _donnees(self) -> dict:
         reglages = (await self.eco.config())["reglages"]
