@@ -25,6 +25,14 @@ ou à défaut par leur pseudo Discord (l'ID est alors enregistré automatiquemen
 Commandes (préfixe `ECO_PREFIX`, `??` par défaut) : `??niveau [@membre]`, `??classement`, `??inventaire`,
 `??boutique`, `??acheter <numéro ou nom>`.
 
+Événement Rostheim et commande RP (définis dans la base : `ros_commandes`, `ros_domaines`, `ros_paliers`,
+`ros_recompenses`, `eco_commande_rp`) : commandes de gain (`??texte`, `??lore`…) avec rôle requis, salon autorisé et
+limites ; conversions `??gold-<monnaie>` / `??xp-<monnaie>` ; boutiques de domaine `??dépenser-<monnaie> [numéro]` ;
+`??boîte-à-rôle [numéro]` ; jauges collective et individuelle, paliers (embed du palier envoyé s'il est rempli) ;
+`??rp @partenaires…` (Or, XP et rôle, message dans le salon configuré). Chaque gain est tracé dans `eco_gains`.
+Règle des boosters : entre plusieurs rôles, seul le plus fort compte ; il se multiplie avec le booster du salon
+et les multiplicateurs temporaires.
+
 Prérequis côté Discord (Developer Portal → Bot) : activer **Message Content Intent** et **Server Members Intent** ;
 le bot doit avoir la permission **Gérer les rôles** et son rôle doit être placé au-dessus des rôles qu'il distribue.
 
@@ -117,6 +125,7 @@ app/
   handlers.py        # logique métier de chaque commande / soumission de modal
   database.py        # couche SQLite (aiosqlite, connexion paresseuse)
   economie.py        # économie (Gateway) : gains par message, niveaux, récompenses, commandes ??
+  rostheim.py        # événement Rostheim et commande RP
   pocketbase.py      # accès à la base PocketBase du site
 scripts/
   register_commands.py  # enregistre les commandes slash auprès de Discord (à lancer une fois)

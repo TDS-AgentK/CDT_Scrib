@@ -4,6 +4,7 @@ récompenses, boutiques, inventaire. Tous les réglages viennent de la page « �
 
 Commandes (préfixe ECO_PREFIX, « ?? » par défaut, comme sur Draftbot) :
   ??niveau [@membre] · ??classement · ??inventaire · ??boutique · ??acheter <numéro ou nom>
+  + commandes Rostheim et RP lues dans la base (voir app/rostheim.py).
 """
 import asyncio
 import logging
@@ -71,6 +72,8 @@ class Economie:
         self._charge_a = 0.0
         self._dernier_gain: dict[int, float] = {}
         self._verrous: dict[int, asyncio.Lock] = {}
+        from app.rostheim import Rostheim
+        self.rostheim = Rostheim(self)
 
     # ------------------------------------------------------------ configuration (page Économie du site)
 
@@ -137,7 +140,7 @@ class Economie:
         if self.guild_id and message.guild.id != self.guild_id:
             return
         try:
-            if message.content.startswith(self.prefixe):
+            if message.content.startswith(self.prefixe) or message.content.startswith("--"):
                 await self.commande(message)
             else:
                 await self.gain(message)
@@ -293,6 +296,11 @@ class Economie:
     # ------------------------------------------------------------ commandes ??
 
     async def commande(self, message: discord.Message):
+        # Commandes Rostheim et RP (définies dans la base) d'abord, puis commandes de l'économie.
+        if await self.rostheim.traiter(message):
+            return
+        if not message.content.startswith(self.prefixe):
+            return
         nom, _, arg = message.content[len(self.prefixe):].strip().partition(" ")
         actions = {
             "niveau": self.cmd_niveau, "rang": self.cmd_niveau, "classement": self.cmd_classement,
