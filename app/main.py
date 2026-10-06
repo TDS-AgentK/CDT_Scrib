@@ -15,6 +15,7 @@ from app.verify import verify_signature
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)  # une ligne par requête PocketBase sinon
 log = logging.getLogger("cdt_scrib")
 
 DISCORD_PUBLIC_KEY = os.getenv("DISCORD_PUBLIC_KEY")

@@ -247,12 +247,17 @@ class Economie:
             await self.donner_succes(joueur, r["succes"])
         return r.get("libelle") or r.get("recompense_role") or r.get("recompense_objet") or ""
 
-    async def donner_role(self, membre: discord.Member, joueur: dict | None, role_id: str | None, role_nom: str | None, jours: float):
+    async def donner_role(self, membre: discord.Member, joueur: dict | None, role_id: str | None, role_nom: str | None, jours: float) -> str | None:
+        """Donne le rôle ; renvoie None si c'est fait, sinon la raison de l'échec (rôle absent, permission manquante)."""
         role = self._role_discord(membre.guild, role_id, role_nom)
         if not role:
             log.warning("Rôle introuvable sur le serveur : %s", role_nom or role_id)
-            return
-        await membre.add_roles(role, reason="Économie CDT")
+            return f"le rôle « {role_nom or role_id} » n'existe pas sur ce serveur"
+        try:
+            await membre.add_roles(role, reason="Économie CDT")
+        except discord.HTTPException as exc:
+            log.warning("Impossible de donner le rôle %s : %s", role.name, exc)
+            return f"je n'ai pas la permission de donner le rôle « {role.name} » (mon rôle doit être au-dessus, avec « Gérer les rôles »)"
         if jours:
             expire = datetime.now(timezone.utc) + timedelta(days=jours)
             await self.pb.creer("eco_roles_temporaires", {
@@ -428,13 +433,17 @@ class Economie:
             if (joueur.get("eco_or") or 0) < prix:
                 await message.reply(f'Il te manque {prix - (joueur.get("eco_or") or 0)} Or.', mention_author=False)
                 return
+            # Le rôle est donné AVANT de débiter : s'il ne peut pas l'être, l'achat est annulé sans rien prélever.
+            if article.get("type") in ("role_permanent", "role_temporaire") and (article.get("role_id") or article.get("role_nom")):
+                jours = (article.get("duree_jours") or 0) if article.get("type") == "role_temporaire" else 0
+                echec = await self.donner_role(membre, joueur, article.get("role_id"), article.get("role_nom"), jours)
+                if echec:
+                    await message.reply(f"Achat annulé, rien n'a été prélevé : {echec}.", mention_author=False)
+                    return
             depense_avant = joueur.get("eco_or_depense") or 0
             joueur = await self.pb.maj("joueurs", joueur["id"], {"eco_or": joueur["eco_or"] - prix, "eco_or_depense": depense_avant + prix})
             if not article.get("stock_illimite"):
                 await self.pb.maj("eco_articles", article["id"], {"stock": (article.get("stock") or 0) - 1})
-            if article.get("type") in ("role_permanent", "role_temporaire") and (article.get("role_id") or article.get("role_nom")):
-                jours = (article.get("duree_jours") or 0) if article.get("type") == "role_temporaire" else 0
-                await self.donner_role(membre, joueur, article.get("role_id"), article.get("role_nom"), jours)
             if article.get("objet"):
                 await self.ajouter_objet(joueur["id"], article["objet"], 1, "achat", article["nom"])
             await self.pb.creer("eco_achats", {
@@ -445,7 +454,10 @@ class Economie:
                 for nom in [r.strip().lstrip("@") for r in (boutique.get("roles_autorises") or "").split(",") if r.strip()]:
                     role = next((r for r in membre.roles if str(r.id) == nom or r.name.lower() == nom.lower()), None)
                     if role:
-                        await membre.remove_roles(role, reason="Achat dans une boutique à accès limité")
+                        try:
+                            await membre.remove_roles(role, reason="Achat dans une boutique à accès limité")
+                        except discord.HTTPException as exc:
+                            log.warning("Impossible de retirer le rôle %s : %s", role.name, exc)
             for p in cfg["paliers"]:
                 if p.get("declencheur") == "or_depense" and depense_avant < (p.get("seuil") or 0) <= depense_avant + prix:
                     await self.donner_succes(joueur, p.get("succes"))

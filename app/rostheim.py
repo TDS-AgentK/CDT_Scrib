@@ -215,12 +215,16 @@ class Rostheim:
             if (solde.get("monnaie") or 0) < prix:
                 await message.reply(f'Il faut {prix} {domaine.get("monnaie_nom")} (tu en as {solde.get("monnaie") or 0}).', mention_author=False)
                 return
+            # Rôle donné avant de débiter : en cas d'échec, rien n'est prélevé.
+            role = article["libelle"][len("Obtenir le rôle "):].strip() if article["libelle"].startswith("Obtenir le rôle ") else ""
+            if role:
+                echec = await self.eco.donner_role(message.author, joueur, None, role, 0)
+                if echec:
+                    await message.reply(f"Achat annulé, rien n'a été prélevé : {echec}.", mention_author=False)
+                    return
             await self.pb.maj("ros_soldes", solde["id"], {"monnaie": solde["monnaie"] - prix})
             if article.get("objet"):
                 await self.eco.ajouter_objet(joueur["id"], article["objet"], 1, "rostheim", article["libelle"])
-            role = article["libelle"][len("Obtenir le rôle "):].strip() if article["libelle"].startswith("Obtenir le rôle ") else ""
-            if role:
-                await self.eco.donner_role(message.author, joueur, None, role, 0)
             await self._tracer(joueur, cmd, f'{cmd["commande"]} : {article["libelle"]}', domaine.get("monnaie_nom") or "", -prix, 0, message)
         await message.reply(f'Acheté : **{article["libelle"]}** pour {prix} {domaine.get("monnaie_nom")}.', mention_author=False)
 
@@ -251,7 +255,7 @@ class Rostheim:
         if maxi and len(membres) > maxi:
             await message.reply(f"{maxi} partenaires au maximum.", mention_author=False)
             return
-        concernes = []
+        concernes, echecs = [], set()
         for m in [message.author] + membres:
             lanceur = m.id == message.author.id
             joueur = await self.eco.joueur_de(m)
@@ -278,8 +282,12 @@ class Rostheim:
                     if n1 > n0:
                         await self.eco.monter_niveau(message.channel, m, frais, n0, n1)
             if (rp.get("role_nom") or rp.get("role_id")) and (lanceur or rp.get("role_mentionnes")):
-                await self.eco.donner_role(m, joueur, rp.get("role_id"), rp.get("role_nom"), 0)
+                echec = await self.eco.donner_role(m, joueur, rp.get("role_id"), rp.get("role_nom"), 0)
+                if echec:
+                    echecs.add(echec)
             concernes.append(m)
+        for echec in echecs:
+            await message.reply(f"Attention : {echec}.", mention_author=False)
         texte = (rp.get("message_texte") or "").strip()
         if rp.get("message_actif") and texte:
             salon = None
