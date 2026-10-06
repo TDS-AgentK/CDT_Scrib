@@ -61,10 +61,14 @@ async def startup():
     pocketbase = PocketBase(PB_URL, os.getenv("PB_EMAIL", ""), os.getenv("PB_PASSWORD", ""))
     economie = Economie(pocketbase, gateway, os.getenv("ECO_PREFIX", "??"), os.getenv("ECO_GUILD_ID") or None)
     gateway.event(economie.on_message)
+    # Salons et rôles du serveur copiés dans la base, pour les listes déroulantes de la page Économie du site.
+    from app import discord_listes
+    synchro_listes = discord_listes.brancher(gateway, pocketbase, economie.guild_id)
 
     @gateway.event
     async def on_ready():
         log.info("Économie connectée à Discord en tant que %s", gateway.user)
+        synchro_listes()
 
     asyncio.create_task(gateway.start(DISCORD_TOKEN))
     asyncio.create_task(economie.boucle_roles_temporaires())
