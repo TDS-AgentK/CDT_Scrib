@@ -72,6 +72,9 @@ async def startup():
 
     asyncio.create_task(gateway.start(DISCORD_TOKEN))
     asyncio.create_task(economie.boucle_roles_temporaires())
+    # Annonce quotidienne des anniversaires et décès des personnages (réglages : Économie › Anniversaires).
+    from app import anniversaires
+    asyncio.create_task(anniversaires.boucle(gateway, pocketbase))
 
 
 @app.on_event("shutdown")
