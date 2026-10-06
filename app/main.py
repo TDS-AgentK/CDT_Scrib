@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, Request, Response
 from fastapi.responses import FileResponse
 
+from app import eco_interactions
 from app.database import Database
 from app.discord_types import EPHEMERAL_FLAG, InteractionType, ResponseType
 from app.handlers import find_subcommand, handle_autocomplete, handle_command, handle_modal_submit, validate_image_upload
@@ -37,11 +38,12 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 PB_URL = os.getenv("PB_URL")
 gateway = None
 pocketbase = None
+economie = None
 
 
 @app.on_event("startup")
 async def startup():
-    global gateway, pocketbase
+    global gateway, pocketbase, economie
     if not (DISCORD_TOKEN and PB_URL):
         log.info("Économie désactivée (DISCORD_TOKEN ou PB_URL absent).")
         return
@@ -150,6 +152,16 @@ async def interactions(request: Request, background_tasks: BackgroundTasks):
         return {"type": ResponseType.PONG}
 
     member_or_user = payload.get("member", {}).get("user") or payload.get("user")
+
+    # Économie : commandes slash (/profil, /boutique…) et clics sur ses menus/boutons (custom_id « eco:… »).
+    if economie is not None and (
+        (interaction_type == InteractionType.APPLICATION_COMMAND and payload["data"]["name"] in eco_interactions.COMMANDES)
+        or (interaction_type == InteractionType.MESSAGE_COMPONENT and payload["data"].get("custom_id", "").startswith("eco:"))
+    ):
+        reponse = eco_interactions.reponse_immediate(payload)
+        if not payload["data"].get("custom_id") == "eco:no":
+            background_tasks.add_task(eco_interactions.traiter, economie, payload, DISCORD_APPLICATION_ID)
+        return reponse
 
     if interaction_type == InteractionType.APPLICATION_COMMAND:
         data = payload["data"]

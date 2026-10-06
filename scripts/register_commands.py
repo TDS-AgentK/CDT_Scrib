@@ -84,7 +84,16 @@ COMMANDS = [
                 "description": "Lister toutes les fiches disponibles",
             },
         ],
-    }
+    },
+    # Économie (app/eco_interactions.py)
+    {
+        "name": "profil",
+        "description": "Ton niveau, ton XP et ton Or (ou ceux d'un autre membre)",
+        "options": [{"type": 6, "name": "membre", "description": "Membre à afficher (toi par défaut)", "required": False}],
+    },
+    {"name": "inventaire", "description": "Ton Or, tes monnaies Rostheim et tes objets (visible par toi seul)"},
+    {"name": "boutique", "description": "Ouvrir la boutique et acheter un article"},
+    {"name": "classement", "description": "Classement des joueurs par XP"},
 ]
 
 

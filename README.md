@@ -25,6 +25,11 @@ ou à défaut par leur pseudo Discord (l'ID est alors enregistré automatiquemen
 Commandes (préfixe `ECO_PREFIX`, `??` par défaut) : `??niveau [@membre]`, `??classement`, `??inventaire`,
 `??boutique`, `??acheter <numéro ou nom>`.
 
+Commandes slash de l'économie (à enregistrer avec `python -m scripts.register_commands`) : `/profil [membre]`
+(niveau, barre de progression, XP, Or, rang), `/inventaire` (privé), `/classement`, `/boutique` (menu de choix des
+boutiques accessibles et des articles, confirmation avec boutons Acheter/Annuler). Les commandes à préfixe affichent
+les mêmes embeds ; menus et boutons (custom_id `eco:…`) arrivent par `/interactions` (`app/eco_interactions.py`).
+
 Événement Rostheim et commande RP (définis dans la base : `ros_commandes`, `ros_domaines`, `ros_paliers`,
 `ros_recompenses`, `eco_commande_rp`) : commandes de gain (`??texte`, `??lore`…) avec rôle requis, salon autorisé et
 limites ; conversions `??gold-<monnaie>` / `??xp-<monnaie>` ; boutiques de domaine `??dépenser-<monnaie> [numéro]` ;
@@ -126,6 +131,8 @@ app/
   database.py        # couche SQLite (aiosqlite, connexion paresseuse)
   economie.py        # économie (Gateway) : gains par message, niveaux, récompenses, commandes ??
   rostheim.py        # événement Rostheim et commande RP
+  eco_vues.py        # embeds et composants (menus, boutons) de l'économie
+  eco_interactions.py # commandes slash et clics des composants de l'économie
   pocketbase.py      # accès à la base PocketBase du site
 scripts/
   register_commands.py  # enregistre les commandes slash auprès de Discord (à lancer une fois)
