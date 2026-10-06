@@ -86,14 +86,55 @@ COMMANDS = [
         ],
     },
     # Économie (app/eco_interactions.py)
+    *[
+        {"name": nom, "description": desc,
+         "options": [{"type": 6, "name": "membre", "description": "Membre à afficher (vous par défaut)", "required": False}]}
+        for nom, desc in (("argent", "Votre Or, votre place et votre record"),
+                          ("niveau", "Votre niveau et votre progression"),
+                          ("inventaire", "Votre Or, vos monnaies Rostheim et vos objets"))
+    ],
+    {"name": "topargent", "description": "Classement d'économie (Or)"},
+    {"name": "topniveau", "description": "Classement des niveaux (XP)"},
+    {"name": "boutique", "description": "Ouvrir la boutique et acheter des articles"},
     {
-        "name": "profil",
-        "description": "Ton niveau, ton XP et ton Or (ou ceux d'un autre membre)",
-        "options": [{"type": 6, "name": "membre", "description": "Membre à afficher (toi par défaut)", "required": False}],
+        "name": "payer", "description": "Donner de l'Or (ou une monnaie Rostheim) à un membre",
+        "options": [
+            {"type": 6, "name": "membre", "description": "Membre qui reçoit", "required": True},
+            {"type": 4, "name": "montant", "description": "Montant", "required": True, "min_value": 1},
+            {"type": 3, "name": "monnaie", "description": "Or par défaut", "required": False, "autocomplete": True},
+        ],
     },
-    {"name": "inventaire", "description": "Ton Or, tes monnaies Rostheim et tes objets (visible par toi seul)"},
-    {"name": "boutique", "description": "Ouvrir la boutique et acheter un article"},
-    {"name": "classement", "description": "Classement des joueurs par XP"},
+    {
+        "name": "donner", "description": "Donner un objet de votre inventaire à un membre",
+        "options": [
+            {"type": 6, "name": "membre", "description": "Membre qui reçoit", "required": True},
+            {"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True},
+            {"type": 4, "name": "quantite", "description": "Quantité (1 par défaut)", "required": False, "min_value": 1},
+        ],
+    },
+    {
+        "name": "vendre", "description": "Revendre un objet de votre inventaire contre de l'Or",
+        "options": [
+            {"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True},
+            {"type": 4, "name": "quantite", "description": "Quantité (1 par défaut)", "required": False, "min_value": 1},
+        ],
+    },
+    {
+        "name": "utiliser", "description": "Utiliser un objet de votre inventaire",
+        "options": [{"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True}],
+    },
+    {
+        "name": "echanger", "description": "Proposer un échange (objets et/ou Or) à un membre",
+        "options": [
+            {"type": 6, "name": "membre", "description": "Membre à qui proposer l'échange", "required": True},
+            {"type": 3, "name": "donne_objet", "description": "Objet que vous donnez", "required": False, "autocomplete": True},
+            {"type": 4, "name": "donne_quantite", "description": "Quantité donnée (1 par défaut)", "required": False, "min_value": 1},
+            {"type": 4, "name": "donne_or", "description": "Or que vous donnez", "required": False, "min_value": 1},
+            {"type": 3, "name": "recoit_objet", "description": "Objet que vous voulez recevoir", "required": False, "autocomplete": True},
+            {"type": 4, "name": "recoit_quantite", "description": "Quantité reçue (1 par défaut)", "required": False, "min_value": 1},
+            {"type": 4, "name": "recoit_or", "description": "Or que vous voulez recevoir", "required": False, "min_value": 1},
+        ],
+    },
 ]
 
 

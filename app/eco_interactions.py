@@ -1,35 +1,52 @@
-"""Commandes slash de l'économie et clics sur ses menus/boutons (custom_id « eco:… »), reçus par /interactions.
+"""Commandes slash de l'économie, clics sur ses menus/boutons (custom_id « eco:… »), fenêtres (modals) et
+autocomplétion, reçus par l'endpoint /interactions.
 
-Discord exige une réponse en moins de 3 s : on répond « en cours » tout de suite (réponse différée), puis on
-remplace le message par le vrai contenu via le webhook de l'interaction.
+Discord exige une réponse en moins de 3 s : les écrans rapides (boutique, pages, tri) répondent directement ;
+les autres répondent « en cours » puis remplacent le message via le webhook de l'interaction.
 """
+import json
 import logging
 
 import discord
 import httpx
 
-from app import eco_vues
-from app.discord_types import EPHEMERAL_FLAG
+from app import eco_actions, eco_vues
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
-COMMANDES = {"profil", "inventaire", "boutique", "classement"}
-DIFFERE_MESSAGE, DIFFERE_MAJ, MAJ_MESSAGE = 5, 6, 7
+COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
+             "payer", "donner", "vendre", "utiliser", "echanger"}
+MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
+PRIVE = eco_vues.PRIVE
 
 
-async def _modifier(app_id: str, jeton: str, embeds: list[dict], composants: list | None = None):
-    url = f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}/messages/@original"
-    corps = {"content": "", "embeds": embeds, "components": composants or []}
+# ---------------------------------------------------------------- envoi
+
+async def _webhook(methode: str, url: str, corps: dict, fichier: bytes | None = None):
     try:
         async with httpx.AsyncClient() as client:
-            r = await client.patch(url, json=corps, timeout=10)
+            if fichier:
+                corps["attachments"] = [{"id": 0, "filename": "carte.png"}]
+                r = await client.request(methode, url, data={"payload_json": json.dumps(corps)},
+                                         files={"files[0]": ("carte.png", fichier, "image/png")}, timeout=20)
+            else:
+                r = await client.request(methode, url, json=corps, timeout=10)
             if r.status_code >= 400:
-                log.error("Échec de la mise à jour du message : %s %s", r.status_code, r.text)
+                log.error("Échec de l'envoi Discord : %s %s", r.status_code, r.text)
     except httpx.HTTPError as exc:
-        log.error("Erreur réseau lors de la mise à jour du message : %s", exc)
+        log.error("Erreur réseau vers Discord : %s", exc)
 
 
-async def _membre(eco, payload: dict, user_id: str | None = None) -> discord.Member | None:
+async def _modifier(app_id: str, jeton: str, embeds: list[dict], composants: list | None = None, fichier: bytes | None = None, contenu: str = ""):
+    corps = {"content": contenu, "embeds": embeds, "components": composants or [], "allowed_mentions": {"parse": ["users"]}}
+    await _webhook("PATCH", f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}/messages/@original", corps, fichier)
+
+
+async def _suivi_prive(app_id: str, jeton: str, embed: dict):
+    await _webhook("POST", f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}", {"embeds": [embed], "flags": PRIVE})
+
+
+async def _membre(eco, payload: dict, user_id=None) -> discord.Member | None:
     guild = eco.client.get_guild(int(payload["guild_id"])) if payload.get("guild_id") else None
     if not guild:
         return None
@@ -43,81 +60,241 @@ async def _membre(eco, payload: dict, user_id: str | None = None) -> discord.Mem
         return None
 
 
-def reponse_immediate(payload: dict) -> dict:
-    """Réponse à renvoyer tout de suite (avant le traitement en arrière-plan)."""
-    if payload["type"] == 2:  # commande slash
-        prive = payload["data"]["name"] in ("inventaire",)
-        return {"type": DIFFERE_MESSAGE, "data": {"flags": EPHEMERAL_FLAG} if prive else {}}
-    cid = payload["data"]["custom_id"]
-    if cid == "eco:no":
-        return {"type": MAJ_MESSAGE, "data": {"content": "", "embeds": [{"description": "Achat annulé.", "color": 0x99AAB5}], "components": []}}
-    if cid.startswith("eco:buy:"):
-        return {"type": DIFFERE_MAJ}
-    # Changer de boutique / choisir un article : réponse privée à la personne qui clique.
-    return {"type": DIFFERE_MESSAGE, "data": {"flags": EPHEMERAL_FLAG}}
+def _options(data: dict) -> dict:
+    return {o["name"]: o.get("value") for o in data.get("options", [])}
 
 
-async def traiter(eco, payload: dict, app_id: str):
-    """Traitement en arrière-plan d'une commande slash ou d'un clic de composant de l'économie."""
-    jeton = payload["token"]
+def _maj_v2(vue: dict) -> dict:
+    """Mise à jour d'un message Components V2 (le drapeau « privé » ne se change pas après coup)."""
+    return {"type": MAJ, "data": {**vue, "flags": eco_vues.V2}}
+
+
+def _origine(payload: dict) -> str:
+    return f'https://discord.com/channels/{payload.get("guild_id")}/{payload.get("channel_id")}' if payload.get("channel_id") else ""
+
+
+# ---------------------------------------------------------------- point d'entrée
+
+async def repondre(eco, payload: dict, taches, app_id: str) -> dict:
+    """Réponse immédiate à l'interaction ; le travail long est confié à `taches` (BackgroundTasks)."""
     try:
-        if payload["type"] == 2:
-            await _commande(eco, payload, app_id, jeton)
-        else:
-            await _composant(eco, payload, app_id, jeton)
+        t = payload["type"]
+        if t == 4:
+            return await _autocompletion(eco, payload)
+        membre = await _membre(eco, payload)
+        if not membre:
+            return {"type": MESSAGE, "data": {"content": "À utiliser sur le serveur.", "flags": PRIVE}}
+        if t == 2:
+            return await _commande(eco, payload, membre, taches, app_id)
+        if t == 3:
+            return await _composant(eco, payload, membre, taches, app_id)
+        if t == 5:
+            return await _fenetre(eco, payload, membre, taches, app_id)
     except Exception:
         log.exception("Erreur pendant une interaction de l'économie")
-        await _modifier(app_id, jeton, [eco_vues.erreur("Une erreur est survenue, réessaie dans un instant.")])
+    return {"type": MESSAGE, "data": {"embeds": [eco_vues.erreur("Une erreur est survenue, réessayez dans un instant.")], "flags": PRIVE}}
 
 
-async def _commande(eco, payload: dict, app_id: str, jeton: str):
-    data = payload["data"]
-    nom = data["name"]
-    membre = await _membre(eco, payload)
-    if not membre:
-        await _modifier(app_id, jeton, [eco_vues.erreur("Commande à utiliser sur le serveur.")])
-        return
-    options = {o["name"]: o.get("value") for o in data.get("options", [])}
-    if nom == "profil":
-        cible = membre
-        if options.get("membre") and str(options["membre"]) != str(membre.id):
+def _en_fond(taches, coro_fn, *args):
+    async def executer():
+        try:
+            await coro_fn(*args)
+        except Exception:
+            log.exception("Erreur en arrière-plan (économie)")
+    taches.add_task(executer)
+
+
+# ---------------------------------------------------------------- commandes slash
+
+async def _commande(eco, payload, membre, taches, app_id) -> dict:
+    data, jeton = payload["data"], payload["token"]
+    nom, opt = data["name"], _options(data)
+    if nom == "boutique":
+        return {"type": MESSAGE, "data": await eco_vues.vue_choix_boutique(eco, membre)}
+
+    async def cible():
+        if opt.get("membre") and str(opt["membre"]) != str(membre.id):
             cfg = await eco.config()
-            if not cfg["reglages"].get("voir_niveau_autres"):
-                await _modifier(app_id, jeton, [eco_vues.erreur("Le niveau des autres membres n'est pas visible.")])
-                return
-            cible = await _membre(eco, payload, options["membre"]) or membre
-        await _modifier(app_id, jeton, [await eco_vues.vue_profil(eco, cible)])
-    elif nom == "inventaire":
-        await _modifier(app_id, jeton, await eco_vues.vue_inventaire(eco, membre))
-    elif nom == "classement":
-        await _modifier(app_id, jeton, [await eco_vues.vue_classement(eco)])
-    elif nom == "boutique":
-        embed, composants = await eco_vues.vue_boutique(eco, membre)
-        await _modifier(app_id, jeton, [embed], composants)
+            if nom in ("argent", "niveau", "inventaire") and not cfg["reglages"].get("voir_niveau_autres"):
+                return None
+            return await _membre(eco, payload, opt["membre"])
+        return membre
+
+    async def travail():
+        if nom in ("argent", "niveau"):
+            c = await cible()
+            if not c:
+                return await _modifier(app_id, jeton, [eco_vues.erreur("Les informations des autres membres ne sont pas visibles.")])
+            embed, image = await (eco_vues.carte_argent if nom == "argent" else eco_vues.carte_niveau)(eco, c)
+            return await _modifier(app_id, jeton, [embed], fichier=image)
+        if nom in ("topargent", "topniveau"):
+            embed, comp = await eco_vues.vue_classement(eco, "argent" if nom == "topargent" else "niveau")
+            return await _modifier(app_id, jeton, [embed], comp)
+        if nom == "inventaire":
+            c = await cible()
+            if not c:
+                return await _modifier(app_id, jeton, [eco_vues.erreur("L'inventaire des autres membres n'est pas visible.")])
+            embed, comp = await eco_vues.vue_inventaire(eco, c)
+            return await _modifier(app_id, jeton, [embed], comp)
+        if nom == "payer":
+            vers = await _membre(eco, payload, opt.get("membre"))
+            ok, txt = await eco_actions.payer(eco, membre, vers, int(opt.get("montant") or 0), opt.get("monnaie") or "or", _origine(payload)) if vers else (False, "Membre introuvable.")
+            return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+        if nom == "donner":
+            vers = await _membre(eco, payload, opt.get("membre"))
+            ok, txt = await eco_actions.donner(eco, membre, vers, opt.get("objet"), int(opt.get("quantite") or 1)) if vers else (False, "Membre introuvable.")
+            return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+        if nom == "vendre":
+            ok, txt = await eco_actions.vendre(eco, membre, opt.get("objet"), int(opt.get("quantite") or 1), _origine(payload))
+            return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+        if nom == "utiliser":
+            ok, txt = await eco_actions.utiliser(eco, membre, opt.get("objet"))
+            return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+        if nom == "echanger":
+            vers = await _membre(eco, payload, opt.get("membre"))
+            if not vers:
+                return await _modifier(app_id, jeton, [eco_vues.erreur("Membre introuvable.")])
+            ok, txt, e = await eco_actions.proposer_echange(
+                eco, membre, vers, opt.get("donne_objet"), int(opt.get("donne_quantite") or 1), int(opt.get("donne_or") or 0),
+                opt.get("recoit_objet"), int(opt.get("recoit_quantite") or 1), int(opt.get("recoit_or") or 0), _origine(payload))
+            if not ok:
+                return await _modifier(app_id, jeton, [eco_vues.erreur(txt)])
+            embed, comp = await _vue_echange(eco, e, membre, vers)
+            return await _modifier(app_id, jeton, [embed], comp, contenu=vers.mention)
+
+    _en_fond(taches, travail)
+    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom == "vendre" else {}}
 
 
-async def _composant(eco, payload: dict, app_id: str, jeton: str):
-    data = payload["data"]
+async def _vue_echange(eco, e: dict, de, vers, statut: str | None = None) -> tuple[dict, list]:
+    donne, recoit = await eco_actions.decrire_echange(eco, e)
+    embed = {"title": "🤝 Proposition d'échange", "color": eco_vues.OR_DEFAUT,
+             "description": f"{de.mention} propose à {vers.mention} :\n\n**Donne** : {donne}\n**Contre** : {recoit}"}
+    if statut:
+        embed["footer"] = {"text": statut}
+        embed["color"] = eco_vues.VERT if statut.startswith("Échange effectué") else eco_vues.GRIS
+        return embed, []
+    return embed, [{"type": 1, "components": [
+        eco_vues._bouton("Accepter", f'eco:ech:{e["id"]}:ok', style=3),
+        eco_vues._bouton("Refuser", f'eco:ech:{e["id"]}:no', style=4),
+    ]}]
+
+
+# ---------------------------------------------------------------- menus et boutons
+
+async def _composant(eco, payload, membre, taches, app_id) -> dict:
+    data, jeton = payload["data"], payload["token"]
     cid, valeurs = data["custom_id"], data.get("values") or []
-    membre = await _membre(eco, payload)
-    if not membre:
-        await _modifier(app_id, jeton, [eco_vues.erreur("Action à utiliser sur le serveur.")])
-        return
-    if cid == "eco:bq":
-        embed, composants = await eco_vues.vue_boutique(eco, membre, valeurs[0] if valeurs else None)
-        await _modifier(app_id, jeton, [embed], composants)
-    elif cid.startswith("eco:art:"):
-        embed, composants = await eco_vues.vue_confirmation(eco, membre, cid.split(":")[2], valeurs[0])
-        await _modifier(app_id, jeton, [embed], composants)
-    elif cid.startswith("eco:buy:"):
-        _, _, boutique_id, article_id = cid.split(":")
+    morceaux = cid.split(":")
+    if cid == "eco:rien":
+        return {"type": DIFFERE_MAJ}
+    if cid == "eco:fermer":
+        return _maj_v2(eco_vues.boutique_fermee())
+    if cid == "eco:shop":
+        return _maj_v2(await eco_vues.vue_boutique(eco, membre, valeurs[0]))
+    if morceaux[1] == "pg":
+        return _maj_v2(await eco_vues.vue_boutique(eco, membre, morceaux[2], int(morceaux[3]), morceaux[4]))
+    if morceaux[1] == "tri":
+        return _maj_v2(await eco_vues.vue_boutique(eco, membre, morceaux[2], 0, valeurs[0]))
+    if morceaux[1] == "buy":
+        boutique_id, article_id = morceaux[2], morceaux[3]
         cfg = await eco.config()
-        boutique = next((b for b in cfg["boutiques"] if b["id"] == boutique_id), None)
         article = next((a for a in cfg["articles"] if a["id"] == article_id), None)
-        if not boutique or not article:
-            await _modifier(app_id, jeton, [eco_vues.resultat_achat(False, "Cet article n'est plus disponible.")])
-            return
-        canal = payload.get("channel_id")
-        origine = f'https://discord.com/channels/{payload["guild_id"]}/{canal}' if canal else ""
-        ok, texte = await eco.acheter(membre, boutique, article, origine)
-        await _modifier(app_id, jeton, [eco_vues.resultat_achat(ok, texte)])
+        if article and article.get("type") not in ("role_permanent", "role_temporaire"):
+            fenetre = await eco_vues.fenetre_quantite(eco, membre, boutique_id, article_id)
+            if fenetre:
+                return {"type": FENETRE, "data": fenetre}
+        _en_fond(taches, _achat, eco, payload, membre, app_id, boutique_id, article_id, 1)
+        return {"type": DIFFERE, "data": {"flags": PRIVE}}
+    if morceaux[1] == "top":
+        async def page_top():
+            embed, comp = await eco_vues.vue_classement(eco, morceaux[2], int(morceaux[3]))
+            await _modifier(app_id, jeton, [embed], comp)
+        _en_fond(taches, page_top)
+        return {"type": DIFFERE_MAJ}
+    if morceaux[1] == "inv":
+        async def page_inv():
+            c = await _membre(eco, payload, morceaux[2]) or membre
+            embed, comp = await eco_vues.vue_inventaire(eco, c, int(morceaux[3]))
+            await _modifier(app_id, jeton, [embed], comp)
+        _en_fond(taches, page_inv)
+        return {"type": DIFFERE_MAJ}
+    if morceaux[1] == "ech":
+        async def reponse_echange():
+            ok, txt = await eco_actions.repondre_echange(eco, membre, morceaux[2], morceaux[3] == "ok")
+            if not ok:
+                return await _suivi_prive(app_id, jeton, eco_vues.erreur(txt))
+            e = await eco.pb.requete("GET", f"/api/collections/eco_echanges/records/{morceaux[2]}")
+            de = await _membre_de_joueur(eco, payload, e["de"])
+            vers = await _membre_de_joueur(eco, payload, e["vers"])
+            embed, comp = await _vue_echange(eco, e, de or membre, vers or membre, txt)
+            await _modifier(app_id, jeton, [embed], comp)
+        _en_fond(taches, reponse_echange)
+        return {"type": DIFFERE_MAJ}
+    return {"type": DIFFERE_MAJ}
+
+
+async def _membre_de_joueur(eco, payload, joueur_id: str):
+    j = await eco.pb.requete("GET", f"/api/collections/joueurs/records/{joueur_id}")
+    return await _membre(eco, payload, j["discord_id"]) if j.get("discord_id") else None
+
+
+async def _achat(eco, payload, membre, app_id, boutique_id, article_id, quantite):
+    cfg = await eco.config()
+    boutique = next((b for b in cfg["boutiques"] if b["id"] == boutique_id), None)
+    article = next((a for a in cfg["articles"] if a["id"] == article_id), None)
+    if not boutique or not article:
+        return await _modifier(app_id, payload["token"], [eco_vues.resultat_achat(False, "Cet article n'est plus disponible.")])
+    ok, texte = await eco.acheter(membre, boutique, article, _origine(payload), quantite)
+    await _modifier(app_id, payload["token"], [eco_vues.resultat_achat(ok, texte)])
+
+
+# ---------------------------------------------------------------- fenêtre de quantité
+
+async def _fenetre(eco, payload, membre, taches, app_id) -> dict:
+    data = payload["data"]
+    morceaux = data["custom_id"].split(":")
+    if morceaux[1] != "buyq":
+        return {"type": DIFFERE_MAJ}
+    valeur = "1"
+    for rangee in data.get("components", []):
+        for c in rangee.get("components", []):
+            if c.get("custom_id") == "quantite":
+                valeur = (c.get("value") or "1").strip()
+    if not valeur.isdigit() or not 1 <= int(valeur) <= 25:
+        return {"type": MESSAGE, "data": {"embeds": [eco_vues.erreur("Quantité invalide (entre 1 et 25).")], "flags": PRIVE}}
+    _en_fond(taches, _achat, eco, payload, membre, app_id, morceaux[2], morceaux[3], int(valeur))
+    return {"type": DIFFERE, "data": {"flags": PRIVE}}
+
+
+# ---------------------------------------------------------------- autocomplétion des objets
+
+async def _autocompletion(eco, payload) -> dict:
+    data = payload["data"]
+    focus = next((o for o in data.get("options", []) if o.get("focused")), None)
+    if not focus:
+        return {"type": AUTOCOMPLETE, "data": {"choices": []}}
+    tape = str(focus.get("value") or "").lower()
+    choix = []
+    if focus["name"] in ("objet", "donne_objet"):
+        membre = await _membre(eco, payload)
+        joueur = await eco.joueur_de(membre) if membre else None
+        if joueur:
+            lignes = await eco.pb.lister("eco_inventaire", f'joueur="{joueur["id"]}" && quantite>0', expand="objet")
+            for l in lignes:
+                o = (l.get("expand") or {}).get("objet")
+                if o and tape in o["nom"].lower():
+                    suffixe = f" — revente {o.get('prix_revente')} Or" if data["name"] == "vendre" and o.get("prix_revente") else ""
+                    choix.append({"name": f'{o["nom"]} (×{l["quantite"]}){suffixe}'[:100], "value": o["id"]})
+    elif focus["name"] == "recoit_objet":
+        for o in await eco.pb.lister("eco_objets", "actif=true", tri="ordre"):
+            if tape in o["nom"].lower():
+                choix.append({"name": o["nom"][:100], "value": o["id"]})
+    elif focus["name"] == "monnaie":
+        choix = [{"name": "Or", "value": "or"}]
+        cfg = await eco.config()
+        if cfg["reglages"].get("echanges_actifs"):
+            for d in await eco.pb.lister("ros_domaines", tri="ordre"):
+                choix.append({"name": f'{d.get("monnaie_nom")} ({d.get("nom")})'[:100], "value": f'monnaie:{d["id"]}'})
+        choix = [c for c in choix if tape in c["name"].lower()]
+    return {"type": AUTOCOMPLETE, "data": {"choices": choix[:25]}}

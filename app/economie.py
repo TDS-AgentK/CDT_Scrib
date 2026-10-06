@@ -242,7 +242,11 @@ class Economie:
             trace(f'+{xp} XP, +{or_} Or (salon « {salon.get("salon_nom")} », bonus rôle {pct_xp} %)')
             self._dernier_gain[membre.id] = maintenant
             ancien = joueur.get("eco_xp") or 0
-            joueur = await self.pb.maj("joueurs", joueur["id"], {"eco_xp": ancien + xp, "eco_or": (joueur.get("eco_or") or 0) + or_})
+            nouvel_or = (joueur.get("eco_or") or 0) + or_
+            maj = {"eco_xp": ancien + xp, "eco_or": nouvel_or}
+            if nouvel_or > (joueur.get("eco_or_record") or 0):
+                maj["eco_or_record"] = nouvel_or
+            joueur = await self.pb.maj("joueurs", joueur["id"], maj)
             n_avant, n_apres = niveau_de(cfg["courbe"], ancien)[0], niveau_de(cfg["courbe"], joueur["eco_xp"])[0]
             if n_apres > n_avant:
                 await self.monter_niveau(message.channel, membre, joueur, n_avant, n_apres)
@@ -336,29 +340,50 @@ class Economie:
             return
         nom, _, arg = message.content[len(self.prefixe):].strip().partition(" ")
         actions = {
-            "niveau": self.cmd_niveau, "rang": self.cmd_niveau, "classement": self.cmd_classement,
+            "niveau": self.cmd_niveau, "rang": self.cmd_niveau, "argent": self.cmd_argent,
+            "classement": self.cmd_classement, "topniveau": self.cmd_classement, "topargent": self.cmd_topargent,
             "inventaire": self.cmd_inventaire, "boutique": self.cmd_boutique, "acheter": self.cmd_acheter,
         }
         action = actions.get(nom.lower())
         if action:
             await action(message, arg.strip())
 
-    async def cmd_niveau(self, message: discord.Message, arg: str):
+    async def _carte(self, message: discord.Message, genre: str):
         from app import eco_vues
         cfg = await self.config()
         cible = message.mentions[0] if message.mentions else message.author
         if cible != message.author and not cfg["reglages"].get("voir_niveau_autres"):
             return
-        await message.reply(embed=discord.Embed.from_dict(await eco_vues.vue_profil(self, cible)), mention_author=False)
+        embed, image = await (eco_vues.carte_argent if genre == "argent" else eco_vues.carte_niveau)(self, cible)
+        if not image:
+            await message.reply(embed=discord.Embed.from_dict(embed), mention_author=False)
+            return
+        import io
+        await message.reply(embed=discord.Embed.from_dict(embed), file=discord.File(io.BytesIO(image), "carte.png"), mention_author=False)
+
+    async def cmd_niveau(self, message: discord.Message, arg: str):
+        await self._carte(message, "niveau")
+
+    async def cmd_argent(self, message: discord.Message, arg: str):
+        await self._carte(message, "argent")
+
+    async def _top(self, message: discord.Message, genre: str):
+        from app import eco_vues
+        embed, comp = await eco_vues.vue_classement(self, genre)
+        vue = eco_vues.vue_discord(comp)
+        await message.reply(embed=discord.Embed.from_dict(embed), mention_author=False, **({"view": vue} if vue else {}))
 
     async def cmd_classement(self, message: discord.Message, arg: str):
-        from app import eco_vues
-        await message.reply(embed=discord.Embed.from_dict(await eco_vues.vue_classement(self)), mention_author=False)
+        await self._top(message, "niveau")
+
+    async def cmd_topargent(self, message: discord.Message, arg: str):
+        await self._top(message, "argent")
 
     async def cmd_inventaire(self, message: discord.Message, arg: str):
         from app import eco_vues
-        embeds = await eco_vues.vue_inventaire(self, message.author)
-        await message.reply(embeds=[discord.Embed.from_dict(e) for e in embeds], mention_author=False)
+        embed, comp = await eco_vues.vue_inventaire(self, message.author)
+        vue = eco_vues.vue_discord(comp)
+        await message.reply(embed=discord.Embed.from_dict(embed), mention_author=False, **({"view": vue} if vue else {}))
 
     def _boutiques_accessibles(self, cfg: dict, membre: discord.Member) -> list[dict]:
         def roles(txt):
@@ -383,10 +408,7 @@ class Economie:
         return sorted(l, key=cles.get(boutique.get("tri"), lambda a: (a.get("ordre") or 0, a.get("prix") or 0)))
 
     async def cmd_boutique(self, message: discord.Message, arg: str):
-        from app import eco_vues
-        embed, composants = await eco_vues.vue_boutique(self, message.author)
-        vue = eco_vues.vue_discord(composants)
-        await message.channel.send(embed=discord.Embed.from_dict(embed), **({"view": vue} if vue else {}))
+        await message.reply("La boutique s'ouvre avec la commande **/boutique** (pages, tri, achat par bouton).", mention_author=False)
 
     async def cmd_acheter(self, message: discord.Message, arg: str):
         cfg = await self.config()
@@ -411,8 +433,8 @@ class Economie:
         ok, texte = await self.acheter(message.author, trouve[0], trouve[1], message.jump_url)
         await message.reply(embed=discord.Embed.from_dict(eco_vues.resultat_achat(ok, texte)), mention_author=False)
 
-    async def acheter(self, membre: discord.Member, boutique: dict, article: dict, origine: str) -> tuple[bool, str]:
-        """Achat d'un article (commande à préfixe ou bouton) : (réussi, texte à afficher)."""
+    async def acheter(self, membre: discord.Member, boutique: dict, article: dict, origine: str, quantite: int = 1) -> tuple[bool, str]:
+        """Achat d'un article (commande à préfixe, bouton ou fenêtre de quantité) : (réussi, texte à afficher)."""
         cfg = await self.config()
         if not any(b["id"] == boutique["id"] for b in self._boutiques_accessibles(cfg, membre)):
             return False, "Cette boutique ne t'est pas accessible."
@@ -421,15 +443,23 @@ class Economie:
             if not joueur:
                 return False, "Aucune fiche joueur liée à ce compte Discord."
             article = await self.pb.requete("GET", f'/api/collections/eco_articles/records/{article["id"]}')  # stock à jour
-            prix = article.get("prix") or 0
+            est_role = article.get("type") in ("role_permanent", "role_temporaire") and (article.get("role_id") or article.get("role_nom"))
+            if est_role:
+                quantite = 1  # un rôle ne s'achète qu'une fois
+                role = self._role_discord(membre.guild, article.get("role_id"), article.get("role_nom"))
+                if role and role in membre.roles:
+                    return False, f"❌ Vous possédez déjà le rôle {role.mention}."
+            quantite = max(1, int(quantite or 1))
+            prix_unitaire = article.get("prix") or 0
+            prix = prix_unitaire * quantite
             if not article.get("actif"):
                 return False, "Cet article n'est plus en vente."
-            if not article.get("stock_illimite") and (article.get("stock") or 0) <= 0:
-                return False, "Cet article est épuisé."
+            if not article.get("stock_illimite") and (article.get("stock") or 0) < quantite:
+                return False, "Cet article est épuisé." if (article.get("stock") or 0) <= 0 else f'Il n\'en reste que {article.get("stock")}.'
             if (joueur.get("eco_or") or 0) < prix:
                 return False, f'Il te manque {prix - (joueur.get("eco_or") or 0)} Or.'
             # Le rôle est donné AVANT de débiter : s'il ne peut pas l'être, l'achat est annulé sans rien prélever.
-            if article.get("type") in ("role_permanent", "role_temporaire") and (article.get("role_id") or article.get("role_nom")):
+            if est_role:
                 jours = (article.get("duree_jours") or 0) if article.get("type") == "role_temporaire" else 0
                 echec = await self.donner_role(membre, joueur, article.get("role_id"), article.get("role_nom"), jours)
                 if echec:
@@ -437,12 +467,12 @@ class Economie:
             depense_avant = joueur.get("eco_or_depense") or 0
             joueur = await self.pb.maj("joueurs", joueur["id"], {"eco_or": joueur["eco_or"] - prix, "eco_or_depense": depense_avant + prix})
             if not article.get("stock_illimite"):
-                await self.pb.maj("eco_articles", article["id"], {"stock": (article.get("stock") or 0) - 1})
+                await self.pb.maj("eco_articles", article["id"], {"stock": (article.get("stock") or 0) - quantite})
                 self._charge_a = 0  # stock affiché à jour au prochain affichage
             if article.get("objet"):
-                await self.ajouter_objet(joueur["id"], article["objet"], 1, "achat", article["nom"])
+                await self.ajouter_objet(joueur["id"], article["objet"], quantite, "achat", article["nom"])
             await self.pb.creer("eco_achats", {
-                "joueur": joueur["id"], "article": article["id"], "article_nom": article["nom"], "prix": prix,
+                "joueur": joueur["id"], "article": article["id"], "article_nom": article["nom"] + (f" ×{quantite}" if quantite > 1 else ""), "prix": prix,
                 "date": _pb_date(datetime.now(timezone.utc)), "origine": origine,
             })
             if boutique.get("retirer_roles_acces"):
@@ -457,4 +487,4 @@ class Economie:
                 if p.get("declencheur") == "or_depense" and depense_avant < (p.get("seuil") or 0) <= depense_avant + prix:
                     await self.donner_succes(joueur, p.get("succes"))
         from app import eco_vues
-        return True, f'{article.get("emoji") or ""} **{article["nom"]}** pour **{prix}** {eco_vues.or_txt(cfg)}.\nIl te reste **{eco_vues._n(joueur["eco_or"])}** {eco_vues.or_txt(cfg)}.'.strip()
+        return True, f'{article.get("emoji") or ""} **{article["nom"]}**{f" ×{quantite}" if quantite > 1 else ""} pour **{eco_vues._n(prix)}** {eco_vues.or_txt(cfg)}.\nIl te reste **{eco_vues._n(joueur["eco_or"])}** {eco_vues.or_txt(cfg)}.'.strip()

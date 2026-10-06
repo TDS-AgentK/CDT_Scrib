@@ -25,10 +25,12 @@ ou à défaut par leur pseudo Discord (l'ID est alors enregistré automatiquemen
 Commandes (préfixe `ECO_PREFIX`, `??` par défaut) : `??niveau [@membre]`, `??classement`, `??inventaire`,
 `??boutique`, `??acheter <numéro ou nom>`.
 
-Commandes slash de l'économie (à enregistrer avec `python -m scripts.register_commands`) : `/profil [membre]`
-(niveau, barre de progression, XP, Or, rang), `/inventaire` (privé), `/classement`, `/boutique` (menu de choix des
-boutiques accessibles et des articles, confirmation avec boutons Acheter/Annuler). Les commandes à préfixe affichent
-les mêmes embeds ; menus et boutons (custom_id `eco:…`) arrivent par `/interactions` (`app/eco_interactions.py`).
+Commandes slash de l'économie (à enregistrer avec `python -m scripts.register_commands`), dans l'esprit de Draftbot :
+`/boutique` (Components V2 : choix de la boutique, articles paginés avec bouton « prix - Acheter », tri, fenêtre de
+quantité), `/argent` et `/niveau` (cartes image), `/topargent`, `/topniveau` (paginés), `/inventaire` (grille),
+`/payer` (Or, ou monnaie Rostheim si les échanges sont activés), `/donner`, `/vendre` (prix de revente de l'objet),
+`/utiliser` (objets utilisables), `/echanger` (proposition acceptée ou refusée par bouton). Menus, boutons et
+fenêtres (custom_id `eco:…`) arrivent par `/interactions` (`app/eco_interactions.py`).
 
 Événement Rostheim et commande RP (définis dans la base : `ros_commandes`, `ros_domaines`, `ros_paliers`,
 `ros_recompenses`, `eco_commande_rp`) : commandes de gain (`??texte`, `??lore`…) avec rôle requis, salon autorisé et
@@ -132,7 +134,9 @@ app/
   economie.py        # économie (Gateway) : gains par message, niveaux, récompenses, commandes ??
   rostheim.py        # événement Rostheim et commande RP
   eco_vues.py        # embeds et composants (menus, boutons) de l'économie
-  eco_interactions.py # commandes slash et clics des composants de l'économie
+  eco_interactions.py # commandes slash, clics, fenêtres et autocomplétion de l'économie
+  eco_actions.py     # payer, donner, vendre, utiliser, échanger
+  eco_cartes.py      # cartes image /argent et /niveau (Pillow)
   pocketbase.py      # accès à la base PocketBase du site
 scripts/
   register_commands.py  # enregistre les commandes slash auprès de Discord (à lancer une fois)

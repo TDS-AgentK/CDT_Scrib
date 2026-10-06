@@ -153,15 +153,16 @@ async def interactions(request: Request, background_tasks: BackgroundTasks):
 
     member_or_user = payload.get("member", {}).get("user") or payload.get("user")
 
-    # Économie : commandes slash (/profil, /boutique…) et clics sur ses menus/boutons (custom_id « eco:… »).
+    # Économie : commandes slash (/boutique, /argent…), autocomplétion, clics sur ses menus/boutons et
+    # fenêtres (custom_id « eco:… »).
+    donnees = payload.get("data") or {}
     if economie is not None and (
-        (interaction_type == InteractionType.APPLICATION_COMMAND and payload["data"]["name"] in eco_interactions.COMMANDES)
-        or (interaction_type == InteractionType.MESSAGE_COMPONENT and payload["data"].get("custom_id", "").startswith("eco:"))
+        (interaction_type in (InteractionType.APPLICATION_COMMAND, InteractionType.APPLICATION_COMMAND_AUTOCOMPLETE)
+         and donnees.get("name") in eco_interactions.COMMANDES)
+        or (interaction_type in (InteractionType.MESSAGE_COMPONENT, InteractionType.MODAL_SUBMIT)
+            and donnees.get("custom_id", "").startswith("eco:"))
     ):
-        reponse = eco_interactions.reponse_immediate(payload)
-        if not payload["data"].get("custom_id") == "eco:no":
-            background_tasks.add_task(eco_interactions.traiter, economie, payload, DISCORD_APPLICATION_ID)
-        return reponse
+        return await eco_interactions.repondre(economie, payload, background_tasks, DISCORD_APPLICATION_ID)
 
     if interaction_type == InteractionType.APPLICATION_COMMAND:
         data = payload["data"]
