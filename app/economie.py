@@ -174,7 +174,8 @@ class Economie:
         for s in cfg["salons"]:
             if s.get("salon_id") and str(s["salon_id"]) == str(channel.id):
                 return s
-        return next((s for s in cfg["salons"] if not s.get("salon_id") and meme_nom(s.get("salon_nom"), channel.name)), None)
+        # Sinon par le nom, même si un ID est renseigné (ex. ID du vrai serveur, test sur un serveur de test).
+        return next((s for s in cfg["salons"] if meme_nom(s.get("salon_nom"), channel.name)), None)
 
     async def gain(self, message: discord.Message):
         cfg = await self.config()
