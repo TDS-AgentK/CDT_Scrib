@@ -57,6 +57,11 @@ class Rostheim:
             await message.reply("L'événement Rostheim n'est pas actif.", mention_author=False)
             return True
         domaine = next((x for x in d["domaines"] if x["id"] == cmd.get("domaine")), None)
+        if cmd.get("type") == "outil" and (cmd.get("reponses") or "").strip():
+            # Ex. --wut : une réponse tirée au hasard, sans fiche joueur ni gain.
+            if await self._lieu_et_role(message, cmd, domaine):
+                await self.reponse_au_hasard(message, cmd)
+            return True
         joueur = await self._autorise(message, cmd, domaine)
         if not joueur:
             return True
@@ -75,21 +80,27 @@ class Rostheim:
 
     # ------------------------------------------------------------ contrôles
 
-    async def _autorise(self, message: discord.Message, cmd: dict, domaine: dict | None) -> dict | None:
-        """Rôle requis, salon autorisé, fiche joueur et limites ; renvoie la fiche joueur si tout est bon."""
+    async def _lieu_et_role(self, message: discord.Message, cmd: dict, domaine: dict | None) -> bool:
+        """Rôle requis et salon autorisé de la commande."""
         membre = message.author
         role = (cmd.get("role_requis") or "").strip()
         if role and not any(r.name.lower() == role.lower() or r.name.lower().startswith(role.lower() + " ") for r in membre.roles):
             await message.reply(f"Cette commande demande le rôle {role}.", mention_author=False)
-            return None
+            return False
         salon = (cmd.get("salon_autorise") or "").strip()
         if salon:
             ch = message.channel.parent if isinstance(message.channel, discord.Thread) else message.channel
             ids = {str(domaine.get("salon_id"))} if domaine and domaine.get("salon_id") and domaine.get("salon_nom") == salon else set()
             if str(ch.id) not in ids and ch.name != salon:
                 await message.reply(f"Cette commande se lance dans le salon #{salon}.", mention_author=False)
-                return None
-        joueur = await self.eco.joueur_de(membre)
+                return False
+        return True
+
+    async def _autorise(self, message: discord.Message, cmd: dict, domaine: dict | None) -> dict | None:
+        """Rôle requis, salon autorisé, fiche joueur et limites ; renvoie la fiche joueur si tout est bon."""
+        if not await self._lieu_et_role(message, cmd, domaine):
+            return None
+        joueur = await self.eco.joueur_de(message.author)
         if not joueur:
             await message.reply("Aucune fiche joueur liée à ce compte Discord.", mention_author=False)
             return None
@@ -102,6 +113,17 @@ class Rostheim:
                 await message.reply(f"Limite atteinte : {nombre} fois par {heures:g} h.", mention_author=False)
                 return None
         return joueur
+
+    async def reponse_au_hasard(self, message: discord.Message, cmd: dict):
+        """Envoie une des réponses de la commande (une par ligne), et supprime le message déclencheur si demandé."""
+        import random
+        reponses = [l for l in (cmd.get("reponses") or "").splitlines() if l.strip()]
+        await message.channel.send(random.choice(reponses))
+        if cmd.get("supprimer_declencheur"):
+            try:
+                await message.delete()
+            except discord.HTTPException:
+                log.warning("Impossible de supprimer le message de commande (permission « Gérer les messages » ?)")
 
     async def _solde(self, joueur: dict, domaine: dict) -> dict:
         s = await self.pb.premier("ros_soldes", f'joueur="{echapper(joueur["id"])}" && domaine="{echapper(domaine["id"])}"')

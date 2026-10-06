@@ -34,7 +34,7 @@ Règle des boosters : entre plusieurs rôles, seul le plus fort compte ; il se m
 et les multiplicateurs temporaires.
 
 Prérequis côté Discord (Developer Portal → Bot) : activer **Message Content Intent** et **Server Members Intent** ;
-le bot doit avoir la permission **Gérer les rôles** et son rôle doit être placé au-dessus des rôles qu'il distribue.
+le bot doit avoir les permissions **Gérer les rôles** et **Gérer les messages** (suppression du message `--wut`) et son rôle doit être placé au-dessus des rôles qu'il distribue.
 
 ## Commandes
 
