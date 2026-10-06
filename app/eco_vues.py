@@ -207,7 +207,13 @@ async def vue_classement(eco, genre: str, page: int = 0) -> tuple[dict, list]:
 
 # ---------------------------------------------------------------- inventaire (grille)
 
+# Ordre et titres des catégories d'objets dans /inventaire (catégorie réglée par objet dans la page Économie).
+CATEGORIES_INV = [("hasard", "🎲 Objets de hasard"), ("a_utiliser", "🎁 Objets à utiliser"), ("bon", "🎟️ Bons"),
+                  ("collection", "🃏 Collections"), ("document", "📜 Documents"), ("consommable", "🍬 Consommables")]
+
+
 async def vue_inventaire(eco, cible, page: int = 0) -> tuple[dict, list]:
+    """Or en tête, monnaies Rostheim à part, puis les objets rangés par catégorie (les autres en « Autres objets »)."""
     import asyncio
     cfg = await eco.config()
     joueur = await eco.joueur_de(cible)
@@ -218,30 +224,37 @@ async def vue_inventaire(eco, cible, page: int = 0) -> tuple[dict, list]:
         eco.pb.lister("ros_soldes", f'joueur="{echapper(joueur["id"])}"'),
         eco.pb.lister("ros_domaines", tri="ordre"),
     )
-    cases = [{"name": f'{(l["expand"]["objet"].get("emoji") or "")} {l["expand"]["objet"]["nom"]}'.strip()[:256], "value": f'x {_n(l["quantite"])}', "inline": True}
-             for l in sorted([l for l in lignes if (l.get("expand") or {}).get("objet")], key=lambda l: l["expand"]["objet"].get("ordre") or 0)]
+    champs = []
+    monnaies = []
     for d in domaines:
         q = sum((s.get("monnaie") or 0) for s in soldes if s.get("domaine") == d["id"])
         if q:
-            cases.append({"name": f'{d.get("monnaie_emoji") or ""} {d.get("monnaie_nom")}'.strip(), "value": f"x {_n(q)}", "inline": True})
-    pages = max(1, -(-len(cases) // PAR_PAGE_INV))
-    page = max(0, min(page, pages - 1))
+            monnaies.append(f'{d.get("monnaie_emoji") or ""} {d.get("monnaie_nom")} : **{_n(q)}**'.strip())
+    if monnaies:
+        champs.append({"name": "🏛️ Monnaies Rostheim", "value": "\n".join(monnaies), "inline": False})
+    objets = sorted([l for l in lignes if (l.get("expand") or {}).get("objet")], key=lambda l: l["expand"]["objet"].get("ordre") or 0)
+    connues = {k for k, _ in CATEGORIES_INV}
+    groupes = [(titre, [l for l in objets if l["expand"]["objet"].get("categorie") == k]) for k, titre in CATEGORIES_INV]
+    groupes.append(("📦 Autres objets", [l for l in objets if l["expand"]["objet"].get("categorie") not in connues]))
+    for titre, liste in groupes:
+        bloc = []
+        for l in liste:
+            o = l["expand"]["objet"]
+            ligne = f'`×{l["quantite"]}` {o.get("emoji") or ""} {o["nom"]}'.replace("  ", " ")
+            if sum(len(x) + 1 for x in bloc) + len(ligne) > 1000:
+                champs.append({"name": titre, "value": "\n".join(bloc), "inline": False})
+                bloc, titre = [], f"{titre} (suite)"
+            bloc.append(ligne)
+        if bloc:
+            champs.append({"name": titre, "value": "\n".join(bloc), "inline": False})
     nom = getattr(cible, "display_name", None) or joueur.get("pseudo")
     embed = {
         "author": {"name": f"Inventaire de {nom}", **({"icon_url": cible.display_avatar.url} if getattr(cible, "display_avatar", None) else {})},
-        "description": f"Monnaie de {getattr(cible, 'mention', nom)} : {_n(joueur.get('eco_or'))} {or_txt(cfg)}\n━━━━━━━━━━━━━━━━━━",
-        "fields": cases[page * PAR_PAGE_INV:(page + 1) * PAR_PAGE_INV] or [{"name": "Inventaire vide", "value": "—", "inline": False}],
-        "color": OR_DEFAUT, "footer": {"text": "Chroniques du Temps" + (f" • page {page + 1}/{pages}" if pages > 1 else "")},
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "description": f"Monnaie de {getattr(cible, 'mention', nom)} : **{_n(joueur.get('eco_or'))}** {or_txt(cfg)}",
+        "fields": champs[:25] or [{"name": "Inventaire vide", "value": "—", "inline": False}],
+        "color": OR_DEFAUT, "footer": {"text": "Chroniques du Temps"}, "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-    composants = []
-    if pages > 1:
-        composants = [{"type": 1, "components": [
-            _bouton("Précédent", f'eco:inv:{getattr(cible, "id", 0)}:{page - 1}', style=1, disabled=page == 0),
-            _bouton(f"Page {page + 1}/{pages}", "eco:rien", disabled=True),
-            _bouton("Suivant", f'eco:inv:{getattr(cible, "id", 0)}:{page + 1}', style=1, disabled=page >= pages - 1),
-        ]}]
-    return embed, composants
+    return embed, []
 
 
 # ---------------------------------------------------------------- cartes image
