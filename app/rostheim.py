@@ -4,8 +4,11 @@
 - ros_domaines / ros_paliers / ros_soldes / ros_recompenses : monnaies, jauges, paliers et boutiques de domaine ;
 - eco_commande_rp : récompense de la commande RP (Or, XP, rôle, pour le lanceur et ses partenaires mentionnés).
 Les textes de jeu (embeds de palier, message RP) viennent tous de la base ; un texte vide n'est pas envoyé.
+Embed de palier : l'embed complet (message_embed_json, réglé dans l'éditeur du site) s'il est marqué prêt, avec l'auteur
+du domaine, posté sous le nom et l'avatar des réglages (« Conseiller Corvoline ») ; sinon l'ancien texte message_embed.
 Chaque gain est tracé dans eco_gains.
 """
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -15,6 +18,23 @@ from app.economie import meme_nom, normaliser
 from app.pocketbase import echapper
 
 log = logging.getLogger("cdt_scrib.rostheim")
+
+
+def embed_palier(palier: dict, domaine: dict) -> discord.Embed | None:
+    """Embed complet du palier s'il est prêt ; l'auteur est toujours celui du domaine (verrouillé sur le site)."""
+    brut = (palier.get("message_embed_json") or "").strip()
+    if not palier.get("embed_pret") or not brut:
+        return None
+    try:
+        donnees = json.loads(brut)
+    except ValueError:
+        log.warning("Embed du palier %s illisible (JSON)", palier.get("id"))
+        return None
+    if domaine.get("embed_auteur_nom"):
+        donnees["author"] = {"name": domaine["embed_auteur_nom"]}
+        if domaine.get("embed_auteur_icone"):
+            donnees["author"]["icon_url"] = domaine["embed_auteur_icone"]
+    return discord.Embed.from_dict(donnees)
 
 
 def _pb_date(d: datetime) -> str:
@@ -170,9 +190,23 @@ class Rostheim:
             if avant < (p.get("points") or 0) <= apres:
                 await self.pb.maj("ros_paliers", p["id"], {"atteint": True})
                 await self.pb.maj("ros_domaines", domaine["id"], {"palier_actuel": p.get("niveau")})
+                embed = embed_palier(p, domaine)
                 texte = (p.get("message_embed") or "").strip()
-                if texte:
-                    await channel.send(embed=discord.Embed(description=texte[:4096], color=0xC5A24F))
+                if embed is None and texte:
+                    embed = discord.Embed(description=texte[:4096], color=0xC5A24F)
+                if embed is not None:
+                    await self._envoyer_palier(channel, embed)
+
+    async def _envoyer_palier(self, channel, embed: discord.Embed):
+        """Embed de palier posté sous le nom et l'avatar des réglages (webhook du salon), sinon par le bot lui-même."""
+        from app.anniversaires import _webhook
+        reglages = (await self.eco.config())["reglages"]
+        nom, avatar = reglages.get("rostheim_envoi_nom") or "", reglages.get("rostheim_envoi_avatar") or ""
+        webhook = await _webhook(self.eco.client, channel) if (nom or avatar) and isinstance(channel, discord.TextChannel) else None
+        if webhook:
+            await webhook.send(embed=embed, username=nom or None, avatar_url=avatar or None)
+        else:
+            await channel.send(embed=embed)
 
     async def conversion(self, message: discord.Message, joueur: dict, cmd: dict, domaine: dict):
         cout = cmd.get("cout_monnaie") or 0
