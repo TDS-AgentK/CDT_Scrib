@@ -35,7 +35,8 @@ fenêtres (custom_id `eco:…`) arrivent par `/interactions` (`app/eco_interacti
 Événement Rostheim et commande RP (définis dans la base : `ros_commandes`, `ros_domaines`, `ros_paliers`,
 `ros_recompenses`, `eco_commande_rp`) : commandes de gain (`??texte`, `??lore`…) avec rôle requis, salon autorisé et
 limites ; conversions `??gold-<monnaie>` / `??xp-<monnaie>` ; boutiques de domaine `??dépenser-<monnaie> [numéro]` ;
-`??boîte-à-rôle [numéro]` ; jauges collective et individuelle, paliers (embed du palier envoyé s'il est rempli) ;
+`??boîte-à-rôle [numéro]` ; jauges collective et individuelle, paliers (embed complet du palier — titre, citation, champs, image, auteur du domaine — envoyé s'il est marqué prêt dans
+l'éditeur du site, sous le nom et l'avatar des réglages Rostheim ; sinon l'ancien texte simple) ;
 `??rp @partenaires…` (Or, XP et rôle, message dans le salon configuré). Chaque gain est tracé dans `eco_gains`.
 Règle des boosters : entre plusieurs rôles, seul le plus fort compte ; il se multiplie avec le booster du salon
 et les multiplicateurs temporaires.
