@@ -222,13 +222,17 @@ class Economie:
             f_xp *= m.get("facteur_xp") or 1
             f_or *= m.get("facteur_or") or 1
 
+        # Gain de base tiré au hasard entre les bornes des réglages (incluses), sinon valeur fixe du salon.
         xp_min = reglages.get("xp_min") or 0
         xp_max = max(xp_min, reglages.get("xp_max") or 0)
         xp = random.randint(xp_min, xp_max) if xp_max else (salon.get("xp_base") or 0)
+        or_min = reglages.get("or_min") or 0
+        or_max = max(or_min, reglages.get("or_max") or 0)
+        or_ = random.randint(or_min, or_max) if or_max else (salon.get("or_base") or 0)
         xp *= (salon.get("multiplicateur_xp") or 1) * (1 + pct_xp / 100) * f_xp
         if reglages.get("messages_longs_double") and len(message.content) > 250:
             xp *= 2
-        or_ = (salon.get("or_base") or 0) * (1 + pct_or / 100) * f_or
+        or_ *= (1 + pct_or / 100) * f_or
         xp, or_ = round(xp), round(or_)
         if xp <= 0 and or_ <= 0:
             trace("gain calculé nul")
