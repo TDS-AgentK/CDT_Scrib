@@ -4,10 +4,13 @@
 - ros_domaines / ros_paliers / ros_soldes / ros_recompenses : monnaies, jauges, paliers et boutiques de domaine ;
 - eco_commande_rp : récompense de la commande RP (Or, XP, rôle, pour le lanceur et ses partenaires mentionnés).
 Les textes de jeu (embeds de palier, message RP) viennent tous de la base ; un texte vide n'est pas envoyé.
-Embed de palier : l'embed complet (message_embed_json, réglé dans l'éditeur du site) s'il est marqué prêt, avec l'auteur
-du domaine, posté sous le nom et l'avatar des réglages (« Conseiller Corvoline ») ; sinon l'ancien texte message_embed.
+Embed de palier : rien n'est posté automatiquement au passage d'un palier (le palier est seulement marqué atteint).
+K l'envoie elle-même depuis l'éditeur du site (« Envoyer dans le salon ») : le site ajoute une demande dans ros_envois,
+boucle_envois() la traite — embed complet (message_embed_json) avec l'auteur du domaine, posté dans le salon du domaine
+sous le nom et l'avatar des réglages (« Conseiller Corvoline ») — et note le résultat (lien du message ou erreur).
 Chaque gain est tracé dans eco_gains.
 """
+import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -20,10 +23,13 @@ from app.pocketbase import echapper
 log = logging.getLogger("cdt_scrib.rostheim")
 
 
+VERIFIER_ENVOIS_S = 15
+
+
 def embed_palier(palier: dict, domaine: dict) -> discord.Embed | None:
-    """Embed complet du palier s'il est prêt ; l'auteur est toujours celui du domaine (verrouillé sur le site)."""
+    """Embed complet enregistré pour le palier ; l'auteur est toujours celui du domaine (verrouillé sur le site)."""
     brut = (palier.get("message_embed_json") or "").strip()
-    if not palier.get("embed_pret") or not brut:
+    if not brut:
         return None
     try:
         donnees = json.loads(brut)
@@ -184,29 +190,71 @@ class Rostheim:
         await self._paliers(message.channel, domaine, avant, domaine["jauge_collective"])
 
     async def _paliers(self, channel, domaine: dict, avant: int, apres: int):
-        """Passage de palier de la jauge collective : palier marqué atteint, embed du palier envoyé s'il est rempli."""
+        """Passage de palier de la jauge collective : palier marqué atteint (l'embed est envoyé à la main depuis le site)."""
         paliers = await self.pb.lister("ros_paliers", f'domaine="{echapper(domaine["id"])}"', tri="niveau")
         for p in paliers:
             if avant < (p.get("points") or 0) <= apres:
                 await self.pb.maj("ros_paliers", p["id"], {"atteint": True})
                 await self.pb.maj("ros_domaines", domaine["id"], {"palier_actuel": p.get("niveau")})
-                embed = embed_palier(p, domaine)
-                texte = (p.get("message_embed") or "").strip()
-                if embed is None and texte:
-                    embed = discord.Embed(description=texte[:4096], color=0xC5A24F)
-                if embed is not None:
-                    await self._envoyer_palier(channel, embed)
+
+    def _salon(self, domaine: dict):
+        """Salon du domaine : par son ID s'il est connu, sinon par son nom sur le serveur."""
+        client = self.eco.client
+        if domaine.get("salon_id"):
+            salon = client.get_channel(int(domaine["salon_id"]))
+            if salon:
+                return salon
+        for guild in client.guilds:
+            if self.eco.guild_id and guild.id != self.eco.guild_id:
+                continue
+            for salon in guild.text_channels:
+                if meme_nom(salon.name, domaine.get("salon_nom")):
+                    return salon
+        return None
 
     async def _envoyer_palier(self, channel, embed: discord.Embed):
-        """Embed de palier posté sous le nom et l'avatar des réglages (webhook du salon), sinon par le bot lui-même."""
+        """Embed de palier posté sous le nom et l'avatar des réglages (webhook du salon), sinon par le bot lui-même ;
+        renvoie le message posté."""
         from app.anniversaires import _webhook
         reglages = (await self.eco.config())["reglages"]
         nom, avatar = reglages.get("rostheim_envoi_nom") or "", reglages.get("rostheim_envoi_avatar") or ""
         webhook = await _webhook(self.eco.client, channel) if (nom or avatar) and isinstance(channel, discord.TextChannel) else None
         if webhook:
-            await webhook.send(embed=embed, username=nom or None, avatar_url=avatar or None)
-        else:
-            await channel.send(embed=embed)
+            return await webhook.send(embed=embed, username=nom or None, avatar_url=avatar or None, wait=True)
+        return await channel.send(embed=embed)
+
+    async def traiter_envoi(self, demande: dict):
+        """Une demande d'envoi (ros_envois) : embed du palier posté dans le salon du domaine, résultat noté."""
+        maj = {"statut": "erreur"}
+        try:
+            palier = await self.pb.requete("GET", f'/api/collections/ros_paliers/records/{demande["palier"]}')
+            domaine = await self.pb.requete("GET", f'/api/collections/ros_domaines/records/{palier["domaine"]}')
+            embed = embed_palier(palier, domaine)
+            salon = self._salon(domaine)
+            if embed is None:
+                maj["erreur"] = "embed vide ou illisible"
+            elif salon is None:
+                maj["erreur"] = f'salon #{domaine.get("salon_nom") or "?"} introuvable'
+            else:
+                message = await self._envoyer_palier(salon, embed)
+                maj = {"statut": "envoye", "envoye_le": _pb_date(datetime.now(timezone.utc)), "lien": getattr(message, "jump_url", "") or "", "erreur": ""}
+        except discord.HTTPException as e:
+            maj["erreur"] = f"Discord : {e.text or e}"[:300]
+        except Exception as e:  # noqa: BLE001 — l'erreur est notée sur la demande, visible dans l'admin
+            log.exception("Envoi de l'embed de palier impossible")
+            maj["erreur"] = str(e)[:300]
+        await self.pb.maj("ros_envois", demande["id"], maj)
+
+    async def boucle_envois(self):
+        """Traite les demandes d'envoi d'embeds de palier faites depuis le site (toutes les VERIFIER_ENVOIS_S secondes)."""
+        await self.eco.client.wait_until_ready()
+        while not self.eco.client.is_closed():
+            try:
+                for demande in await self.pb.lister("ros_envois", 'statut="en_attente"', tri="created"):
+                    await self.traiter_envoi(demande)
+            except Exception:
+                log.exception("Erreur dans la boucle des envois d'embeds de palier")
+            await asyncio.sleep(VERIFIER_ENVOIS_S)
 
     async def conversion(self, message: discord.Message, joueur: dict, cmd: dict, domaine: dict):
         cout = cmd.get("cout_monnaie") or 0
