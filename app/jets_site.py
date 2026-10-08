@@ -21,6 +21,9 @@ JETS_SITE_S = 5
 FRAICHEUR = timedelta(minutes=15)
 OR_CDT = 0xC9A24C
 
+# Jets déjà postés mais dont la mise à jour en base a échoué : on ne les reposte pas à chaque tour.
+_publies: dict[str, str] = {}
+
 ICONES = {"competence": "🎯", "sauvegarde": "🛡️", "ca": "🛡️", "attaque": "⚔️", "degats": "💥",
           "sort": "✨", "degats_sort": "💥", "libre": "🎲"}
 
@@ -69,15 +72,18 @@ def construire_embed(jet: dict) -> discord.Embed:
 async def publier(client: discord.Client, pb: PocketBase, jet: dict):
     maj = {"discord_envoye": True}
     quand = _date(jet)
-    if quand and datetime.now(timezone.utc) - quand > FRAICHEUR:
+    if jet["id"] in _publies:
+        maj["discord_message_id"] = _publies[jet["id"]]
+    elif quand and datetime.now(timezone.utc) - quand > FRAICHEUR:
         log.info("Jet %s trop ancien, marqué sans être publié", jet["id"])
     else:
         salon = client.get_channel(int(jet["discord_salon_id"]))
         if salon is None:
             salon = await client.fetch_channel(int(jet["discord_salon_id"]))
         message = await salon.send(embed=construire_embed(jet))
-        maj["discord_message_id"] = str(message.id)
+        maj["discord_message_id"] = _publies[jet["id"]] = str(message.id)
     await pb.maj("jets", jet["id"], maj)
+    _publies.pop(jet["id"], None)
 
 
 async def boucle(client: discord.Client, pb: PocketBase):
@@ -88,9 +94,15 @@ async def boucle(client: discord.Client, pb: PocketBase):
                                        tri="created", expand="personnage"):
                 try:
                     await publier(client, pb, jet)
-                except (discord.HTTPException, ValueError):
+                except Exception:
+                    # Salon introuvable, interdit ou qui n'accepte pas de message : on marque le jet pour ne
+                    # pas bloquer la file ; une erreur de la base sera retentée au tour suivant.
                     log.exception("Jet %s non publié (salon %s)", jet.get("id"), jet.get("discord_salon_id"))
-                    await pb.maj("jets", jet["id"], {"discord_envoye": True})
+                    if jet["id"] not in _publies:
+                        try:
+                            await pb.maj("jets", jet["id"], {"discord_envoye": True})
+                        except Exception:
+                            log.exception("Jet %s : impossible de le marquer comme traité", jet.get("id"))
         except Exception:
             log.exception("Erreur dans la boucle des jets du site")
         await asyncio.sleep(JETS_SITE_S)
