@@ -162,6 +162,21 @@ COMMANDS = [
         }],
     },
     {
+        # Sessions de jeu des fiches du site (app/sessions_jeu.py) : utilisables par tout le monde.
+        "name": "session", "description": "Sessions de jeu (MJ, table) des fiches de jeu du site",
+        "options": [
+            {"type": 1, "name": "ouvrir", "description": "Ouvrir une session de jeu (vous êtes MJ par défaut)", "options": [
+                {"type": 6, "name": "mj", "description": "Le MJ de la session (vous par défaut)", "required": False},
+                {"type": 3, "name": "event", "description": "Nom de l'event (facultatif)", "required": False, "max_length": 200},
+            ]},
+            {"type": 1, "name": "rejoindre", "description": "Mettre un de vos personnages à la table", "options": [
+                {"type": 3, "name": "perso", "description": "Fiche de jeu de votre personnage", "required": True, "autocomplete": True},
+            ]},
+            {"type": 1, "name": "voir", "description": "Voir la session en cours (MJ, table, jets)"},
+            {"type": 1, "name": "clore", "description": "Clore la session (MJ, personne qui l'a ouverte ou administrateur)"},
+        ],
+    },
+    {
         "name": "utiliser", "description": "Utiliser un objet de votre inventaire",
         "options": [{"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True}],
     },

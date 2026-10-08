@@ -32,6 +32,11 @@ quantité), `/argent` et `/niveau` (cartes image), `/topargent`, `/topniveau` (p
 `/utiliser` (objets utilisables), `/echanger` (proposition acceptée ou refusée par bouton). Menus, boutons et
 fenêtres (custom_id `eco:…`) arrivent par `/interactions` (`app/eco_interactions.py`).
 
+Sessions de jeu des fiches du site (`app/sessions_jeu.py`, collection `sessions_jeu`), pour tout le monde :
+`/session ouvrir [mj] [event]` (vous êtes MJ par défaut ; refusé si une session est déjà ouverte),
+`/session rejoindre perso` (une fiche de jeu de vos personnages), `/session voir`, `/session clore` (MJ, personne qui
+l'a ouverte ou administrateur du serveur). Les jets lancés depuis le site pendant la session y sont rattachés.
+
 Événement Rostheim et commande RP (définis dans la base : `ros_commandes`, `ros_domaines`, `ros_paliers`,
 `ros_recompenses`, `eco_commande_rp`) : commandes de gain (`??texte`, `??lore`…) avec rôle requis, salon autorisé et
 limites ; conversions `??gold-<monnaie>` / `??xp-<monnaie>` ; boutiques de domaine `??dépenser-<monnaie> [numéro]` ;
