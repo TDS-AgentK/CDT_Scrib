@@ -251,9 +251,23 @@ class Economie:
             if nouvel_or > (joueur.get("eco_or_record") or 0):
                 maj["eco_or_record"] = nouvel_or
             joueur = await self.pb.maj("joueurs", joueur["id"], maj)
+            await self.tracer_message(joueur["id"], message, xp, or_)
             n_avant, n_apres = niveau_de(cfg["courbe"], ancien)[0], niveau_de(cfg["courbe"], joueur["eco_xp"])[0]
             if n_apres > n_avant:
                 await self.monter_niveau(message.channel, membre, joueur, n_avant, n_apres)
+
+    async def tracer_message(self, joueur_id: str, message: discord.Message, xp: int, or_: int):
+        """Trace dans eco_gains l'XP et l'Or gagnés par un message (visible dans l'onglet Gains du site)."""
+        salon = message.channel.parent if isinstance(message.channel, discord.Thread) else message.channel
+        nom = f'message #{getattr(salon, "name", "?")}'
+        date = _pb_date(datetime.now(timezone.utc))
+        try:
+            for monnaie, montant in (("XP", xp), ("Or", or_)):
+                if montant:
+                    await self.pb.creer("eco_gains", {"joueur": joueur_id, "commande": nom, "monnaie": monnaie, "montant": montant,
+                                                      "points_jauge": 0, "date": date, "origine": message.jump_url})
+        except Exception:  # la trace ne doit pas bloquer le gain
+            log.exception("Trace du gain du message %s impossible", message.id)
 
     # ------------------------------------------------------------ niveaux et récompenses
 
@@ -275,6 +289,9 @@ class Economie:
         if r.get("recompense_or"):
             frais = await self.pb.requete("GET", f'/api/collections/joueurs/records/{joueur["id"]}')
             await self.pb.maj("joueurs", joueur["id"], {"eco_or": (frais.get("eco_or") or 0) + r["recompense_or"]})
+            await self.pb.creer("eco_gains", {"joueur": joueur["id"], "commande": f'niveau {r.get("niveau")}', "monnaie": "Or",
+                                              "montant": r["recompense_or"], "points_jauge": 0,
+                                              "date": _pb_date(datetime.now(timezone.utc)), "origine": ""})
         if r.get("objet"):
             await self.ajouter_objet(joueur["id"], r["objet"], 1, "recompense_niveau", f'Niveau {r.get("niveau")}')
         if r.get("recompense_role"):

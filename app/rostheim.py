@@ -273,6 +273,10 @@ class Rostheim:
                 frais = await self.pb.maj("joueurs", joueur["id"], {"eco_xp": ancien_xp + (cmd.get("gain_xp") or 0)})
                 gain_txt = f'+{cmd.get("gain_xp") or 0} XP'
             await self._tracer(joueur, cmd, cmd["commande"], domaine.get("monnaie_nom") or "", -cout, 0, message)
+            if cmd["type"] == "conversion_or":
+                await self._tracer(joueur, cmd, cmd["commande"], "Or", cmd.get("gain_or") or 0, 0, message)
+            else:
+                await self._tracer(joueur, cmd, cmd["commande"], "XP", cmd.get("gain_xp") or 0, 0, message)
         await message.reply(f'{gain_txt} · −{cout} {domaine.get("monnaie_nom")}', mention_author=False)
         if ancien_xp is not None:
             cfg = await self.eco.config()
