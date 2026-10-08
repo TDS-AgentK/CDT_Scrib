@@ -69,17 +69,18 @@ async def startup():
     async def on_ready():
         log.info("Économie connectée à Discord en tant que %s", gateway.user)
         synchro_listes()
-        # /session (sessions de jeu des fiches) : déclarée ici, sans toucher aux autres commandes ni relancer
+        # /session et /attaque (fiches de jeu) : déclarées ici, sans toucher aux autres commandes ni relancer
         # scripts/register_commands.py à la main.
-        try:
-            from scripts.register_commands import COMMANDS
-            session = next(c for c in COMMANDS if c["name"] == "session")
-            if os.getenv("GUILD_ID"):
-                await gateway.http.upsert_guild_command(DISCORD_APPLICATION_ID, os.getenv("GUILD_ID"), session)
-            else:
-                await gateway.http.upsert_global_command(DISCORD_APPLICATION_ID, session)
-        except Exception:
-            log.exception("Impossible de déclarer la commande /session")
+        from scripts.register_commands import COMMANDS
+        for nom in ("session", "attaque"):
+            try:
+                commande = next(c for c in COMMANDS if c["name"] == nom)
+                if os.getenv("GUILD_ID"):
+                    await gateway.http.upsert_guild_command(DISCORD_APPLICATION_ID, os.getenv("GUILD_ID"), commande)
+                else:
+                    await gateway.http.upsert_global_command(DISCORD_APPLICATION_ID, commande)
+            except Exception:
+                log.exception("Impossible de déclarer la commande /%s", nom)
 
     asyncio.create_task(gateway.start(DISCORD_TOKEN))
     asyncio.create_task(economie.boucle_roles_temporaires())
@@ -98,6 +99,12 @@ async def startup():
     # Jets de dés lancés depuis les fiches de jeu du site : publiés dans le salon choisi (#random ou salon perso).
     from app import jets_site
     asyncio.create_task(jets_site.boucle(gateway, pocketbase))
+    # Combats (/attaque et bouton « Attaquer » du site) : défis lancés depuis le site, changements de statut, expirations.
+    from app import combat
+    if combat.configure():
+        asyncio.create_task(combat.boucle(gateway, pocketbase))
+    else:
+        log.info("Combat non branché : SITE_URL et BOT_SITE_SECRET absents.")
 
 
 @app.on_event("shutdown")

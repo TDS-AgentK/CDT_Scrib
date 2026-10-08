@@ -169,6 +169,15 @@ COMMANDS = [
         }],
     },
     {
+        # Combat des fiches de jeu (app/combat.py) : le site arbitre, le joueur de la cible accepte ou refuse.
+        "name": "attaque", "description": "Attaquer un personnage avec une arme ou un sort de votre fiche de jeu",
+        "options": [
+            {"type": 3, "name": "perso", "description": "Votre personnage (fiche de jeu)", "required": True, "autocomplete": True},
+            {"type": 3, "name": "type", "description": "Arme ou sort utilisé", "required": True, "autocomplete": True},
+            {"type": 3, "name": "cible", "description": "Personnage attaqué (⚔ = à la table de la session)", "required": True, "autocomplete": True},
+        ],
+    },
+    {
         # Sessions de jeu des fiches du site (app/sessions_jeu.py) : utilisables par tout le monde.
         "name": "session", "description": "Sessions de jeu (MJ, table) des fiches de jeu du site",
         "options": [
