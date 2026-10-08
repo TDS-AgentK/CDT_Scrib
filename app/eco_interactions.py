@@ -10,12 +10,12 @@ import logging
 import discord
 import httpx
 
-from app import eco_actions, eco_vues, receleur
+from app import drop, eco_actions, eco_vues, loteries, receleur
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
-             "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter"}
+             "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "loterie"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -152,6 +152,13 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
         if nom == "receleur":
             return await _modifier(app_id, jeton, [await receleur.vue(eco, membre)])
+        if nom == "drop":
+            ok, txt = await drop.lancer(eco, membre, opt.get("objet"), int(opt.get("quantite") or 1), int(opt.get("duree") or 0), payload.get("channel_id"))
+            return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+        if nom == "loterie":
+            sous = data["options"][0]
+            ok, txt = await loteries.creer(eco, membre, _options(sous), payload.get("channel_id"))
+            return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
         if nom == "utiliser":
             salon = membre.guild.get_channel(int(payload["channel_id"])) if payload.get("channel_id") else None
             ok, txt = await eco_actions.utiliser(eco, membre, opt.get("objet"), salon)
@@ -170,7 +177,7 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             return await _modifier(app_id, jeton, [embed], comp, contenu=vers.mention)
 
     _en_fond(taches, travail)
-    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur") else {}}
+    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "loterie") else {}}
 
 
 async def _vue_echange(eco, e: dict, de, vers, statut: str | None = None) -> tuple[dict, list]:
@@ -226,6 +233,13 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
             await _modifier(app_id, jeton, [embed], comp)
         _en_fond(taches, page_inv)
         return {"type": DIFFERE_MAJ}
+    if morceaux[1] in ("drop", "lot"):
+        async def clic():
+            fn = drop.ramasser if morceaux[1] == "drop" else loteries.participer
+            ok, txt = await fn(eco, membre, morceaux[2])
+            await _suivi_prive(app_id, jeton, eco_vues.resultat(ok, txt) if ok else eco_vues.erreur(txt))
+        _en_fond(taches, clic)
+        return {"type": DIFFERE_MAJ}
     if morceaux[1] == "ech":
         async def reponse_echange():
             ok, txt = await eco_actions.repondre_echange(eco, membre, morceaux[2], morceaux[3] == "ok")
@@ -278,7 +292,10 @@ async def _fenetre(eco, payload, membre, taches, app_id) -> dict:
 
 async def _autocompletion(eco, payload) -> dict:
     data = payload["data"]
-    focus = next((o for o in data.get("options", []) if o.get("focused")), None)
+    options = data.get("options", [])
+    if options and options[0].get("type") == 1:  # sous-commande (/loterie creer) : les options sont dedans
+        options = options[0].get("options", [])
+    focus = next((o for o in options if o.get("focused")), None)
     if not focus:
         return {"type": AUTOCOMPLETE, "data": {"choices": []}}
     tape = str(focus.get("value") or "").lower()
@@ -289,6 +306,10 @@ async def _autocompletion(eco, payload) -> dict:
             o = objets.get(l.get("objet"))
             if o and tape in o["nom"].lower():
                 choix.append({"name": f'{o["nom"]} — {l["prix_vente"]} Or (stock {l["stock"]})'[:100], "value": o["id"]})
+    elif focus["name"] == "objet" and data["name"] == "loterie":
+        for o in await eco.pb.lister("eco_objets", "actif=true", tri="ordre"):
+            if tape in o["nom"].lower():
+                choix.append({"name": o["nom"][:100], "value": o["id"]})
     elif focus["name"] in ("objet", "donne_objet"):
         membre = await _membre(eco, payload)
         joueur = await eco.joueur_de(membre) if membre else None

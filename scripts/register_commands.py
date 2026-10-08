@@ -128,6 +128,31 @@ COMMANDS = [
         ],
     },
     {
+        "name": "drop", "description": "Lâcher un objet dans le salon : le premier qui le ramasse le garde, sinon il file chez le Receleur",
+        "options": [
+            {"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True},
+            {"type": 4, "name": "duree", "description": "Durée en secondes (5 à 120)", "required": True, "min_value": 5, "max_value": 120},
+            {"type": 4, "name": "quantite", "description": "Quantité (1 par défaut)", "required": False, "min_value": 1},
+        ],
+    },
+    {
+        "name": "loterie", "description": "Loteries (administrateurs de loterie)",
+        "options": [{
+            "type": 1, "name": "creer", "description": "Créer une loterie",
+            "options": [
+                {"type": 3, "name": "titre", "description": "Titre de la loterie", "required": True},
+                {"type": 3, "name": "fin", "description": "Fin du tirage : JJ/MM/AAAA HH:MM (heure de Paris)", "required": True},
+                {"type": 4, "name": "gagnants", "description": "Nombre de gagnants (1 par défaut)", "required": False, "min_value": 1},
+                {"type": 4, "name": "or", "description": "Or gagné par chaque gagnant", "required": False, "min_value": 1},
+                {"type": 3, "name": "objet", "description": "Objet gagné par chaque gagnant", "required": False, "autocomplete": True},
+                {"type": 4, "name": "quantite", "description": "Quantité de l'objet (1 par défaut)", "required": False, "min_value": 1},
+                {"type": 4, "name": "prix_ticket", "description": "Prix d'un ticket en Or (0 = gratuit)", "required": False, "min_value": 0},
+                {"type": 4, "name": "max_tickets", "description": "Tickets maximum par joueur (1 par défaut)", "required": False, "min_value": 1},
+                {"type": 7, "name": "salon", "description": "Salon de l'annonce (le salon actuel par défaut)", "required": False},
+            ],
+        }],
+    },
+    {
         "name": "utiliser", "description": "Utiliser un objet de votre inventaire",
         "options": [{"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True}],
     },
