@@ -124,7 +124,7 @@ COMMANDS = [
         "options": [{"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True}],
     },
     {
-        "name": "echanger", "description": "Proposer un échange (objets et/ou Or) à un membre",
+        "name": "echanger", "description": "Proposer un échange (objets, Or et/ou monnaies Rostheim) à un membre",
         "options": [
             {"type": 6, "name": "membre", "description": "Membre à qui proposer l'échange", "required": True},
             {"type": 3, "name": "donne_objet", "description": "Objet que vous donnez", "required": False, "autocomplete": True},
@@ -133,6 +133,10 @@ COMMANDS = [
             {"type": 3, "name": "recoit_objet", "description": "Objet que vous voulez recevoir", "required": False, "autocomplete": True},
             {"type": 4, "name": "recoit_quantite", "description": "Quantité reçue (1 par défaut)", "required": False, "min_value": 1},
             {"type": 4, "name": "recoit_or", "description": "Or que vous voulez recevoir", "required": False, "min_value": 1},
+            {"type": 3, "name": "donne_monnaie", "description": "Monnaie Rostheim que vous donnez", "required": False, "autocomplete": True},
+            {"type": 4, "name": "donne_montant", "description": "Montant de cette monnaie", "required": False, "min_value": 1},
+            {"type": 3, "name": "recoit_monnaie", "description": "Monnaie Rostheim que vous voulez recevoir", "required": False, "autocomplete": True},
+            {"type": 4, "name": "recoit_montant", "description": "Montant de cette monnaie", "required": False, "min_value": 1},
         ],
     },
 ]
