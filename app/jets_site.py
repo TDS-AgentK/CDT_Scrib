@@ -38,11 +38,14 @@ def _date(jet: dict) -> datetime | None:
 
 
 def _nom_personnage(jet: dict) -> str:
+    # Le site enregistre le nom affiché avec la forme active (« Jurgen (Loup) ») : il passe avant celui du personnage.
+    if jet.get("personnage_nom"):
+        return jet["personnage_nom"]
     perso = (jet.get("expand") or {}).get("personnage") or {}
     for cle in ("prenom", "nom", "titre", "name"):  # personnages du site : le nom est dans « prenom »
         if perso.get(cle):
             return perso[cle]
-    return jet.get("personnage_nom") or "Personnage"
+    return "Personnage"
 
 
 def construire_embed(jet: dict) -> discord.Embed:
