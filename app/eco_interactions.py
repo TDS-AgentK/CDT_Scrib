@@ -157,7 +157,8 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
                 return await _modifier(app_id, jeton, [eco_vues.erreur("Membre introuvable.")])
             ok, txt, e = await eco_actions.proposer_echange(
                 eco, membre, vers, opt.get("donne_objet"), int(opt.get("donne_quantite") or 1), int(opt.get("donne_or") or 0),
-                opt.get("recoit_objet"), int(opt.get("recoit_quantite") or 1), int(opt.get("recoit_or") or 0), _origine(payload))
+                opt.get("recoit_objet"), int(opt.get("recoit_quantite") or 1), int(opt.get("recoit_or") or 0), _origine(payload),
+                opt.get("donne_monnaie"), int(opt.get("donne_montant") or 0), opt.get("recoit_monnaie"), int(opt.get("recoit_montant") or 0))
             if not ok:
                 return await _modifier(app_id, jeton, [eco_vues.erreur(txt)])
             embed, comp = await _vue_echange(eco, e, membre, vers)
@@ -291,8 +292,8 @@ async def _autocompletion(eco, payload) -> dict:
         for o in await eco.pb.lister("eco_objets", "actif=true", tri="ordre"):
             if tape in o["nom"].lower():
                 choix.append({"name": o["nom"][:100], "value": o["id"]})
-    elif focus["name"] == "monnaie":
-        choix = [{"name": "Or", "value": "or"}]
+    elif focus["name"] in ("monnaie", "donne_monnaie", "recoit_monnaie"):
+        choix = [{"name": "Or", "value": "or"}] if focus["name"] == "monnaie" else []
         cfg = await eco.config()
         if cfg["reglages"].get("echanges_actifs"):
             for d in await eco.pb.lister("ros_domaines", tri="ordre"):

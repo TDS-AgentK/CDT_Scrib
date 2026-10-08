@@ -257,45 +257,72 @@ async def utiliser(eco, membre: discord.Member, objet_id: str, salon=None) -> tu
 # ---------------------------------------------------------------- échanges (proposition puis acceptation)
 
 async def proposer_echange(eco, de: discord.Member, vers: discord.Member, objet_donne: str | None, q_donne: int, or_donne: int,
-                           objet_recu: str | None, q_recu: int, or_recu: int, origine: str) -> tuple[bool, str, dict | None]:
+                           objet_recu: str | None, q_recu: int, or_recu: int, origine: str,
+                           monnaie_donnee: str | None = None, montant_donne: int = 0,
+                           monnaie_recue: str | None = None, montant_recu: int = 0) -> tuple[bool, str, dict | None]:
     j_de, j_vers, err = await _deux_joueurs(eco, de, vers)
     if err:
         return False, err, None
+    cfg = await eco.config()
+    monnaie_donnee, monnaie_recue = _id_domaine(monnaie_donnee), _id_domaine(monnaie_recue)
+    if (monnaie_donnee or monnaie_recue) and not cfg["reglages"].get("echanges_actifs"):
+        return False, "Les échanges de monnaies Rostheim entre joueurs sont désactivés.", None
+    if (monnaie_donnee and montant_donne <= 0) or (monnaie_recue and montant_recu <= 0):
+        return False, "Indique le montant de la monnaie Rostheim.", None
+    domaines = {d["id"]: d for d in await eco.pb.lister("ros_domaines")}
+    if (monnaie_donnee and monnaie_donnee not in domaines) or (monnaie_recue and monnaie_recue not in domaines):
+        return False, "Monnaie inconnue.", None
     od = await objet_par_nom(eco, objet_donne) if objet_donne else None
     orc = await objet_par_nom(eco, objet_recu) if objet_recu else None
     if (objet_donne and not od) or (objet_recu and not orc):
         return False, "Objet inconnu.", None
-    if not (od or or_donne > 0) or not (orc or or_recu > 0):
-        return False, "Un échange doit avoir quelque chose de chaque côté (objet et/ou Or).", None
+    if not (od or or_donne > 0 or monnaie_donnee) or not (orc or or_recu > 0 or monnaie_recue):
+        return False, "Un échange doit avoir quelque chose de chaque côté (objet, Or et/ou monnaie Rostheim).", None
     if od:
         _, possede = await quantite(eco, j_de["id"], od["id"])
         if possede < max(1, q_donne):
             return False, f"Tu n'as que {possede} × {od['nom']}.", None
     if or_donne > (j_de.get("eco_or") or 0):
         return False, "Tu n'as pas assez d'Or pour cette offre.", None
+    if monnaie_donnee:
+        solde = await eco.rostheim._solde(j_de, domaines[monnaie_donnee])
+        if (solde.get("monnaie") or 0) < montant_donne:
+            return False, f"Il te manque {_n(montant_donne - (solde.get('monnaie') or 0))} {domaines[monnaie_donnee].get('monnaie_nom')}.", None
     e = await eco.pb.creer("eco_echanges", {
         "de": j_de["id"], "vers": j_vers["id"], "objet_donne": od["id"] if od else "", "quantite_donnee": max(1, q_donne) if od else 0,
         "or_donne": or_donne, "objet_recu": orc["id"] if orc else "", "quantite_recue": max(1, q_recu) if orc else 0, "or_recu": or_recu,
         "statut": "propose", "origine": origine,
+        "monnaie_donnee": monnaie_donnee or "", "montant_monnaie_donne": montant_donne if monnaie_donnee else 0,
+        "monnaie_recue": monnaie_recue or "", "montant_monnaie_recu": montant_recu if monnaie_recue else 0,
     })
     return True, "", e
 
 
-def _offre_txt(cfg, objet: dict | None, q: int, or_: int) -> str:
+def _id_domaine(valeur: str | None) -> str:
+    """Valeur de l'option monnaie (« monnaie:<id domaine> » ou id nu) → id du domaine, ou vide."""
+    return (valeur or "").split(":", 1)[-1] if valeur and valeur != "or" else ""
+
+
+def _offre_txt(cfg, objet: dict | None, q: int, or_: int, domaine: dict | None = None, montant: int = 0) -> str:
     from app import eco_vues
     morceaux = []
     if objet:
         morceaux.append(f"**{q} × {objet.get('emoji') or ''} {objet['nom']}**".replace("  ", " "))
     if or_:
         morceaux.append(f"**{_n(or_)}** {eco_vues.or_txt(cfg)}")
+    if domaine and montant:
+        morceaux.append(f"**{_n(montant)}** {domaine.get('monnaie_emoji') or ''} {domaine.get('monnaie_nom')}".replace("  ", " "))
     return " + ".join(morceaux) or "rien"
 
 
 async def decrire_echange(eco, e: dict) -> tuple[str, str]:
     cfg = await eco.config()
     objets = {o["id"]: o for o in await eco.pb.lister("eco_objets")}
-    return (_offre_txt(cfg, objets.get(e.get("objet_donne")), e.get("quantite_donnee") or 0, e.get("or_donne") or 0),
-            _offre_txt(cfg, objets.get(e.get("objet_recu")), e.get("quantite_recue") or 0, e.get("or_recu") or 0))
+    domaines = {d["id"]: d for d in await eco.pb.lister("ros_domaines")}
+    return (_offre_txt(cfg, objets.get(e.get("objet_donne")), e.get("quantite_donnee") or 0, e.get("or_donne") or 0,
+                       domaines.get(e.get("monnaie_donnee")), e.get("montant_monnaie_donne") or 0),
+            _offre_txt(cfg, objets.get(e.get("objet_recu")), e.get("quantite_recue") or 0, e.get("or_recu") or 0,
+                       domaines.get(e.get("monnaie_recue")), e.get("montant_monnaie_recu") or 0))
 
 
 async def repondre_echange(eco, membre: discord.Member, echange_id: str, accepte: bool) -> tuple[bool, str]:
@@ -316,8 +343,17 @@ async def repondre_echange(eco, membre: discord.Member, echange_id: str, accepte
     # Vérification des deux côtés au moment de l'acceptation, puis transfert.
     j_de = await eco.pb.requete("GET", f'/api/collections/joueurs/records/{e["de"]}')
     j_vers = await eco.pb.requete("GET", f'/api/collections/joueurs/records/{e["vers"]}')
-    for j, obj, q, or_ in ((j_de, e.get("objet_donne"), e.get("quantite_donnee"), e.get("or_donne")),
-                           (j_vers, e.get("objet_recu"), e.get("quantite_recue"), e.get("or_recu"))):
+    domaines = {d["id"]: d for d in await eco.pb.lister("ros_domaines")}
+    if (e.get("monnaie_donnee") or e.get("monnaie_recue")) and not (await eco.config())["reglages"].get("echanges_actifs"):
+        return False, "Les échanges de monnaies Rostheim entre joueurs sont désactivés."
+    for j, obj, q, or_, mon, mt in ((j_de, e.get("objet_donne"), e.get("quantite_donnee"), e.get("or_donne"), e.get("monnaie_donnee"), e.get("montant_monnaie_donne")),
+                                    (j_vers, e.get("objet_recu"), e.get("quantite_recue"), e.get("or_recu"), e.get("monnaie_recue"), e.get("montant_monnaie_recu"))):
+        if mon and mt:
+            if mon not in domaines:
+                return False, "Une des monnaies de cet échange n'existe plus."
+            solde = await eco.rostheim._solde(j, domaines[mon])
+            if (solde.get("monnaie") or 0) < mt:
+                return False, f"{j.get('pseudo')} n'a plus assez de {domaines[mon].get('monnaie_nom')} pour cet échange."
         if obj:
             _, possede = await quantite(eco, j["id"], obj)
             if possede < q:
@@ -337,5 +373,15 @@ async def repondre_echange(eco, membre: discord.Member, echange_id: str, accepte
             await changer_or(eco, vers["id"], or_)
             await _gain(eco, depuis["id"], "échange", "Or", -or_, e.get("origine") or "")
             await _gain(eco, vers["id"], "échange", "Or", or_, e.get("origine") or "")
+    for depuis, vers, mon, mt in ((j_de, j_vers, e.get("monnaie_donnee"), e.get("montant_monnaie_donne") or 0),
+                                  (j_vers, j_de, e.get("monnaie_recue"), e.get("montant_monnaie_recu") or 0)):
+        if mon and mt:
+            domaine = domaines[mon]
+            s_dep = await eco.rostheim._solde(depuis, domaine)
+            await eco.pb.maj("ros_soldes", s_dep["id"], {"monnaie": (s_dep.get("monnaie") or 0) - mt})
+            s_vers = await eco.rostheim._solde(vers, domaine)
+            await eco.pb.maj("ros_soldes", s_vers["id"], {"monnaie": (s_vers.get("monnaie") or 0) + mt})
+            await _gain(eco, depuis["id"], "échange", domaine.get("monnaie_nom") or "", -mt, e.get("origine") or "")
+            await _gain(eco, vers["id"], "échange", domaine.get("monnaie_nom") or "", mt, e.get("origine") or "")
     await eco.pb.maj("eco_echanges", e["id"], {"statut": "accepte"})
     return True, "Échange effectué ✅"
