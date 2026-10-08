@@ -335,7 +335,28 @@ class Economie:
             await self.pb.maj("eco_inventaire", ligne["id"], {"quantite": (ligne.get("quantite") or 0) + quantite})
         else:
             await self.pb.creer("eco_inventaire", {"joueur": joueur_id, "objet": objet_id, "quantite": quantite})
-        await self.pb.creer("eco_mouvements", {"joueur": joueur_id, "objet": objet_id, "quantite": quantite, "motif": motif, "note": note})
+        await self.tracer_mouvement(joueur_id, objet_id, quantite, motif, note)
+
+    # Motifs connus de la base ; un motif plus récent retombe sur le plus proche si la base le refuse.
+    MOTIFS_REPLI = {"vente_receleur": "vente", "achat_receleur": "achat", "drop": "don", "drop_annule": "don",
+                    "drop_ramasse": "don", "loterie": "achat", "rostheim": "achat", "boite_a_role_rendue": "utilisation"}
+
+    async def tracer_mouvement(self, joueur_id: str, objet_id: str, quantite: int, motif: str, note: str = ""):
+        """Historique eco_mouvements. Ne doit jamais interrompre l'opération (objet déjà retiré ou ajouté) :
+        si la base refuse le motif, on réessaie avec un motif connu (le vrai motif passe dans la note), puis on abandonne."""
+        ligne = {"joueur": joueur_id, "objet": objet_id, "quantite": quantite, "motif": motif, "note": note}
+        try:
+            await self.pb.creer("eco_mouvements", ligne)
+            return
+        except Exception as exc:
+            log.warning("Mouvement refusé (motif %s) : %s", motif, exc)
+        repli = self.MOTIFS_REPLI.get(motif)
+        if repli:
+            try:
+                await self.pb.creer("eco_mouvements", {**ligne, "motif": repli, "note": f"{motif} · {note}".strip(" ·")})
+                return
+            except Exception:
+                log.exception("Mouvement refusé même avec le motif %s", repli)
 
     async def boucle_roles_temporaires(self):
         """Retire les rôles temporaires arrivés à échéance (toutes les 10 minutes)."""
