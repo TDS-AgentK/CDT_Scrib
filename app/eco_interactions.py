@@ -196,7 +196,14 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             embed, comp = await _vue_echange(eco, e, membre, vers)
             return await _modifier(app_id, jeton, [embed], comp, contenu=vers.mention)
 
-    _en_fond(taches, travail)
+    async def travail_sur():
+        try:
+            await travail()
+        except Exception:
+            log.exception("Erreur pendant /%s", nom)
+            await _modifier(app_id, jeton, [eco_vues.erreur("Une erreur est survenue : préviens un admin avec l'heure de ta commande.")])
+
+    _en_fond(taches, travail_sur)
     return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie") else {}}
 
 
