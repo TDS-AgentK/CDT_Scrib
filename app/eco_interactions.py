@@ -171,6 +171,13 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             return await _webhook("POST", f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}",
                                   {"content": f"{membre.mention} {txt}", "allowed_mentions": {"parse": ["users"]}})
         if nom == "utiliser":
+            o = await eco_actions.objet_par_nom(eco, opt.get("objet") or "")
+            if ros_boutique.est_boite_a_role(o):
+                joueur = await eco.joueur_de(membre)
+                if not joueur or (await eco_actions.quantite(eco, joueur["id"], o["id"]))[1] < 1:
+                    return await _modifier(app_id, jeton, [eco_vues.erreur(f"Vous n'avez pas de {o['nom']}.")])
+                embed, comp = await ros_boutique.menu_boite(eco, membre)
+                return await _modifier(app_id, jeton, [embed], comp)
             salon = membre.guild.get_channel(int(payload["channel_id"])) if payload.get("channel_id") else None
             ok, txt = await eco_actions.utiliser(eco, membre, opt.get("objet"), salon)
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
@@ -237,6 +244,15 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
             return {"type": FENETRE, "data": modal}
         _en_fond(taches, _achat_ros, eco, payload, membre, app_id, morceaux[2], morceaux[3], "")
         return {"type": DIFFERE, "data": {"flags": PRIVE}}
+    if morceaux[1] == "bar":
+        if str(membre.id) != morceaux[2]:
+            return {"type": MESSAGE, "data": {"embeds": [eco_vues.erreur("Ce choix appartient à un autre joueur.")], "flags": PRIVE}}
+
+        async def choix_role():
+            ok, txt = await ros_boutique.ouvrir_boite(eco, membre, valeurs[0], payload.get("channel_id"))
+            await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)], [])
+        _en_fond(taches, choix_role)
+        return {"type": DIFFERE_MAJ}
     if morceaux[1] == "top":
         async def page_top():
             embed, comp = await eco_vues.vue_classement(eco, morceaux[2], int(morceaux[3]))

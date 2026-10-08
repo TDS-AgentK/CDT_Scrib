@@ -232,3 +232,58 @@ async def _prevenir_staff(eco, membre: discord.Member, d: dict, r: dict, precisi
     except discord.HTTPException as exc:
         log.error("Envoi de la demande spéciale impossible : %s", exc)
         return ""
+
+
+# ---------------------------------------------------------------- boîte à rôle (/utiliser)
+
+def est_boite_a_role(objet: dict | None) -> bool:
+    return bool(objet) and normaliser(objet.get("nom")).startswith("boitearole")
+
+
+async def offres_roles(eco, membre: discord.Member) -> list[tuple[dict, dict]]:
+    """Rôles des boutiques de domaine (« Obtenir le rôle … ») que le membre n'a pas encore, avec leur domaine."""
+    offres = []
+    for d in await domaines(eco):
+        for r in await eco.pb.lister("ros_recompenses", f'actif=true && domaine="{echapper(d["id"])}"', tri="ordre"):
+            effet = analyser(r)
+            if effet["type"] == "role" and not eco._a_le_role(membre, None, effet["nom"]):
+                offres.append((d, r))
+    return offres
+
+
+async def menu_boite(eco, membre: discord.Member) -> tuple[dict, list]:
+    offres = await offres_roles(eco, membre)
+    if not offres:
+        return eco_vues.erreur("Aucun rôle à choisir : vous les avez déjà tous, ou l'événement Rostheim n'est pas actif."), []
+    embed = {"title": "Boîte à rôle", "color": eco_vues.OR_DEFAUT,
+             "description": "Choisissez votre rôle. Il est définitif et se paie dans la monnaie de sa zone ; la boîte est utilisée seulement si le rôle est obtenu."}
+    options = [{"label": analyser(r)["nom"][:100], "value": r["id"],
+                "description": f'{r.get("prix") or 0} {d.get("monnaie_nom")} ({d.get("nom")})'[:100]} for d, r in offres[:25]]
+    return embed, [{"type": 1, "components": [{"type": 3, "custom_id": f"eco:bar:{membre.id}", "placeholder": "Choisissez votre rôle…", "options": options}]}]
+
+
+async def ouvrir_boite(eco, membre: discord.Member, rec_id: str, channel_id: str | None) -> tuple[bool, str]:
+    """La boîte est retirée de l'inventaire, puis le rôle acheté dans sa monnaie ; en cas d'échec la boîte est rendue."""
+    from app.eco_actions import quantite, retirer_objet
+    joueur = await eco.joueur_de(membre)
+    if not joueur:
+        return False, "Aucune fiche joueur liée à ce compte Discord."
+    r = await eco.pb.premier("ros_recompenses", f'id="{echapper(rec_id)}"')
+    if not r or analyser(r)["type"] != "role":
+        return False, "Ce rôle n'est plus proposé."
+    boites = [o for o in await eco.pb.lister("eco_objets", "actif=true") if est_boite_a_role(o)]
+    async with eco._verrou(membre.id):
+        boite = None
+        for o in boites:
+            if (await quantite(eco, joueur["id"], o["id"]))[1] >= 1:
+                boite = o
+                break
+        if not boite:
+            return False, "Vous n'avez plus de Boîte à rôle."
+        await retirer_objet(eco, joueur["id"], boite["id"], 1, "utilisation", f'boîte à rôle : {r["libelle"]}')
+    ok, texte = await acheter(eco, membre, r.get("domaine"), rec_id, "", channel_id)
+    if not ok:
+        await eco.ajouter_objet(joueur["id"], boite["id"], 1, "boite_a_role_rendue", "rôle non obtenu")
+        return False, texte + " La boîte vous est rendue."
+    d = next((x for x in await domaines(eco) if x["id"] == r.get("domaine")), {})
+    return True, f'{membre.mention} ouvre une **Boîte à rôle** : rôle **{analyser(r)["nom"]}** obtenu pour {r.get("prix") or 0} {d.get("monnaie_nom") or ""}.'
