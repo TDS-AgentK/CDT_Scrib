@@ -1,0 +1,3006 @@
+{
+ "version": "Base V3.3 + correctifs des fiches joueurs",
+ "caracteristiques": [
+  "Force",
+  "Dextérité",
+  "Constitution",
+  "Intelligence",
+  "Sagesse",
+  "Charisme"
+ ],
+ "competences": [
+  "Acrobaties",
+  "Dressage",
+  "Arcanes",
+  "Athlétisme",
+  "Tromperie",
+  "Histoire",
+  "Intimidation",
+  "Investigation",
+  "Médecine",
+  "Nature",
+  "Perception",
+  "Perspicacité",
+  "Représentation",
+  "Persuasion",
+  "Religion",
+  "Escamotage",
+  "Discrétion",
+  "Survie"
+ ],
+ "competence_carac": {
+  "Acrobaties": "Dextérité",
+  "Dressage": "Sagesse",
+  "Arcanes": "Intelligence",
+  "Athlétisme": "Force",
+  "Tromperie": "Charisme",
+  "Histoire": "Intelligence",
+  "Intimidation": "Charisme",
+  "Investigation": "Intelligence",
+  "Médecine": "Sagesse",
+  "Nature": "Intelligence",
+  "Perception": "Sagesse",
+  "Perspicacité": "Sagesse",
+  "Représentation": "Charisme",
+  "Persuasion": "Charisme",
+  "Religion": "Intelligence",
+  "Escamotage": "Dextérité",
+  "Discrétion": "Dextérité",
+  "Survie": "Sagesse"
+ },
+ "constantes": {
+  "points_a_repartir": 300,
+  "carac_min": 30,
+  "carac_max": 70,
+  "specialisations_max": 3,
+  "bonus_specialisation": 15,
+  "pv_base": 12,
+  "sorts": {
+   "mineur": {
+    "jet_bonus": 6,
+    "arcanes_div": 200,
+    "dd_base": 10,
+    "dd_mult": 1.1,
+    "des_degats": 2
+   },
+   "median": {
+    "jet_bonus": 10,
+    "arcanes_div": 100,
+    "dd_base": 20,
+    "dd_mult": 1.2,
+    "des_degats": 3
+   },
+   "majeur": {
+    "jet_bonus": 20,
+    "arcanes_div": 400,
+    "dd_base": 30,
+    "dd_mult": 1.25,
+    "des_degats": 5
+   }
+  },
+  "artefacts_max": 3
+ },
+ "table_modificateurs": [
+  [
+   -31,
+   -25
+  ],
+  [
+   -30,
+   -25
+  ],
+  [
+   -29,
+   -25
+  ],
+  [
+   -28,
+   -25
+  ],
+  [
+   -27,
+   -25
+  ],
+  [
+   -26,
+   -25
+  ],
+  [
+   -25,
+   -25
+  ],
+  [
+   -24,
+   -25
+  ],
+  [
+   -23,
+   -25
+  ],
+  [
+   -22,
+   -25
+  ],
+  [
+   -21,
+   -25
+  ],
+  [
+   -20,
+   -25
+  ],
+  [
+   -19,
+   -25
+  ],
+  [
+   -18,
+   -25
+  ],
+  [
+   -17,
+   -25
+  ],
+  [
+   -16,
+   -25
+  ],
+  [
+   -15,
+   -25
+  ],
+  [
+   -14,
+   -25
+  ],
+  [
+   -13,
+   -25
+  ],
+  [
+   -12,
+   -25
+  ],
+  [
+   -11,
+   -25
+  ],
+  [
+   -10,
+   -25
+  ],
+  [
+   -9,
+   -25
+  ],
+  [
+   -8,
+   -25
+  ],
+  [
+   -7,
+   -25
+  ],
+  [
+   -6,
+   -25
+  ],
+  [
+   -5,
+   -25
+  ],
+  [
+   -4,
+   -25
+  ],
+  [
+   -3,
+   -25
+  ],
+  [
+   -2,
+   -25
+  ],
+  [
+   -1,
+   -25
+  ],
+  [
+   0,
+   -25
+  ],
+  [
+   1,
+   -25
+  ],
+  [
+   2,
+   -25
+  ],
+  [
+   3,
+   -25
+  ],
+  [
+   4,
+   -25
+  ],
+  [
+   5,
+   -25
+  ],
+  [
+   6,
+   -25
+  ],
+  [
+   7,
+   -25
+  ],
+  [
+   8,
+   -25
+  ],
+  [
+   9,
+   -25
+  ],
+  [
+   10,
+   -20
+  ],
+  [
+   11,
+   -20
+  ],
+  [
+   12,
+   -20
+  ],
+  [
+   13,
+   -20
+  ],
+  [
+   14,
+   -20
+  ],
+  [
+   15,
+   -20
+  ],
+  [
+   16,
+   -20
+  ],
+  [
+   17,
+   -20
+  ],
+  [
+   18,
+   -20
+  ],
+  [
+   19,
+   -20
+  ],
+  [
+   20,
+   -15
+  ],
+  [
+   21,
+   -15
+  ],
+  [
+   22,
+   -15
+  ],
+  [
+   23,
+   -15
+  ],
+  [
+   24,
+   -15
+  ],
+  [
+   25,
+   -15
+  ],
+  [
+   26,
+   -15
+  ],
+  [
+   27,
+   -15
+  ],
+  [
+   28,
+   -15
+  ],
+  [
+   29,
+   -15
+  ],
+  [
+   30,
+   -10
+  ],
+  [
+   31,
+   -10
+  ],
+  [
+   32,
+   -10
+  ],
+  [
+   33,
+   -10
+  ],
+  [
+   34,
+   -10
+  ],
+  [
+   35,
+   -10
+  ],
+  [
+   36,
+   -10
+  ],
+  [
+   37,
+   -10
+  ],
+  [
+   38,
+   -10
+  ],
+  [
+   39,
+   -10
+  ],
+  [
+   40,
+   -5
+  ],
+  [
+   41,
+   -5
+  ],
+  [
+   42,
+   -5
+  ],
+  [
+   43,
+   -5
+  ],
+  [
+   44,
+   -5
+  ],
+  [
+   45,
+   -5
+  ],
+  [
+   46,
+   -5
+  ],
+  [
+   47,
+   -5
+  ],
+  [
+   48,
+   -5
+  ],
+  [
+   49,
+   -5
+  ],
+  [
+   50,
+   0
+  ],
+  [
+   51,
+   0
+  ],
+  [
+   52,
+   0
+  ],
+  [
+   53,
+   0
+  ],
+  [
+   54,
+   0
+  ],
+  [
+   55,
+   0
+  ],
+  [
+   56,
+   0
+  ],
+  [
+   57,
+   0
+  ],
+  [
+   58,
+   0
+  ],
+  [
+   59,
+   0
+  ],
+  [
+   60,
+   5
+  ],
+  [
+   61,
+   5
+  ],
+  [
+   62,
+   5
+  ],
+  [
+   63,
+   5
+  ],
+  [
+   64,
+   5
+  ],
+  [
+   65,
+   5
+  ],
+  [
+   66,
+   5
+  ],
+  [
+   67,
+   5
+  ],
+  [
+   68,
+   5
+  ],
+  [
+   69,
+   5
+  ],
+  [
+   70,
+   10
+  ],
+  [
+   71,
+   10
+  ],
+  [
+   72,
+   10
+  ],
+  [
+   73,
+   10
+  ],
+  [
+   74,
+   10
+  ],
+  [
+   75,
+   10
+  ],
+  [
+   76,
+   10
+  ],
+  [
+   77,
+   10
+  ],
+  [
+   78,
+   10
+  ],
+  [
+   79,
+   10
+  ],
+  [
+   80,
+   15
+  ],
+  [
+   81,
+   15
+  ],
+  [
+   82,
+   15
+  ],
+  [
+   83,
+   15
+  ],
+  [
+   84,
+   15
+  ],
+  [
+   85,
+   15
+  ],
+  [
+   86,
+   15
+  ],
+  [
+   87,
+   15
+  ],
+  [
+   88,
+   15
+  ],
+  [
+   89,
+   15
+  ],
+  [
+   90,
+   20
+  ],
+  [
+   91,
+   20
+  ],
+  [
+   92,
+   20
+  ],
+  [
+   93,
+   20
+  ],
+  [
+   94,
+   20
+  ],
+  [
+   95,
+   20
+  ],
+  [
+   96,
+   20
+  ],
+  [
+   97,
+   20
+  ],
+  [
+   98,
+   20
+  ],
+  [
+   99,
+   20
+  ],
+  [
+   100,
+   25
+  ],
+  [
+   101,
+   25
+  ],
+  [
+   102,
+   25
+  ],
+  [
+   103,
+   25
+  ],
+  [
+   104,
+   25
+  ],
+  [
+   105,
+   25
+  ],
+  [
+   106,
+   25
+  ],
+  [
+   107,
+   25
+  ],
+  [
+   108,
+   25
+  ],
+  [
+   109,
+   25
+  ],
+  [
+   110,
+   25
+  ],
+  [
+   111,
+   25
+  ],
+  [
+   112,
+   25
+  ],
+  [
+   113,
+   25
+  ],
+  [
+   114,
+   25
+  ],
+  [
+   115,
+   25
+  ],
+  [
+   116,
+   25
+  ],
+  [
+   117,
+   25
+  ],
+  [
+   118,
+   25
+  ],
+  [
+   119,
+   25
+  ],
+  [
+   120,
+   25
+  ],
+  [
+   121,
+   25
+  ],
+  [
+   122,
+   25
+  ],
+  [
+   123,
+   25
+  ],
+  [
+   124,
+   25
+  ],
+  [
+   125,
+   25
+  ],
+  [
+   126,
+   25
+  ],
+  [
+   127,
+   25
+  ],
+  [
+   128,
+   25
+  ],
+  [
+   129,
+   25
+  ],
+  [
+   130,
+   25
+  ],
+  [
+   131,
+   25
+  ],
+  [
+   132,
+   25
+  ],
+  [
+   133,
+   25
+  ],
+  [
+   134,
+   25
+  ],
+  [
+   135,
+   25
+  ],
+  [
+   136,
+   25
+  ],
+  [
+   137,
+   25
+  ],
+  [
+   138,
+   25
+  ],
+  [
+   139,
+   25
+  ],
+  [
+   140,
+   25
+  ],
+  [
+   141,
+   25
+  ],
+  [
+   142,
+   25
+  ],
+  [
+   143,
+   25
+  ],
+  [
+   144,
+   25
+  ],
+  [
+   145,
+   25
+  ],
+  [
+   146,
+   25
+  ],
+  [
+   147,
+   25
+  ],
+  [
+   148,
+   25
+  ],
+  [
+   149,
+   25
+  ],
+  [
+   150,
+   25
+  ],
+  [
+   151,
+   25
+  ],
+  [
+   152,
+   25
+  ],
+  [
+   153,
+   25
+  ],
+  [
+   154,
+   25
+  ],
+  [
+   155,
+   25
+  ],
+  [
+   156,
+   25
+  ],
+  [
+   157,
+   25
+  ],
+  [
+   158,
+   25
+  ],
+  [
+   159,
+   25
+  ],
+  [
+   160,
+   25
+  ],
+  [
+   161,
+   25
+  ],
+  [
+   162,
+   25
+  ],
+  [
+   163,
+   25
+  ],
+  [
+   164,
+   25
+  ],
+  [
+   165,
+   25
+  ],
+  [
+   166,
+   25
+  ],
+  [
+   167,
+   25
+  ],
+  [
+   168,
+   25
+  ],
+  [
+   169,
+   25
+  ],
+  [
+   170,
+   25
+  ]
+ ],
+ "races": [
+  {
+   "nom": "Humain",
+   "caracs": {
+    "Force": 0,
+    "Dextérité": 0,
+    "Constitution": 0,
+    "Intelligence": 0,
+    "Sagesse": -5,
+    "Charisme": 5
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": 0,
+    "Tromperie": 0,
+    "Histoire": 5,
+    "Intimidation": 0,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 0,
+    "Perception": -5,
+    "Perspicacité": 0,
+    "Représentation": 10,
+    "Persuasion": 5,
+    "Religion": 5,
+    "Escamotage": 0,
+    "Discrétion": 0,
+    "Survie": -5
+   },
+   "traits": "Les humains n'ont pas de faiblesses particulières."
+  },
+  {
+   "nom": "Shaamah",
+   "caracs": {
+    "Force": -5,
+    "Dextérité": 5,
+    "Constitution": 0,
+    "Intelligence": 0,
+    "Sagesse": 5,
+    "Charisme": -5
+   },
+   "competences": {
+    "Acrobaties": 10,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": -10,
+    "Tromperie": 0,
+    "Histoire": 0,
+    "Intimidation": 0,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 0,
+    "Perception": 5,
+    "Perspicacité": 0,
+    "Représentation": 0,
+    "Persuasion": 0,
+    "Religion": 0,
+    "Escamotage": 5,
+    "Discrétion": 5,
+    "Survie": 0
+   },
+   "traits": "Nyctalopie : Peut voir dans le noir.\nHautement inflammable : le feu inflige x2 de dégâts.\nGrandes Oreilles : Ils perçoivent les sons avec plus d'acuité.\nPas si fort ! : Les bruits trop stridents les désorientent davantage.\n"
+  },
+  {
+   "nom": "Vulrek",
+   "caracs": {
+    "Force": -5,
+    "Dextérité": 5,
+    "Constitution": 0,
+    "Intelligence": 0,
+    "Sagesse": 5,
+    "Charisme": -5
+   },
+   "competences": {
+    "Acrobaties": 5,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": -5,
+    "Tromperie": 5,
+    "Histoire": 0,
+    "Intimidation": -10,
+    "Investigation": 5,
+    "Médecine": 5,
+    "Nature": 5,
+    "Perception": 5,
+    "Perspicacité": -5,
+    "Représentation": -10,
+    "Persuasion": -5,
+    "Religion": 0,
+    "Escamotage": 5,
+    "Discrétion": 5,
+    "Survie": 10
+   },
+   "traits": "Hautement inflammable : le feu inflige x2 de dégâts.\nGrandes Oreilles : Ils perçoivent les sons avec plus d'acuité.\nPas si fort ! : Les bruits trop stridents les désorientent davantage.\nYeux d'elfe : Peut voir dans la pénombre (pas dans le noir total).\n"
+  },
+  {
+   "nom": "Elfe",
+   "caracs": {
+    "Force": -10,
+    "Dextérité": 5,
+    "Constitution": 0,
+    "Intelligence": 0,
+    "Sagesse": 2,
+    "Charisme": 3
+   },
+   "competences": {
+    "Acrobaties": 5,
+    "Dressage": 0,
+    "Arcanes": 5,
+    "Athlétisme": -5,
+    "Tromperie": -10,
+    "Histoire": 10,
+    "Intimidation": -10,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 10,
+    "Perception": 5,
+    "Perspicacité": 0,
+    "Représentation": 5,
+    "Persuasion": 0,
+    "Religion": 0,
+    "Escamotage": -5,
+    "Discrétion": 0,
+    "Survie": 5
+   },
+   "traits": "Yeux d'elfe : Peut voir dans la pénombre (pas dans le noir total).\nGrandes Oreilles : Ils perçoivent les sons avec plus d'acuité.\nPas si fort ! : Les bruits trop stridents les désorientent davantage.\nSanté de fer : les maladies les atteignent moins.\n"
+  },
+  {
+   "nom": "Elfe noir / drow",
+   "caracs": {
+    "Force": -5,
+    "Dextérité": 5,
+    "Constitution": 0,
+    "Intelligence": 0,
+    "Sagesse": 5,
+    "Charisme": -5
+   },
+   "competences": {
+    "Acrobaties": 5,
+    "Dressage": 5,
+    "Arcanes": 5,
+    "Athlétisme": -5,
+    "Tromperie": 5,
+    "Histoire": 10,
+    "Intimidation": 5,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": -15,
+    "Perception": 0,
+    "Perspicacité": 0,
+    "Représentation": -10,
+    "Persuasion": -15,
+    "Religion": 0,
+    "Escamotage": 10,
+    "Discrétion": 10,
+    "Survie": 5
+   },
+   "traits": "Hérésie lvl 2 : Sensibilité au sacré (Aariba/Donblas) / magie blanche : x2 de dégâts.\nNyctalopie : Peut voir dans le noir.\nMa vie c'est l'Australie : La sensibilité aux poisons est diminuée.\nSanté de fer : les maladies les atteignent moins.\nTerrible réputation : souffre d'une réputation (à définir) qui l'handicapera dans ses relations sociales (et jets de charisme)\nPik' les yeux : sensibilité à la lumière - le personnage sera désorienté / aveuglé plus facilement.\n"
+  },
+  {
+   "nom": "Elfe noir x Elfe",
+   "caracs": {
+    "Force": -10,
+    "Dextérité": 10,
+    "Constitution": 0,
+    "Intelligence": 0,
+    "Sagesse": 0,
+    "Charisme": 0
+   },
+   "competences": {
+    "Acrobaties": 5,
+    "Dressage": 0,
+    "Arcanes": 5,
+    "Athlétisme": -5,
+    "Tromperie": 5,
+    "Histoire": -5,
+    "Intimidation": 5,
+    "Investigation": 0,
+    "Médecine": 5,
+    "Nature": -5,
+    "Perception": 5,
+    "Perspicacité": 0,
+    "Représentation": 0,
+    "Persuasion": -10,
+    "Religion": 0,
+    "Escamotage": 0,
+    "Discrétion": 5,
+    "Survie": 5
+   },
+   "traits": "Nyctalopie : Peut voir dans le noir.\nGrandes Oreilles : Ils perçoivent les sons avec plus d'acuité.\nPas si fort ! : Les bruits trop stridents les désorientent davantage.\nSanté de fer : les maladies les atteignent moins.\nHérésie lvl 1 : Sensibilité au sacré (Aariba/Donblas) / magie blanche : x1.5 de dégâts.\nPik' les yeux : sensibilité à la lumière - le personnage sera désorienté / aveuglé plus facilement.\n"
+  },
+  {
+   "nom": "Humain x Elfe",
+   "caracs": {
+    "Force": -5,
+    "Dextérité": 5,
+    "Constitution": 0,
+    "Intelligence": 0,
+    "Sagesse": -5,
+    "Charisme": 5
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": -5,
+    "Tromperie": 0,
+    "Histoire": 0,
+    "Intimidation": -10,
+    "Investigation": 0,
+    "Médecine": 5,
+    "Nature": 5,
+    "Perception": 0,
+    "Perspicacité": 5,
+    "Représentation": 5,
+    "Persuasion": 5,
+    "Religion": 0,
+    "Escamotage": -5,
+    "Discrétion": 5,
+    "Survie": 5
+   },
+   "traits": "Yeux d'elfe : Peut voir dans la pénombre (pas dans le noir total).\n"
+  },
+  {
+   "nom": "Humain x Drow",
+   "caracs": {
+    "Force": -5,
+    "Dextérité": 5,
+    "Constitution": 0,
+    "Intelligence": 5,
+    "Sagesse": 0,
+    "Charisme": -5
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 5,
+    "Athlétisme": -5,
+    "Tromperie": 5,
+    "Histoire": 5,
+    "Intimidation": 5,
+    "Investigation": 0,
+    "Médecine": -5,
+    "Nature": -5,
+    "Perception": 5,
+    "Perspicacité": 0,
+    "Représentation": -5,
+    "Persuasion": -5,
+    "Religion": 0,
+    "Escamotage": 5,
+    "Discrétion": 5,
+    "Survie": 5
+   },
+   "traits": "Hérésie lvl 1 : Sensibilité au sacré (Aariba/Donblas) / magie blanche : x1.5 de dégâts.\nYeux d'elfe : Peut voir dans la pénombre (pas dans le noir total).\nPik' les yeux : sensibilité à la lumière - le personnage sera désorienté / aveuglé plus facilement.\n"
+  },
+  {
+   "nom": "Lycan",
+   "caracs": {
+    "Force": 15,
+    "Dextérité": 5,
+    "Constitution": 0,
+    "Intelligence": -10,
+    "Sagesse": 0,
+    "Charisme": -10
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": -10,
+    "Athlétisme": 10,
+    "Tromperie": -10,
+    "Histoire": 0,
+    "Intimidation": 10,
+    "Investigation": 0,
+    "Médecine": 5,
+    "Nature": 10,
+    "Perception": 10,
+    "Perspicacité": -10,
+    "Représentation": -10,
+    "Persuasion": 0,
+    "Religion": 5,
+    "Escamotage": 0,
+    "Discrétion": -5,
+    "Survie": 10
+   },
+   "traits": "Hautement inflammable : le feu inflige x2 de dégâts.\nYeux d'elfe : Peut voir dans la pénombre (pas dans le noir total).\nGrandes Oreilles : Ils perçoivent les sons avec plus d'acuité.\nPas si fort ! : Les bruits trop stridents les désorientent davantage.\nSanté de fer : les maladies les atteignent moins.\nTerrible réputation : souffre d'une réputation (à définir) qui l'handicapera dans ses relations sociales (et jets de charisme)\n"
+  },
+  {
+   "nom": "Lyrek (Lycan x Vulrek)",
+   "caracs": {
+    "Force": 5,
+    "Dextérité": 5,
+    "Constitution": 0,
+    "Intelligence": -5,
+    "Sagesse": 5,
+    "Charisme": -10
+   },
+   "competences": {
+    "Acrobaties": 5,
+    "Dressage": 0,
+    "Arcanes": -5,
+    "Athlétisme": 5,
+    "Tromperie": 5,
+    "Histoire": 0,
+    "Intimidation": 0,
+    "Investigation": 5,
+    "Médecine": 0,
+    "Nature": 5,
+    "Perception": 5,
+    "Perspicacité": -5,
+    "Représentation": -5,
+    "Persuasion": -10,
+    "Religion": 0,
+    "Escamotage": 0,
+    "Discrétion": 5,
+    "Survie": 5
+   },
+   "traits": "Hautement inflammable : le feu inflige x2 de dégâts.\nYeux d'elfe : Peut voir dans la pénombre (pas dans le noir total).\nGrandes Oreilles : Ils perçoivent les sons avec plus d'acuité.\nPas si fort ! : Les bruits trop stridents les désorientent davantage.\n"
+  },
+  {
+   "nom": "Telgun",
+   "caracs": {
+    "Force": -5,
+    "Dextérité": 0,
+    "Constitution": 0,
+    "Intelligence": 10,
+    "Sagesse": 0,
+    "Charisme": -5
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 5,
+    "Arcanes": 10,
+    "Athlétisme": -10,
+    "Tromperie": 0,
+    "Histoire": 10,
+    "Intimidation": 0,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 10,
+    "Perception": 5,
+    "Perspicacité": 0,
+    "Représentation": 0,
+    "Persuasion": -5,
+    "Religion": 5,
+    "Escamotage": -10,
+    "Discrétion": -10,
+    "Survie": 5
+   },
+   "traits": "Yeux d'elfe : Peut voir dans la pénombre (pas dans le noir total).\nGrandes Oreilles : Ils perçoivent les sons avec plus d'acuité.\nPas si fort ! : Les bruits trop stridents les désorientent davantage.\nSanté de fer : les maladies les atteignent moins.\nQui a touché à la clim ?! : le personnage se sentira mal quand il fera trop chaud.\n"
+  },
+  {
+   "nom": "Loup-Garou",
+   "caracs": {
+    "Force": 10,
+    "Dextérité": 10,
+    "Constitution": 5,
+    "Intelligence": -20,
+    "Sagesse": 10,
+    "Charisme": -5
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": -5,
+    "Arcanes": -20,
+    "Athlétisme": 20,
+    "Tromperie": -20,
+    "Histoire": 0,
+    "Intimidation": 20,
+    "Investigation": -10,
+    "Médecine": 10,
+    "Nature": 10,
+    "Perception": 10,
+    "Perspicacité": -5,
+    "Représentation": -20,
+    "Persuasion": 0,
+    "Religion": 0,
+    "Escamotage": 0,
+    "Discrétion": 0,
+    "Survie": 20
+   },
+   "traits": "Hautement inflammable : le feu inflige x2 de dégâts.\nTerrible réputation : souffre d'une réputation (à définir) qui l'handicapera dans ses relations sociales (et jets de charisme)\nJe préfère l'or : les armes en argent infligent x2 de dégâts.\nGrandes Oreilles : Ils perçoivent les sons avec plus d'acuité.\nPas si fort ! : Les bruits trop stridents les désorientent davantage.\nMa vie c'est l'Australie : La sensibilité aux poisons est diminuée.\nSanté de fer : les maladies les atteignent moins.\n"
+  },
+  {
+   "nom": "Coacien",
+   "caracs": {
+    "Force": 0,
+    "Dextérité": 10,
+    "Constitution": 0,
+    "Intelligence": -10,
+    "Sagesse": 10,
+    "Charisme": -10
+   },
+   "competences": {
+    "Acrobaties": 5,
+    "Dressage": -5,
+    "Arcanes": 0,
+    "Athlétisme": 0,
+    "Tromperie": -15,
+    "Histoire": 5,
+    "Intimidation": -5,
+    "Investigation": -5,
+    "Médecine": 5,
+    "Nature": 10,
+    "Perception": 5,
+    "Perspicacité": -5,
+    "Représentation": 0,
+    "Persuasion": 0,
+    "Religion": 5,
+    "Escamotage": 0,
+    "Discrétion": 10,
+    "Survie": 5
+   },
+   "traits": "Poisson dans l'eau : le personnage est à l'aise dans les milieux aqueux.\nQui a touché à la clim ?! : le personnage se sentira mal quand il fera trop chaud.\nMa vie c'est l'Australie : La sensibilité aux poisons est diminuée.\n"
+  },
+  {
+   "nom": "Nagga",
+   "caracs": {
+    "Force": 10,
+    "Dextérité": 0,
+    "Constitution": 0,
+    "Intelligence": -5,
+    "Sagesse": 0,
+    "Charisme": -5
+   },
+   "competences": {
+    "Acrobaties": 5,
+    "Dressage": -5,
+    "Arcanes": 0,
+    "Athlétisme": 15,
+    "Tromperie": -10,
+    "Histoire": 5,
+    "Intimidation": 5,
+    "Investigation": 0,
+    "Médecine": 5,
+    "Nature": 5,
+    "Perception": 5,
+    "Perspicacité": -5,
+    "Représentation": -10,
+    "Persuasion": -5,
+    "Religion": 5,
+    "Escamotage": -5,
+    "Discrétion": -5,
+    "Survie": 10
+   },
+   "traits": "Ma vie c'est l'Australie : La sensibilité aux poisons est diminuée.\nPoisson dans l'eau : le personnage est à l'aise dans les milieux aqueux.\nSanté de fer : les maladies les atteignent moins.\nQui a touché à la clim ?! : le personnage se sentira mal quand il fera trop chaud.\n"
+  },
+  {
+   "nom": "Demi-démon",
+   "caracs": {
+    "Force": 5,
+    "Dextérité": 0,
+    "Constitution": 0,
+    "Intelligence": 5,
+    "Sagesse": 0,
+    "Charisme": -10
+   },
+   "competences": {
+    "Acrobaties": 5,
+    "Dressage": 0,
+    "Arcanes": 5,
+    "Athlétisme": 10,
+    "Tromperie": 5,
+    "Histoire": 5,
+    "Intimidation": 5,
+    "Investigation": 0,
+    "Médecine": -5,
+    "Nature": -10,
+    "Perception": 0,
+    "Perspicacité": 5,
+    "Représentation": -5,
+    "Persuasion": 0,
+    "Religion": 0,
+    "Escamotage": -5,
+    "Discrétion": 0,
+    "Survie": 0
+   },
+   "traits": "Ma vie c'est l'Australie : La sensibilité aux poisons est diminuée.\nSanté de fer : les maladies les atteignent moins.\nYeux d'elfe : Peut voir dans la pénombre (pas dans le noir total).\nHérésie lvl 2 : Sensibilité au sacré (Aariba/Donblas) / magie blanche : x2 de dégâts.\n"
+  },
+  {
+   "nom": "TinyMony",
+   "caracs": {
+    "Force": -10,
+    "Dextérité": 0,
+    "Constitution": 0,
+    "Intelligence": 20,
+    "Sagesse": -5,
+    "Charisme": -5
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": -10,
+    "Athlétisme": -20,
+    "Tromperie": -5,
+    "Histoire": 10,
+    "Intimidation": -10,
+    "Investigation": 10,
+    "Médecine": 0,
+    "Nature": 0,
+    "Perception": 0,
+    "Perspicacité": -10,
+    "Représentation": 0,
+    "Persuasion": 5,
+    "Religion": 0,
+    "Escamotage": 20,
+    "Discrétion": 20,
+    "Survie": 5
+   },
+   "traits": "EH OH JE SUIS LÀ : le personnage de si petite taille aura tendance à ne pas être vue. Avantage ? Désavantage ? La réponse est cachée dans un placard hors de sa portée.\nSanté de fer : les maladies les atteignent moins.\n"
+  },
+  {
+   "nom": "Vampire",
+   "caracs": {
+    "Force": 10,
+    "Dextérité": 10,
+    "Constitution": 0,
+    "Intelligence": 0,
+    "Sagesse": 0,
+    "Charisme": -10
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": -10,
+    "Arcanes": 0,
+    "Athlétisme": 10,
+    "Tromperie": 10,
+    "Histoire": 5,
+    "Intimidation": 10,
+    "Investigation": 5,
+    "Médecine": -15,
+    "Nature": -15,
+    "Perception": 10,
+    "Perspicacité": 0,
+    "Représentation": -5,
+    "Persuasion": 10,
+    "Religion": -15,
+    "Escamotage": 0,
+    "Discrétion": 15,
+    "Survie": 0
+   },
+   "traits": "Hérésie lvl 2 : Sensibilité au sacré (Aariba/Donblas) / magie blanche : x2 de dégâts.\nJ'ai pas d'vie : Sensibilité au sacré (Danava/Vanilius) et à la lumière : x2 de dégâts\nPik' les yeux : sensibilité à la lumière - le personnage sera désorienté / aveuglé plus facilement.\nGrandes Oreilles : Ils perçoivent les sons avec plus d'acuité.\nSanté de fer : les maladies les atteignent moins.\nMa vie c'est l'Australie : La sensibilité aux poisons est diminuée.\nNyctalopie : Peut voir dans le noir.\n"
+  },
+  {
+   "nom": "Aashar",
+   "caracs": {
+    "Force": 10,
+    "Dextérité": 0,
+    "Constitution": 5,
+    "Intelligence": -5,
+    "Sagesse": 0,
+    "Charisme": -10
+   },
+   "competences": {
+    "Acrobaties": 5,
+    "Dressage": 5,
+    "Arcanes": 0,
+    "Athlétisme": 10,
+    "Tromperie": -10,
+    "Histoire": -5,
+    "Intimidation": 15,
+    "Investigation": -5,
+    "Médecine": -5,
+    "Nature": 5,
+    "Perception": 10,
+    "Perspicacité": 0,
+    "Représentation": -10,
+    "Persuasion": -5,
+    "Religion": 0,
+    "Escamotage": -5,
+    "Discrétion": 5,
+    "Survie": 5
+   },
+   "traits": "Santé de fer : les maladies les atteignent moins.\nPas si fort ! : Les bruits trop stridents les désorientent davantage.\nGrandes Oreilles : Ils perçoivent les sons avec plus d'acuité.\nTerrible réputation : souffre d'une réputation (à définir) qui l'handicapera dans ses relations sociales (et jets de charisme)\nNyctalopie : Peut voir dans le noir.\nHautement inflammable : le feu inflige x2 de dégâts.\n"
+  },
+  {
+   "nom": "Raaksah",
+   "caracs": {
+    "Force": 10,
+    "Dextérité": 5,
+    "Constitution": 0,
+    "Intelligence": -5,
+    "Sagesse": 0,
+    "Charisme": -10
+   },
+   "competences": {
+    "Acrobaties": 10,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": 10,
+    "Tromperie": -10,
+    "Histoire": -5,
+    "Intimidation": 5,
+    "Investigation": -5,
+    "Médecine": -5,
+    "Nature": 5,
+    "Perception": 10,
+    "Perspicacité": 0,
+    "Représentation": -10,
+    "Persuasion": -5,
+    "Religion": 0,
+    "Escamotage": -5,
+    "Discrétion": 5,
+    "Survie": 15
+   },
+   "traits": "Santé de fer : les maladies les atteignent moins.\nPas si fort ! : Les bruits trop stridents les désorientent davantage.\nGrandes Oreilles : Ils perçoivent les sons avec plus d'acuité.\nTerrible réputation : souffre d'une réputation (à définir) qui l'handicapera dans ses relations sociales (et jets de charisme)\nNyctalopie : Peut voir dans le noir.\nHautement inflammable : le feu inflige x2 de dégâts.\n"
+  },
+  {
+   "nom": "Démon",
+   "caracs": {
+    "Force": 10,
+    "Dextérité": 10,
+    "Constitution": 0,
+    "Intelligence": 10,
+    "Sagesse": 0,
+    "Charisme": 0
+   },
+   "competences": {
+    "Acrobaties": 10,
+    "Dressage": -5,
+    "Arcanes": 10,
+    "Athlétisme": 20,
+    "Tromperie": 10,
+    "Histoire": 10,
+    "Intimidation": 10,
+    "Investigation": 0,
+    "Médecine": -10,
+    "Nature": -20,
+    "Perception": 10,
+    "Perspicacité": 10,
+    "Représentation": -20,
+    "Persuasion": -10,
+    "Religion": 0,
+    "Escamotage": -10,
+    "Discrétion": 0,
+    "Survie": 5
+   },
+   "traits": "Santé de fer : les maladies les atteignent moins.\nMa vie c'est l'Australie : La sensibilité aux poisons est diminuée.\nGrandes Oreilles : Ils perçoivent les sons avec plus d'acuité.\nHérésie lvl 3 : Sensibilité au sacré (Aariba/Donblas) / magie blanche : x3 de dégâts.\nNyctalopie : Peut voir dans le noir.\nTerrible réputation : souffre d'une réputation (à définir) qui l'handicapera dans ses relations sociales (et jets de charisme)\n"
+  }
+ ],
+ "metiers": [
+  {
+   "nom": "Voleur",
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": -10,
+    "Arcanes": 0,
+    "Athlétisme": 0,
+    "Tromperie": 5,
+    "Histoire": 0,
+    "Intimidation": -10,
+    "Investigation": 5,
+    "Médecine": -5,
+    "Nature": 0,
+    "Perception": 5,
+    "Perspicacité": 0,
+    "Représentation": -5,
+    "Persuasion": -5,
+    "Religion": 0,
+    "Escamotage": 10,
+    "Discrétion": 10,
+    "Survie": 0
+   }
+  },
+  {
+   "nom": "Milicien / Soldat",
+   "competences": {
+    "Acrobaties": 5,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": 10,
+    "Tromperie": -10,
+    "Histoire": 5,
+    "Intimidation": 5,
+    "Investigation": 0,
+    "Médecine": 5,
+    "Nature": 0,
+    "Perception": 5,
+    "Perspicacité": -5,
+    "Représentation": -5,
+    "Persuasion": -5,
+    "Religion": 0,
+    "Escamotage": -10,
+    "Discrétion": -10,
+    "Survie": 10
+   }
+  },
+  {
+   "nom": "Chasseur",
+   "competences": {
+    "Acrobaties": 5,
+    "Dressage": 5,
+    "Arcanes": -5,
+    "Athlétisme": 5,
+    "Tromperie": -5,
+    "Histoire": -5,
+    "Intimidation": 0,
+    "Investigation": -5,
+    "Médecine": 5,
+    "Nature": 10,
+    "Perception": 10,
+    "Perspicacité": -5,
+    "Représentation": -5,
+    "Persuasion": -5,
+    "Religion": -5,
+    "Escamotage": -10,
+    "Discrétion": 5,
+    "Survie": 5
+   }
+  },
+  {
+   "nom": "Bûcheron",
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": -5,
+    "Athlétisme": 10,
+    "Tromperie": -10,
+    "Histoire": -5,
+    "Intimidation": 5,
+    "Investigation": 0,
+    "Médecine": 5,
+    "Nature": 10,
+    "Perception": 5,
+    "Perspicacité": -5,
+    "Représentation": -5,
+    "Persuasion": -5,
+    "Religion": 0,
+    "Escamotage": -10,
+    "Discrétion": 0,
+    "Survie": 10
+   }
+  },
+  {
+   "nom": "Assassin",
+   "competences": {
+    "Acrobaties": 10,
+    "Dressage": -10,
+    "Arcanes": 5,
+    "Athlétisme": 0,
+    "Tromperie": 5,
+    "Histoire": -5,
+    "Intimidation": 5,
+    "Investigation": 5,
+    "Médecine": -10,
+    "Nature": -10,
+    "Perception": 5,
+    "Perspicacité": 5,
+    "Représentation": -10,
+    "Persuasion": -5,
+    "Religion": -5,
+    "Escamotage": 10,
+    "Discrétion": 10,
+    "Survie": -5
+   }
+  },
+  {
+   "nom": "Alchimiste",
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 5,
+    "Arcanes": 10,
+    "Athlétisme": -5,
+    "Tromperie": -5,
+    "Histoire": 5,
+    "Intimidation": -5,
+    "Investigation": 10,
+    "Médecine": 5,
+    "Nature": 10,
+    "Perception": -5,
+    "Perspicacité": -5,
+    "Représentation": -5,
+    "Persuasion": -5,
+    "Religion": 5,
+    "Escamotage": -10,
+    "Discrétion": -5,
+    "Survie": 0
+   }
+  },
+  {
+   "nom": "Infirmière",
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": -5,
+    "Tromperie": -5,
+    "Histoire": 5,
+    "Intimidation": -5,
+    "Investigation": 10,
+    "Médecine": 10,
+    "Nature": 5,
+    "Perception": -10,
+    "Perspicacité": 5,
+    "Représentation": -10,
+    "Persuasion": 5,
+    "Religion": 5,
+    "Escamotage": -10,
+    "Discrétion": -10,
+    "Survie": 10
+   }
+  },
+  {
+   "nom": "Professeur de magie",
+   "competences": {
+    "Acrobaties": -5,
+    "Dressage": 0,
+    "Arcanes": 10,
+    "Athlétisme": -5,
+    "Tromperie": -5,
+    "Histoire": 10,
+    "Intimidation": -5,
+    "Investigation": 10,
+    "Médecine": 5,
+    "Nature": 0,
+    "Perception": 5,
+    "Perspicacité": 5,
+    "Représentation": 0,
+    "Persuasion": 0,
+    "Religion": 5,
+    "Escamotage": -10,
+    "Discrétion": -10,
+    "Survie": -10
+   }
+  },
+  {
+   "nom": "Commerçant",
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": -5,
+    "Tromperie": 5,
+    "Histoire": 5,
+    "Intimidation": -5,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 0,
+    "Perception": 0,
+    "Perspicacité": 10,
+    "Représentation": 5,
+    "Persuasion": 10,
+    "Religion": -10,
+    "Escamotage": -5,
+    "Discrétion": -5,
+    "Survie": -5
+   }
+  },
+  {
+   "nom": "Mercenaire",
+   "competences": {
+    "Acrobaties": 5,
+    "Dressage": -10,
+    "Arcanes": -5,
+    "Athlétisme": 5,
+    "Tromperie": 5,
+    "Histoire": -5,
+    "Intimidation": 5,
+    "Investigation": -5,
+    "Médecine": 5,
+    "Nature": 5,
+    "Perception": 5,
+    "Perspicacité": 5,
+    "Représentation": -10,
+    "Persuasion": 5,
+    "Religion": -10,
+    "Escamotage": 5,
+    "Discrétion": 5,
+    "Survie": -10
+   }
+  },
+  {
+   "nom": "Mage itinérant",
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 5,
+    "Athlétisme": -5,
+    "Tromperie": 0,
+    "Histoire": 5,
+    "Intimidation": -5,
+    "Investigation": 10,
+    "Médecine": 0,
+    "Nature": 5,
+    "Perception": 5,
+    "Perspicacité": 5,
+    "Représentation": 0,
+    "Persuasion": -5,
+    "Religion": 0,
+    "Escamotage": -10,
+    "Discrétion": -5,
+    "Survie": -5
+   }
+  },
+  {
+   "nom": "Élève",
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 5,
+    "Athlétisme": 0,
+    "Tromperie": 0,
+    "Histoire": 5,
+    "Intimidation": -5,
+    "Investigation": 5,
+    "Médecine": 0,
+    "Nature": -5,
+    "Perception": 0,
+    "Perspicacité": 5,
+    "Représentation": 5,
+    "Persuasion": 0,
+    "Religion": -5,
+    "Escamotage": 0,
+    "Discrétion": -5,
+    "Survie": -5
+   }
+  },
+  {
+   "nom": "Riche garce",
+   "competences": {
+    "Acrobaties": 10,
+    "Dressage": 10,
+    "Arcanes": -5,
+    "Athlétisme": 10,
+    "Tromperie": 10,
+    "Histoire": 10,
+    "Intimidation": -10,
+    "Investigation": 0,
+    "Médecine": 5,
+    "Nature": -10,
+    "Perception": -10,
+    "Perspicacité": -10,
+    "Représentation": 10,
+    "Persuasion": 10,
+    "Religion": -10,
+    "Escamotage": -10,
+    "Discrétion": -10,
+    "Survie": 0
+   }
+  },
+  {
+   "nom": "Garde du Corps",
+   "competences": {
+    "Acrobaties": 10,
+    "Dressage": -5,
+    "Arcanes": -10,
+    "Athlétisme": 10,
+    "Tromperie": -10,
+    "Histoire": 5,
+    "Intimidation": 5,
+    "Investigation": -5,
+    "Médecine": 5,
+    "Nature": -5,
+    "Perception": 5,
+    "Perspicacité": 10,
+    "Représentation": -10,
+    "Persuasion": -5,
+    "Religion": -10,
+    "Escamotage": 10,
+    "Discrétion": 5,
+    "Survie": -5
+   }
+  },
+  {
+   "nom": "Paladin",
+   "competences": {
+    "Acrobaties": -5,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": 5,
+    "Tromperie": -10,
+    "Histoire": 5,
+    "Intimidation": 5,
+    "Investigation": -5,
+    "Médecine": 0,
+    "Nature": 0,
+    "Perception": 5,
+    "Perspicacité": 5,
+    "Représentation": -5,
+    "Persuasion": 5,
+    "Religion": 5,
+    "Escamotage": -5,
+    "Discrétion": -5,
+    "Survie": 0
+   }
+  },
+  {
+   "nom": "Aucun",
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": 0,
+    "Tromperie": 0,
+    "Histoire": 0,
+    "Intimidation": 0,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 0,
+    "Perception": 0,
+    "Perspicacité": 0,
+    "Représentation": 0,
+    "Persuasion": 0,
+    "Religion": 0,
+    "Escamotage": 0,
+    "Discrétion": 0,
+    "Survie": 0
+   }
+  }
+ ],
+ "classes": [
+  {
+   "nom": "Guerrier",
+   "caracs": {
+    "Force": 10,
+    "Dextérité": 0,
+    "Constitution": 10,
+    "Intelligence": -10,
+    "Sagesse": 0,
+    "Charisme": -10
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": 20,
+    "Tromperie": 0,
+    "Histoire": 0,
+    "Intimidation": 0,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 0,
+    "Perception": 0,
+    "Perspicacité": 0,
+    "Représentation": 0,
+    "Persuasion": 0,
+    "Religion": 0,
+    "Escamotage": 0,
+    "Discrétion": 0,
+    "Survie": 0
+   },
+   "jet_atk_arme": 4,
+   "jet_atk_mag": 1,
+   "jet_atk_jet": 1,
+   "mult_deg_arme": 1.5,
+   "mult_deg_mag": 0.7,
+   "mult_deg_jet": 1,
+   "coef_bouclier": 0.5,
+   "bonus_ca": 1.5,
+   "pv": 15,
+   "description": "Le guerrier brille par ses caractéristiques de force et de constitution. Il est néanmoins de faible intelligence et un charisme au diapason de la subtilité. Il excelle en athlétisme. Il reçoit un bonus en portant des armures intermédiaires ou lourdes.",
+   "type_armure": "Constitution",
+   "coef_armure": {
+    "Armure lourde": 1.7,
+    "Armure intermédiaire": 1,
+    "Armure légère": 0.5,
+    "Armure de mage": 0.5
+   }
+  },
+  {
+   "nom": "Barbare",
+   "caracs": {
+    "Force": 10,
+    "Dextérité": 10,
+    "Constitution": 0,
+    "Intelligence": -10,
+    "Sagesse": -10,
+    "Charisme": 0
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": 10,
+    "Tromperie": 0,
+    "Histoire": 0,
+    "Intimidation": 10,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 0,
+    "Perception": 0,
+    "Perspicacité": 0,
+    "Représentation": 0,
+    "Persuasion": 0,
+    "Religion": 0,
+    "Escamotage": 0,
+    "Discrétion": 0,
+    "Survie": 0
+   },
+   "jet_atk_arme": 5,
+   "jet_atk_mag": 1,
+   "jet_atk_jet": 1,
+   "mult_deg_arme": 1.7,
+   "mult_deg_mag": 0.5,
+   "mult_deg_jet": 1,
+   "coef_bouclier": 0.5,
+   "bonus_ca": 1.5,
+   "pv": 15,
+   "description": "Le barbare foncera dans le tas, sans réfléchir aux dégâts : il excellera en force et dextérité. Néanmoins, son tempérament le fera manquer souvent d'intelligence ou de sagesse. Il excelle en athlétisme et en intimidation. Il reçoit des bonus avec des armures lourdes et des armures intermédiaires.",
+   "type_armure": "Force",
+   "coef_armure": {
+    "Armure lourde": 1.2,
+    "Armure intermédiaire": 1.2,
+    "Armure légère": 0.5,
+    "Armure de mage": 0.5
+   }
+  },
+  {
+   "nom": "Ménestrel",
+   "caracs": {
+    "Force": -10,
+    "Dextérité": 0,
+    "Constitution": -10,
+    "Intelligence": 0,
+    "Sagesse": 5,
+    "Charisme": 15
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": 0,
+    "Tromperie": 10,
+    "Histoire": 0,
+    "Intimidation": 0,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 0,
+    "Perception": 0,
+    "Perspicacité": 0,
+    "Représentation": 10,
+    "Persuasion": 0,
+    "Religion": 0,
+    "Escamotage": 0,
+    "Discrétion": 0,
+    "Survie": 0
+   },
+   "jet_atk_arme": 1,
+   "jet_atk_mag": 3,
+   "jet_atk_jet": 2,
+   "mult_deg_arme": 0.7,
+   "mult_deg_mag": 1.3,
+   "mult_deg_jet": 0.7,
+   "coef_bouclier": 0.5,
+   "bonus_ca": 1.5,
+   "pv": 10,
+   "description": "Le ménestrel brille par ses compétences sociales et de sagesse. Pour autant, sa force et sa constitution l'affaiblissent considérablement. Il reçoit des bonus en représentation et tromperie. Il reçoit un bonus en armure légère.",
+   "type_armure": "Dextérité",
+   "coef_armure": {
+    "Armure lourde": 0.5,
+    "Armure intermédiaire": 0.5,
+    "Armure légère": 1.7,
+    "Armure de mage": 1
+   }
+  },
+  {
+   "nom": "Voleur",
+   "caracs": {
+    "Force": -10,
+    "Dextérité": 10,
+    "Constitution": -5,
+    "Intelligence": 0,
+    "Sagesse": 10,
+    "Charisme": -5
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": 0,
+    "Tromperie": 0,
+    "Histoire": 0,
+    "Intimidation": 0,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 0,
+    "Perception": 0,
+    "Perspicacité": 0,
+    "Représentation": 0,
+    "Persuasion": 0,
+    "Religion": 0,
+    "Escamotage": 10,
+    "Discrétion": 10,
+    "Survie": 0
+   },
+   "jet_atk_arme": 4,
+   "jet_atk_mag": 1,
+   "jet_atk_jet": 4,
+   "mult_deg_arme": 1.1,
+   "mult_deg_mag": 0.7,
+   "mult_deg_jet": 1.3,
+   "coef_bouclier": 0.5,
+   "bonus_ca": 1.5,
+   "pv": 10,
+   "description": "Le voleur brille par sa dextérité et sa sagesse. Il reçoit pour autant un grand malus en force, et des malus en constitution et charisme. Il excelle en escamotage et discrétion. Il reçoit des bonus avec des armures légères.",
+   "type_armure": "Dextérité",
+   "coef_armure": {
+    "Armure lourde": 0.5,
+    "Armure intermédiaire": 1.5,
+    "Armure légère": 1.5,
+    "Armure de mage": 0.5
+   }
+  },
+  {
+   "nom": "Archer",
+   "caracs": {
+    "Force": -10,
+    "Dextérité": 10,
+    "Constitution": -5,
+    "Intelligence": -5,
+    "Sagesse": 10,
+    "Charisme": 0
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": 0,
+    "Tromperie": 0,
+    "Histoire": 0,
+    "Intimidation": 0,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 10,
+    "Perception": 10,
+    "Perspicacité": 0,
+    "Représentation": 0,
+    "Persuasion": 0,
+    "Religion": 0,
+    "Escamotage": 0,
+    "Discrétion": 0,
+    "Survie": 0
+   },
+   "jet_atk_arme": 2,
+   "jet_atk_mag": 0,
+   "jet_atk_jet": 4,
+   "mult_deg_arme": 1.1,
+   "mult_deg_mag": 0.7,
+   "mult_deg_jet": 1.3,
+   "coef_bouclier": 0.5,
+   "bonus_ca": 1.5,
+   "pv": 10,
+   "description": "L'archer brille de par sa dextérité et sa sagesse, néanmoins sa faible force et constitution l'handicapent au quotidien. Il a une aisance certaine en nature et en perception. Il reçoit un bonus en portant des armures légères ou intermédiaires.",
+   "type_armure": "Dextérité",
+   "coef_armure": {
+    "Armure lourde": 0.5,
+    "Armure intermédiaire": 1.5,
+    "Armure légère": 1,
+    "Armure de mage": 0.5
+   }
+  },
+  {
+   "nom": "Apprenti Mage",
+   "caracs": {
+    "Force": -10,
+    "Dextérité": -5,
+    "Constitution": 0,
+    "Intelligence": 10,
+    "Sagesse": 5,
+    "Charisme": 0
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 5,
+    "Athlétisme": 0,
+    "Tromperie": 0,
+    "Histoire": 5,
+    "Intimidation": 0,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 0,
+    "Perception": 0,
+    "Perspicacité": 0,
+    "Représentation": 0,
+    "Persuasion": 0,
+    "Religion": 0,
+    "Escamotage": 0,
+    "Discrétion": 0,
+    "Survie": 0
+   },
+   "jet_atk_arme": 0,
+   "jet_atk_mag": 3,
+   "jet_atk_jet": 0,
+   "mult_deg_arme": 1,
+   "mult_deg_mag": 1.25,
+   "mult_deg_jet": 1,
+   "coef_bouclier": 0.5,
+   "bonus_ca": 1.5,
+   "pv": 10,
+   "description": "L'apprenti mage souffre des faiblesses de sa condition de mage : force et constitution. Il compense avec son intelligence ainsi que de la sagesse et du charisme. Étudiant, il maîtrise les arcanes et l'histoire. Il reçoit un bonus en portant des armures légères.",
+   "type_armure": "Intelligence",
+   "coef_armure": {
+    "Armure lourde": 0.5,
+    "Armure intermédiaire": 0.5,
+    "Armure légère": 1.5,
+    "Armure de mage": 1.4
+   }
+  },
+  {
+   "nom": "Mage",
+   "caracs": {
+    "Force": -10,
+    "Dextérité": -5,
+    "Constitution": -5,
+    "Intelligence": 15,
+    "Sagesse": 0,
+    "Charisme": 5
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 15,
+    "Athlétisme": 0,
+    "Tromperie": 0,
+    "Histoire": 5,
+    "Intimidation": 0,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 0,
+    "Perception": 0,
+    "Perspicacité": 0,
+    "Représentation": 0,
+    "Persuasion": 0,
+    "Religion": 0,
+    "Escamotage": 0,
+    "Discrétion": 0,
+    "Survie": 0
+   },
+   "jet_atk_arme": 0,
+   "jet_atk_mag": 5,
+   "jet_atk_jet": 0,
+   "mult_deg_arme": 1,
+   "mult_deg_mag": 1.5,
+   "mult_deg_jet": 1,
+   "coef_bouclier": 0.5,
+   "bonus_ca": 1.5,
+   "pv": 10,
+   "description": "Le mage excelle en intelligence et a une certaine proportion au charisme. Néanmoins, si les arcanes sont son domaine de prédilection il est de faible constitution avec une faible force. Il reçoit un bonus en portant des armures légères.",
+   "type_armure": "Intelligence",
+   "coef_armure": {
+    "Armure lourde": 0.5,
+    "Armure intermédiaire": 0.5,
+    "Armure légère": 1.5,
+    "Armure de mage": 1.5
+   }
+  },
+  {
+   "nom": "Prêtre",
+   "caracs": {
+    "Force": -10,
+    "Dextérité": -10,
+    "Constitution": 0,
+    "Intelligence": 10,
+    "Sagesse": 0,
+    "Charisme": 10
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": 0,
+    "Tromperie": 0,
+    "Histoire": 0,
+    "Intimidation": 0,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 0,
+    "Perception": 0,
+    "Perspicacité": 0,
+    "Représentation": 0,
+    "Persuasion": 0,
+    "Religion": 20,
+    "Escamotage": 0,
+    "Discrétion": 0,
+    "Survie": 0
+   },
+   "jet_atk_arme": 0,
+   "jet_atk_mag": 5,
+   "jet_atk_jet": 0,
+   "mult_deg_arme": 1,
+   "mult_deg_mag": 1.5,
+   "mult_deg_jet": 1,
+   "coef_bouclier": 0.5,
+   "bonus_ca": 1.5,
+   "pv": 10,
+   "description": "Le Prêtre, quelle que soit sa divinité,  jouit de bonus en intelligence, charisme et de manière moindre sagesse. Il a cependant des malus en force, constitution et dextérité.Il a un grand bonus en religion. Il reçoit un bonus en portant des armures légères.",
+   "type_armure": "Intelligence",
+   "coef_armure": {
+    "Armure lourde": 0.5,
+    "Armure intermédiaire": 0.5,
+    "Armure légère": 1.5,
+    "Armure de mage": 1.5
+   }
+  },
+  {
+   "nom": "Paladin",
+   "caracs": {
+    "Force": 10,
+    "Dextérité": -10,
+    "Constitution": 0,
+    "Intelligence": 5,
+    "Sagesse": 0,
+    "Charisme": -5
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": 0,
+    "Tromperie": 0,
+    "Histoire": 0,
+    "Intimidation": 0,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 0,
+    "Perception": 0,
+    "Perspicacité": 0,
+    "Représentation": 0,
+    "Persuasion": 0,
+    "Religion": 20,
+    "Escamotage": 0,
+    "Discrétion": 0,
+    "Survie": 0
+   },
+   "jet_atk_arme": 5,
+   "jet_atk_mag": 0,
+   "jet_atk_jet": 0,
+   "mult_deg_arme": 1.5,
+   "mult_deg_mag": 0.7,
+   "mult_deg_jet": 1,
+   "coef_bouclier": 0.5,
+   "bonus_ca": 1.5,
+   "pv": 15,
+   "description": "Le Paladin, quelle que soit sa divinité, possède un bonus en force, en intelligence et en charisme. Il a cependant des malus en dextérité, constitution et sagesse. Il a un grand bonus en religion. Il reçoit un bonus en portant des armures intermédiaires ou lourdes.",
+   "type_armure": "Fo + Const",
+   "coef_armure": {
+    "Armure lourde": 1.7,
+    "Armure intermédiaire": 1.2,
+    "Armure légère": 0.5,
+    "Armure de mage": 0.5
+   }
+  },
+  {
+   "nom": "Rôdeur",
+   "caracs": {
+    "Force": 0,
+    "Dextérité": 10,
+    "Constitution": 0,
+    "Intelligence": -10,
+    "Sagesse": 5,
+    "Charisme": -5
+   },
+   "competences": {
+    "Acrobaties": 0,
+    "Dressage": 0,
+    "Arcanes": 0,
+    "Athlétisme": 0,
+    "Tromperie": 0,
+    "Histoire": 0,
+    "Intimidation": 0,
+    "Investigation": 0,
+    "Médecine": 0,
+    "Nature": 10,
+    "Perception": 0,
+    "Perspicacité": 0,
+    "Représentation": 0,
+    "Persuasion": 0,
+    "Religion": 0,
+    "Escamotage": 0,
+    "Discrétion": 5,
+    "Survie": 5
+   },
+   "jet_atk_arme": 3,
+   "jet_atk_mag": 0,
+   "jet_atk_jet": 3,
+   "mult_deg_arme": 1.3,
+   "mult_deg_mag": 0.7,
+   "mult_deg_jet": 1.3,
+   "coef_bouclier": 0.5,
+   "bonus_ca": 1.5,
+   "pv": 15,
+   "description": "Le Rôdeur, classe versatile entre le corps à corps et les armes de jet. Il excelle en dextérité et en sagesse, mais pêche en intelligence et charisme. Il a des bonus en nature, escamotage et discrétion. Il reçoit un bonus quelle que soit son armure.",
+   "type_armure": "Fo + Dext",
+   "coef_armure": {
+    "Armure lourde": 1.5,
+    "Armure intermédiaire": 1.5,
+    "Armure légère": 0.5,
+    "Armure de mage": 0.5
+   }
+  }
+ ],
+ "armures": [
+  {
+   "nom": "Tunique de mage (Armure de mage)",
+   "ca": 10,
+   "prerequis_valeur": 60,
+   "malus_dex": 0,
+   "type": "Armure de mage",
+   "prerequis_carac": "Intelligence",
+   "competence_liee": null
+  },
+  {
+   "nom": "Etoffe Enchantée (Armure de mage)",
+   "ca": 14,
+   "prerequis_valeur": 70,
+   "malus_dex": 0,
+   "type": "Armure de mage",
+   "prerequis_carac": "Intelligence",
+   "competence_liee": null
+  },
+  {
+   "nom": "Bure de prêtre (Armure de mage)",
+   "ca": 14,
+   "prerequis_valeur": 70,
+   "malus_dex": 0,
+   "type": "Armure de mage",
+   "prerequis_carac": "Intelligence",
+   "competence_liee": null
+  },
+  {
+   "nom": "Vêtements (Armure légère)",
+   "ca": 4,
+   "prerequis_valeur": 0,
+   "malus_dex": 0,
+   "type": "Armure légère",
+   "prerequis_carac": "Dextérité",
+   "competence_liee": null
+  },
+  {
+   "nom": "Armure matelassée (Armure légère)",
+   "ca": 11,
+   "prerequis_valeur": 59,
+   "malus_dex": -5,
+   "type": "Armure légère",
+   "prerequis_carac": "Dextérité",
+   "competence_liee": null
+  },
+  {
+   "nom": "Armure de cuir (Armure légère)",
+   "ca": 12,
+   "prerequis_valeur": 71,
+   "malus_dex": 0,
+   "type": "Armure légère",
+   "prerequis_carac": "Dextérité",
+   "competence_liee": null
+  },
+  {
+   "nom": "Armure en cuir clouté (Armure légère)",
+   "ca": 13,
+   "prerequis_valeur": 80,
+   "malus_dex": 0,
+   "type": "Armure légère",
+   "prerequis_carac": "Dextérité",
+   "competence_liee": null
+  },
+  {
+   "nom": "Peaux (Armure intermédiaire)",
+   "ca": 10,
+   "prerequis_valeur": 0,
+   "malus_dex": 0,
+   "type": "Armure intermédiaire",
+   "prerequis_carac": "Force",
+   "competence_liee": null
+  },
+  {
+   "nom": "Chemise de mailles (Armure intermédiaire)",
+   "ca": 11,
+   "prerequis_valeur": 59,
+   "malus_dex": 0,
+   "type": "Armure intermédiaire",
+   "prerequis_carac": "Force",
+   "competence_liee": null
+  },
+  {
+   "nom": "Ecailles (Armure intermédiaire)",
+   "ca": 12,
+   "prerequis_valeur": 71,
+   "malus_dex": -5,
+   "type": "Armure intermédiaire",
+   "prerequis_carac": "Force",
+   "competence_liee": null
+  },
+  {
+   "nom": "Cuirasse (Armure intermédiaire)",
+   "ca": 13,
+   "prerequis_valeur": 80,
+   "malus_dex": 0,
+   "type": "Armure intermédiaire",
+   "prerequis_carac": "Force",
+   "competence_liee": null
+  },
+  {
+   "nom": "Demi-plate (Armure lourde)",
+   "ca": 15,
+   "prerequis_valeur": 59,
+   "malus_dex": -5,
+   "type": "Armure lourde",
+   "prerequis_carac": "Constitution",
+   "competence_liee": null
+  },
+  {
+   "nom": "Broigne (Armure lourde)",
+   "ca": 16,
+   "prerequis_valeur": 55,
+   "malus_dex": -5,
+   "type": "Armure lourde",
+   "prerequis_carac": "Constitution",
+   "competence_liee": null
+  },
+  {
+   "nom": "Cotte de mailles (Armure lourde)",
+   "ca": 17,
+   "prerequis_valeur": 70,
+   "malus_dex": -10,
+   "type": "Armure lourde",
+   "prerequis_carac": "Constitution",
+   "competence_liee": null
+  },
+  {
+   "nom": "Clibanion (Armure lourde)",
+   "ca": 18,
+   "prerequis_valeur": 75,
+   "malus_dex": -10,
+   "type": "Armure lourde",
+   "prerequis_carac": "Constitution",
+   "competence_liee": null
+  },
+  {
+   "nom": "Harnois (Armure lourde)",
+   "ca": 20,
+   "prerequis_valeur": 80,
+   "malus_dex": -10,
+   "type": "Armure lourde",
+   "prerequis_carac": "Constitution",
+   "competence_liee": null
+  }
+ ],
+ "bouclier": {
+  "nom": "Bouclier",
+  "ca": 2
+ },
+ "armes": [
+  {
+   "nom": "Arme courte",
+   "degats": 4,
+   "action_bonus": 1,
+   "propriete": "Arme légère",
+   "malus_dex": 0,
+   "attaque": 2
+  },
+  {
+   "nom": "Arme tranchante 1M",
+   "degats": 7,
+   "action_bonus": 0,
+   "propriete": "Arme moyenne",
+   "malus_dex": 0,
+   "attaque": 1.1
+  },
+  {
+   "nom": "Arme 1M - Légère",
+   "degats": 6,
+   "action_bonus": 1,
+   "propriete": "Arme légère",
+   "malus_dex": 0,
+   "attaque": 1.1
+  },
+  {
+   "nom": "Arme longue aérienne",
+   "degats": 7,
+   "action_bonus": 1,
+   "propriete": "Arme légère",
+   "malus_dex": 0,
+   "attaque": 1.1,
+   "note": "Attaque saisie comme une date dans l'Excel (01/01/2022), lue 1.1"
+  },
+  {
+   "nom": "Arme tranchante 2M",
+   "degats": 8,
+   "action_bonus": 0,
+   "propriete": "Arme lourde",
+   "malus_dex": -5,
+   "attaque": 1.1
+  },
+  {
+   "nom": "Arme contondante 1M",
+   "degats": 6,
+   "action_bonus": 0,
+   "propriete": "Arme lourde",
+   "malus_dex": 0,
+   "attaque": 1.1
+  },
+  {
+   "nom": "Arme contondante 2M",
+   "degats": 8,
+   "action_bonus": 0,
+   "propriete": "Arme lourde",
+   "malus_dex": -5,
+   "attaque": 1
+  },
+  {
+   "nom": "Arme d'Hast (2M)",
+   "degats": 10,
+   "action_bonus": 0,
+   "propriete": "Arme lourde",
+   "malus_dex": -10,
+   "attaque": 1
+  },
+  {
+   "nom": "Arc",
+   "degats": 6,
+   "action_bonus": 1,
+   "propriete": "De Jet",
+   "malus_dex": 0,
+   "attaque": 0
+  },
+  {
+   "nom": "Arbalète légère (1M)",
+   "degats": 6,
+   "action_bonus": 1,
+   "propriete": "De Jet",
+   "malus_dex": 0,
+   "attaque": 0
+  },
+  {
+   "nom": "Arbalète lourde (2M)",
+   "degats": 8,
+   "action_bonus": 0,
+   "propriete": "De Jet",
+   "malus_dex": -5,
+   "attaque": 0
+  },
+  {
+   "nom": "Pas d'armes",
+   "degats": 0,
+   "action_bonus": 0,
+   "propriete": null,
+   "malus_dex": 0,
+   "attaque": 0
+  }
+ ],
+ "magie": {
+  "energies": [
+   "Mana",
+   "Énergie vitale",
+   "Énergie ténébreuse"
+  ],
+  "ecoles": {
+   "Mana": [
+    "Élémentalisme",
+    "Invocation",
+    "Psychisme",
+    "Abjuration",
+    "Altération"
+   ],
+   "Énergie vitale": [
+    "Protection contre le mal",
+    "Bénédiction",
+    "Magie de Lumière"
+   ],
+   "Énergie ténébreuse": [
+    "Psychisme",
+    "Invocation",
+    "Nécromancie",
+    "Malédiction",
+    "Magie des Ténèbres"
+   ]
+  },
+  "courants": [
+   {
+    "energie": "Mana",
+    "ecole": "Invocation",
+    "courant": "Convocation",
+    "description": "La Convocation ou l'art d'appeler à son service une créature réelle, plus ou moins soumise."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Invocation",
+    "courant": "Conjuration",
+    "description": "La Conjuration ou l'art de créer une créature temporaire, soumise à son créateur."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Invocation",
+    "courant": "Téléportation",
+    "description": "La Téléportation ou l'art de téléporter une personne ou un objet quelque part."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Invocation",
+    "courant": "Évocation",
+    "description": "L’Évocation ou l'art de créer un objet ou un événement temporaire."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Psychisme",
+    "courant": "Illusions",
+    "description": "Magie maniant l'art de duper l'esprit par de fausses visions."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Psychisme",
+    "courant": "Télékinésie",
+    "description": "Magie maniant l'art de matérialiser la force de l'esprit."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Psychisme",
+    "courant": "Télépathie",
+    "description": "Magie maniant l'art d'espionner ou de suggérer des pensées."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Psychisme",
+    "courant": "Divination",
+    "description": "Magie maniant l'art de voir dans le passé et dans l'avenir."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Abjuration",
+    "courant": "Contre-sorts et révocations",
+    "description": "Magie permettant de renvoyer des sorts et des invocations"
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Abjuration",
+    "courant": "Boucliers",
+    "description": "Magie permettant de faire des boucliers contre les attaques."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Abjuration",
+    "courant": "Désenvoutements",
+    "description": "Magie permettant de libérer une personne d'un envoûtement ou des effets d'un sort."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Abjuration",
+    "courant": "Antimagie",
+    "description": "Magie permettant de créer des zones dans laquelle la magie est impossible."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Altération",
+    "courant": "Métamorphose",
+    "description": "L'art de changer le corps d'un être vivant en un autre."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Altération",
+    "courant": "Transmutation",
+    "description": "L'art de changer les propriétés d'un objet ou de le transformer"
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Altération",
+    "courant": "Enchantements",
+    "description": "L'art de conférer des propriétés magiques à un objet."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Altération",
+    "courant": "Sceaux",
+    "description": "L'art de tracer des sceaux, glyphes ou runes aux propriétés magiques."
+   },
+   {
+    "energie": "Énergie vitale",
+    "ecole": "Protection contre le mal",
+    "courant": "Levé de malédiction",
+    "description": "Capacité à ôter les malédictions pesant sur des êtres."
+   },
+   {
+    "energie": "Énergie vitale",
+    "ecole": "Protection contre le mal",
+    "courant": "Boucliers",
+    "description": "Capacité à générer des boucliers puissants contre le mal et de force moindre face aux autres types de magie."
+   },
+   {
+    "energie": "Énergie vitale",
+    "ecole": "Bénédiction",
+    "courant": "Magie d'assistance",
+    "description": "Magie permettant de renforcer les capacités naturelles d'une autre personne"
+   },
+   {
+    "energie": "Énergie vitale",
+    "ecole": "Bénédiction",
+    "courant": "Guérison",
+    "description": "Magie permettant de soigner les maux et afflictions touchant une personne."
+   },
+   {
+    "energie": "Énergie vitale",
+    "ecole": "Magie de Lumière",
+    "courant": "Luxomancie",
+    "description": "Magie permettant de plier la lumière à la volonté du mage, blessant tout particulièrement les créatures maléfiques"
+   },
+   {
+    "energie": "Énergie vitale",
+    "ecole": "Magie de Lumière",
+    "courant": "Bannissement",
+    "description": "Magie permettant de sceller des démons aux enfers et de les bannir dans d'autres plans divers et variés."
+   },
+   {
+    "energie": "Énergie ténébreuse",
+    "ecole": "Psychisme",
+    "courant": "Contrôle de l'esprit",
+    "description": "Magie maniant l'art d'imposer sa volonté à l'esprit d'une autre personne."
+   },
+   {
+    "energie": "Énergie ténébreuse",
+    "ecole": "Invocation",
+    "courant": "Démonisme",
+    "description": "La démonomancie permet d'effectuer des rituels impactant les démons et pouvant à terme les assujettir."
+   },
+   {
+    "energie": "Énergie ténébreuse",
+    "ecole": "Nécromancie",
+    "courant": "Maladies",
+    "description": "L'art de créer ou de répandre des maladies."
+   },
+   {
+    "energie": "Énergie ténébreuse",
+    "ecole": "Nécromancie",
+    "courant": "Lius",
+    "description": "L'art de manier l'essence d'un fantôme ou l'âme d'une personne (Lius), et de parler aux morts."
+   },
+   {
+    "energie": "Énergie ténébreuse",
+    "ecole": "Nécromancie",
+    "courant": "Corps",
+    "description": "L'art de manipuler des morts-vivants, leur chair, leurs os et de créer des créatures à partir de cadavres."
+   },
+   {
+    "energie": "Énergie ténébreuse",
+    "ecole": "Malédiction",
+    "courant": "Corruption",
+    "description": "Capacité à corrompre les énergies d'une personne l'orientant vers une soumission et un maléfice, permettant également de corrompre le physique et les chairs."
+   },
+   {
+    "energie": "Énergie ténébreuse",
+    "ecole": "Malédiction",
+    "courant": "Pactes",
+    "description": "Capacité à générer des pactes de magie noire, moins puissants que les pactes démoniaques mais ayant diverses capacités. Ils sont également capables de faire des malédictions."
+   },
+   {
+    "energie": "Énergie ténébreuse",
+    "ecole": "Magie des Ténèbres",
+    "courant": "Ombromancie",
+    "description": "Magie maniant l'art de maîtriser les ombres et d'en pénétrer le monde."
+   },
+   {
+    "energie": "Énergie ténébreuse",
+    "ecole": "Magie des Ténèbres",
+    "courant": "Hématomancie",
+    "description": "Magie maniant l'art de maîtriser le sang."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Élémentalisme",
+    "courant": "Hydromancie",
+    "description": "Magie maniant l'art de maîtriser l'eau et de contrôler certains liquides."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Élémentalisme",
+    "courant": "Géomancie",
+    "description": "Magie maniant l'art de maîtriser la terre, la roche et certains minéraux."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Élémentalisme",
+    "courant": "Pyromancie",
+    "description": "Magie maniant l'art de maîtriser le feu."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Élémentalisme",
+    "courant": "Aéromancie",
+    "description": "Magie maniant l'art de maîtriser le vent et l'air."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Élémentalisme",
+    "courant": "Phytomancie",
+    "description": "Magie maniant l'art de maîtriser les plantes."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Élémentalisme",
+    "courant": "Chéromancie",
+    "description": "Magie maniant l'art de mâitriser la foudre."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Élémentalisme",
+    "courant": "Métallurgie",
+    "description": "Magie maniant l'art de maîtriser le métal."
+   },
+   {
+    "energie": "Mana",
+    "ecole": "Élémentalisme",
+    "courant": "Algomancie",
+    "description": "Magie maniant l'art de maîtriser la glace."
+   }
+  ],
+  "niveaux": [
+   {
+    "nom": "Novice (1 an)",
+    "valeur": 2,
+    "lancers": {
+     "mineur": "Infini",
+     "median": 1,
+     "majeur": 0
+    },
+    "modif_maitrise": 1
+   },
+   {
+    "nom": "Amateur (2,5 ans)",
+    "valeur": 5,
+    "lancers": {
+     "mineur": "Infini",
+     "median": 3,
+     "majeur": 0
+    },
+    "modif_maitrise": 2
+   },
+   {
+    "nom": "Mage Agréé (5 ans)",
+    "valeur": 7,
+    "lancers": {
+     "mineur": "Infini",
+     "median": 5,
+     "majeur": 1
+    },
+    "modif_maitrise": 3
+   },
+   {
+    "nom": "Expert (15 ans)",
+    "valeur": 10,
+    "lancers": {
+     "mineur": "Infini",
+     "median": 8,
+     "majeur": 1
+    },
+    "modif_maitrise": 4
+   },
+   {
+    "nom": "Maître (35 ans)",
+    "valeur": 15,
+    "lancers": {
+     "mineur": "Infini",
+     "median": 10,
+     "majeur": 1
+    },
+    "modif_maitrise": 5
+   }
+  ]
+ },
+ "types_artefacts": {
+  "Equipement": [
+   "Heaume",
+   "Bouclier",
+   "Arme tranchante 1M",
+   "Arme tranchante 2M",
+   "Arme contondante 1M",
+   "Arme contondante 2M",
+   "Gantelet",
+   "Bottes",
+   "Armure",
+   "Arme de trait",
+   "Arme de jet"
+  ],
+  "Bijoux": [
+   "Collier",
+   "Bague",
+   "Boucle d'oreille",
+   "Diadème",
+   "Baguette",
+   "Bracelet",
+   "Amulette",
+   "Broche",
+   "Pendentif",
+   "Serre-tête",
+   "Montre à gousset"
+  ],
+  "Autre": [
+   "Calice",
+   "Ceinture",
+   "Bâton de mage",
+   "Pierre",
+   "Boussole",
+   "Plume",
+   "Livre",
+   "Sac / bourse",
+   "Corde/Ruban",
+   "Instrument",
+   "Cuillère"
+  ]
+ },
+ "bonus_artefact": [
+  -5,
+  -4,
+  -3,
+  -2,
+  -1,
+  0,
+  1,
+  2,
+  3,
+  4,
+  5
+ ]
+}
