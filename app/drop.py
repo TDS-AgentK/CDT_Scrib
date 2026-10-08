@@ -13,6 +13,7 @@ from app.eco_actions import objet_par_nom, quantite, retirer_objet
 
 log = logging.getLogger("cdt_scrib.drop")
 DUREE_MIN, DUREE_MAX = 5, 120
+DUREE_ADMIN_MAX = 3600  # un drop admin peut durer jusqu'à 1 h
 _verrous: dict[str, asyncio.Lock] = {}
 
 
@@ -30,8 +31,13 @@ def _bouton(drop_id: str, desactive: bool = False) -> discord.ui.View:
     return vue
 
 
-def _embed(lanceur: str, objet: dict, q: int, fin_ts: int | None = None, statut: str | None = None) -> discord.Embed:
-    nom = f"**{q} × {objet.get('emoji') or ''} {objet['nom']}**".replace("  ", " ")
+def _embed(lanceur: str, objet: dict | None, q: int, fin_ts: int | None = None, statut: str | None = None, or_txt: str = "") -> discord.Embed:
+    morceaux = []
+    if objet:
+        morceaux.append(f"**{q} × {objet.get('emoji') or ''} {objet['nom']}**".replace("  ", " "))
+    if or_txt:
+        morceaux.append(f"**{or_txt}**")
+    nom = " + ".join(morceaux)
     if statut:
         texte = statut
     else:
@@ -72,6 +78,39 @@ async def lancer(eco, membre: discord.Member, objet_id: str, q: int, duree: int,
     return True, f"Drop lancé pour {duree} s : {q} × {objet['nom']}."
 
 
+async def lancer_admin(eco, membre: discord.Member, objet_id: str | None, q: int, or_: int, duree: int, channel_id: str | None) -> tuple[bool, str]:
+    """Drop d'un administrateur de loterie : l'objet et/ou l'Or sont créés, sans toucher à aucun inventaire."""
+    from app import loteries
+    if not await loteries.est_admin(eco, membre.id):
+        return False, "Seuls les administrateurs de loterie peuvent lancer un drop admin."
+    if not DUREE_MIN <= duree <= DUREE_ADMIN_MAX:
+        return False, f"La durée doit être comprise entre {DUREE_MIN} et {DUREE_ADMIN_MAX} secondes."
+    objet = await objet_par_nom(eco, objet_id) if objet_id else None
+    if objet_id and not objet:
+        return False, "Objet inconnu."
+    if not objet and or_ <= 0:
+        return False, "Indique un objet et/ou de l'Or."
+    salon = eco.client.get_channel(int(channel_id)) if channel_id else None
+    if salon is None:
+        return False, "Salon introuvable pour ce drop."
+    cfg = await eco.config()
+    from app.eco_actions import _n
+    or_txt = f"{_n(or_)} {eco_vues.or_txt(cfg)}" if or_ > 0 else ""
+    joueur = await eco.joueur_de(membre)
+    fin = datetime.now(timezone.utc) + timedelta(seconds=duree)
+    d = await eco.pb.creer("eco_drops", {"lanceur": joueur["id"] if joueur else "", "objet": objet["id"] if objet else "", "quantite": q if objet else 0,
+                                         "or_montant": or_ if or_ > 0 else 0, "admin": True, "duree_s": duree, "salon_id": str(salon.id),
+                                         "statut": "en_cours", "date": _date(datetime.now(timezone.utc)), "date_fin": _date(fin), "message_id": ""})
+    try:
+        msg = await salon.send(embed=_embed(membre.mention, objet, q, int(fin.timestamp()), or_txt=or_txt), view=_bouton(d["id"]))
+    except discord.HTTPException:
+        await eco.pb.maj("eco_drops", d["id"], {"statut": "annule"})
+        return False, "Je ne peux pas écrire dans ce salon : drop annulé."
+    await eco.pb.maj("eco_drops", d["id"], {"message_id": str(msg.id)})
+    asyncio.create_task(_attendre(eco, d["id"], duree))
+    return True, f"Drop admin lancé pour {duree} s."
+
+
 async def _attendre(eco, drop_id: str, duree: int):
     await asyncio.sleep(duree + 1)
     try:
@@ -89,22 +128,32 @@ async def _editer(eco, d: dict, embed: discord.Embed):
         log.warning("Message du drop %s non modifiable", d.get("id"))
 
 
-async def _infos(eco, d: dict) -> tuple[dict, dict]:
-    objet = await eco.pb.requete("GET", f'/api/collections/eco_objets/records/{d["objet"]}')
-    lanceur = await eco.pb.requete("GET", f'/api/collections/joueurs/records/{d["lanceur"]}')
+async def _infos(eco, d: dict) -> tuple[dict | None, dict | None]:
+    objet = await eco.pb.requete("GET", f'/api/collections/eco_objets/records/{d["objet"]}') if d.get("objet") else None
+    lanceur = await eco.pb.requete("GET", f'/api/collections/joueurs/records/{d["lanceur"]}') if d.get("lanceur") else None
     return objet, lanceur
 
 
+async def _or_txt(eco, d: dict) -> str:
+    if not d.get("or_montant"):
+        return ""
+    from app.eco_actions import _n
+    return f"{_n(d['or_montant'])} {eco_vues.or_txt(await eco.config())}"
+
+
 async def expirer(eco, drop_id: str):
-    """Non ramassé à temps : l'objet entre dans le stock du Receleur."""
+    """Non ramassé à temps : l'objet d'un joueur entre dans le stock du Receleur ; un drop admin disparaît simplement."""
     async with _verrou(drop_id):
         d = await eco.pb.requete("GET", f"/api/collections/eco_drops/records/{drop_id}")
         if d.get("statut") != "en_cours":
             return
         await eco.pb.maj("eco_drops", drop_id, {"statut": "expire"})
+        objet, _ = await _infos(eco, d)
+        if d.get("admin"):
+            await _editer(eco, d, _embed("", objet, d.get("quantite") or 0, statut="Personne n'a ramassé ce drop.", or_txt=await _or_txt(eco, d)))
+            return
         await receleur.ajouter_stock(eco, d["objet"], d["quantite"])
         await receleur._mouvement(eco, d["lanceur"], d["objet"], d["quantite"], 0, "drop", f"drop {drop_id}")
-        objet, _ = await _infos(eco, d)
         await _editer(eco, d, _embed("", objet, d["quantite"], statut=f"Personne n'a ramassé **{d['quantite']} × {objet['nom']}** : l'objet file chez le Receleur."))
 
 
@@ -117,10 +166,17 @@ async def ramasser(eco, membre: discord.Member, drop_id: str) -> tuple[bool, str
         if d.get("statut") != "en_cours":
             return False, "Ce drop n'est plus disponible."
         await eco.pb.maj("eco_drops", drop_id, {"statut": "ramasse", "ramasse_par": joueur["id"], "date_ramasse": _date(datetime.now(timezone.utc))})
-        await eco.ajouter_objet(joueur["id"], d["objet"], d["quantite"], "drop_ramasse", f"drop {drop_id}")
         objet, _ = await _infos(eco, d)
-        await _editer(eco, d, _embed("", objet, d["quantite"], statut=f"{membre.mention} a ramassé **{d['quantite']} × {objet['nom']}**."))
-    return True, f"Tu as ramassé {d['quantite']} × {objet['nom']}."
+        if objet:
+            await eco.ajouter_objet(joueur["id"], d["objet"], d["quantite"], "drop_ramasse", f"drop {drop_id}")
+        or_txt = await _or_txt(eco, d)
+        if or_txt:
+            from app.eco_actions import _gain, changer_or
+            await changer_or(eco, joueur["id"], d["or_montant"])
+            await _gain(eco, joueur["id"], "drop admin", "Or", d["or_montant"], "")
+        lot = " + ".join([x for x in ([f"{d['quantite']} × {objet['nom']}"] if objet else []) + ([or_txt] if or_txt else [])])
+        await _editer(eco, d, _embed("", objet, d.get("quantite") or 0, statut=f"{membre.mention} a ramassé **{lot}**."))
+    return True, f"Tu as ramassé {lot}."
 
 
 async def boucle(eco):

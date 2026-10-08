@@ -136,6 +136,15 @@ COMMANDS = [
         ],
     },
     {
+        "name": "dropadmin", "description": "Drop d'un objet et/ou d'Or créés pour l'occasion (administrateurs de loterie)",
+        "options": [
+            {"type": 4, "name": "duree", "description": "Durée en secondes (5 à 3600)", "required": True, "min_value": 5, "max_value": 3600},
+            {"type": 3, "name": "objet", "description": "Objet du catalogue", "required": False, "autocomplete": True},
+            {"type": 4, "name": "quantite", "description": "Quantité de l'objet (1 par défaut)", "required": False, "min_value": 1},
+            {"type": 4, "name": "or", "description": "Or à ramasser", "required": False, "min_value": 1},
+        ],
+    },
+    {
         "name": "loterie", "description": "Loteries (administrateurs de loterie)",
         "options": [{
             "type": 1, "name": "creer", "description": "Créer une loterie",
