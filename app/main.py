@@ -84,6 +84,9 @@ async def startup():
     # Nouveaux objets : ligne au Receleur et rappel à Kyanite de fixer le prix de reprise.
     from app import receleur
     asyncio.create_task(receleur.surveiller_nouveaux_objets(economie))
+    # Jets de dés lancés depuis les fiches de jeu du site : publiés dans le salon choisi (#random ou salon perso).
+    from app import jets_site
+    asyncio.create_task(jets_site.boucle(gateway, pocketbase))
 
 
 @app.on_event("shutdown")
