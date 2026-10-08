@@ -81,6 +81,9 @@ async def startup():
     from app import drop, loteries
     asyncio.create_task(drop.boucle(economie))
     asyncio.create_task(loteries.boucle(economie))
+    # Nouveaux objets : ligne au Receleur et rappel à Kyanite de fixer le prix de reprise.
+    from app import receleur
+    asyncio.create_task(receleur.surveiller_nouveaux_objets(economie))
 
 
 @app.on_event("shutdown")

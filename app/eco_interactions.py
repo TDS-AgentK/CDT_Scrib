@@ -15,7 +15,7 @@ from app import drop, eco_actions, eco_vues, loteries, receleur
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
-             "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "loterie"}
+             "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -155,6 +155,9 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
         if nom == "drop":
             ok, txt = await drop.lancer(eco, membre, opt.get("objet"), int(opt.get("quantite") or 1), int(opt.get("duree") or 0), payload.get("channel_id"))
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+        if nom == "dropadmin":
+            ok, txt = await drop.lancer_admin(eco, membre, opt.get("objet"), int(opt.get("quantite") or 1), int(opt.get("or") or 0), int(opt.get("duree") or 0), payload.get("channel_id"))
+            return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
         if nom == "loterie":
             sous = data["options"][0]
             ok, txt = await loteries.creer(eco, membre, _options(sous), payload.get("channel_id"))
@@ -177,7 +180,7 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             return await _modifier(app_id, jeton, [embed], comp, contenu=vers.mention)
 
     _en_fond(taches, travail)
-    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "loterie") else {}}
+    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie") else {}}
 
 
 async def _vue_echange(eco, e: dict, de, vers, statut: str | None = None) -> tuple[dict, list]:
@@ -306,7 +309,7 @@ async def _autocompletion(eco, payload) -> dict:
             o = objets.get(l.get("objet"))
             if o and tape in o["nom"].lower():
                 choix.append({"name": f'{o["nom"]} — {l["prix_vente"]} Or (stock {l["stock"]})'[:100], "value": o["id"]})
-    elif focus["name"] == "objet" and data["name"] == "loterie":
+    elif focus["name"] == "objet" and data["name"] in ("loterie", "dropadmin"):
         for o in await eco.pb.lister("eco_objets", "actif=true", tri="ordre"):
             if tape in o["nom"].lower():
                 choix.append({"name": o["nom"][:100], "value": o["id"]})
