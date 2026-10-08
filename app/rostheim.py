@@ -204,7 +204,7 @@ class Rostheim:
             if not nombre or not heures:
                 continue
             depuis = _pb_date(datetime.now(timezone.utc) - timedelta(hours=heures))
-            deja = await self.pb.lister("eco_gains", f'joueur="{echapper(joueur["id"])}" && commande="{echapper(cmd["commande"])}" && created>="{depuis}"')
+            deja = await self.pb.lister("eco_gains", f'joueur="{echapper(joueur["id"])}" && commande="{echapper(cmd["commande"])}" && annule!=true && created>="{depuis}"')
             if len(deja) >= nombre:
                 await message.reply(f"Limite atteinte : {nombre} fois par {heures:g} h.", mention_author=False)
                 return None
