@@ -5,7 +5,8 @@ revend avec son propre stock. Réglages, prix, stocks et historique se gèrent s
   message_non_repris (réponse quand un objet n'a pas de prix de reprise), notif_discord_ids (qui prévenir pour un nouvel objet),
   surveille_depuis (date : seuls les objets créés après sont suivis)
 - rec_statuts : succès du site (champ succes) ou rôle Discord → quota de reprises par semaine (le plus haut gagne)
-- rec_objets : objet, prix_reprise (le joueur vend), prix_vente (le joueur achète), stock, actif
+- rec_objets : objet, prix_reprise (le joueur vend), prix_vente (le joueur achète), stock, actif,
+  non_revendable (case à cocher : l'objet ne peut pas être vendu au Receleur, aucun rappel de prix)
 - rec_mouvements : historique (sens « reprise » = le joueur vend, « vente » = le joueur achète)
 """
 import asyncio
@@ -104,6 +105,8 @@ async def vendre(eco, membre: discord.Member, objet_id: str, q: int, origine: st
         return False, "Objet inconnu."
     ligne = await _ligne(eco, objet["id"])
     prix = (ligne or {}).get("prix_reprise") or 0
+    if ligne and ligne.get("non_revendable"):
+        return False, r.get("message_non_repris") or f"**{objet['nom']}** ne peut pas être revendu au Receleur."
     if not ligne or prix <= 0:
         return False, r.get("message_non_repris") or f"Le Receleur ne reprend pas **{objet['nom']}** pour le moment."
     cfg = await eco.config()
