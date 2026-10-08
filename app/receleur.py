@@ -1,12 +1,15 @@
 """Le Receleur : il reprend des objets aux joueurs (quota par semaine, du lundi au dimanche), les stocke et les
 revend avec son propre stock. Réglages, prix, stocks et historique se gèrent sur le site (collections rec_*).
 
-- rec_reglages (cle « general ») : ouvert, ouverture_texte, changement_prix_texte, ventes_par_semaine
+- rec_reglages (cle « general ») : ouvert, ouverture_texte, changement_prix_texte, ventes_par_semaine,
+  message_non_repris (réponse quand un objet n'a pas de prix de reprise), notif_discord_ids (qui prévenir pour un nouvel objet),
+  surveille_depuis (date : seuls les objets créés après sont suivis)
 - rec_statuts : succès du site (champ succes) ou rôle Discord → quota de reprises par semaine (le plus haut gagne)
 - rec_objets : objet, prix_reprise (le joueur vend), prix_vente (le joueur achète), stock, actif
 - rec_mouvements : historique (sens « reprise » = le joueur vend, « vente » = le joueur achète)
 """
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -16,6 +19,7 @@ from app import eco_vues
 from app.eco_actions import _gain, _n, changer_or, objet_par_nom, quantite, retirer_objet
 from app.pocketbase import echapper
 
+log = logging.getLogger("cdt_scrib.receleur")
 PARIS = ZoneInfo("Europe/Paris")
 _verrou_stock = asyncio.Lock()  # un seul mouvement de stock à la fois
 
@@ -101,7 +105,7 @@ async def vendre(eco, membre: discord.Member, objet_id: str, q: int, origine: st
     ligne = await _ligne(eco, objet["id"])
     prix = (ligne or {}).get("prix_reprise") or 0
     if not ligne or prix <= 0:
-        return False, f"Le Receleur ne reprend pas **{objet['nom']}** pour le moment."
+        return False, r.get("message_non_repris") or f"Le Receleur ne reprend pas **{objet['nom']}** pour le moment."
     cfg = await eco.config()
     async with eco._verrou(membre.id), _verrou_stock:
         maxi, fait = await quota(eco, membre, joueur, r), await deja_vendu(eco, joueur["id"])
@@ -183,3 +187,36 @@ async def vue(eco, membre: discord.Member) -> dict:
     if r.get("changement_prix_texte"):
         embed.setdefault("fields", []).append({"name": "Prochain changement des prix", "value": r["changement_prix_texte"], "inline": True})
     return embed
+
+
+async def surveiller_nouveaux_objets(eco):
+    """Tout objet créé après « surveille_depuis » reçoit sa ligne au Receleur (revendable dès qu'un prix de reprise est fixé)
+    et les personnes de notif_discord_ids sont prévenues en message privé de lui attribuer un prix."""
+    await eco.client.wait_until_ready()
+    while not eco.client.is_closed():
+        try:
+            r = await reglages(eco)
+            if r.get("id"):
+                if not r.get("surveille_depuis"):
+                    await eco.pb.maj("rec_reglages", r["id"], {"surveille_depuis": _pb_date(datetime.now(timezone.utc))})
+                else:
+                    for o in await eco.pb.lister("eco_objets", f'created>"{r["surveille_depuis"]}"'):
+                        if await eco.pb.premier("rec_objets", f'objet="{echapper(o["id"])}"'):
+                            continue
+                        await eco.pb.creer("rec_objets", {"objet": o["id"], "prix_reprise": 0, "prix_vente": 0, "stock": 0, "actif": True})
+                        await _prevenir(eco, r, o)
+        except Exception:
+            log.exception("Erreur dans la surveillance des nouveaux objets")
+        await asyncio.sleep(300)
+
+
+async def _prevenir(eco, r: dict, objet: dict):
+    ids = [x.strip() for x in str(r.get("notif_discord_ids") or "").replace(";", ",").split(",") if x.strip().isdigit()]
+    texte = (f"Nouvel objet : **{objet['nom']}**. Il est dans la liste du Receleur sans prix de reprise : "
+             "pense à lui en attribuer un (page Receleur du site), sinon les joueurs ne pourront pas le lui vendre.")
+    for uid in ids:
+        try:
+            user = eco.client.get_user(int(uid)) or await eco.client.fetch_user(int(uid))
+            await user.send(texte)
+        except discord.HTTPException:
+            log.warning("Impossible de prévenir %s d'un nouvel objet (messages privés fermés ?)", uid)
