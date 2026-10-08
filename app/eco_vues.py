@@ -77,22 +77,33 @@ def _acces_txt(b: dict) -> str:
     return txt + (" (retiré à l'achat)" if b.get("retirer_roles_acces") else "")
 
 
-async def vue_choix_boutique(eco, membre) -> dict:
-    """Premier écran de /boutique : « Sur quelle boutique souhaitez-vous naviguer ? »."""
-    cfg = await eco.config()
-    accessibles = eco._boutiques_accessibles(cfg, membre)
-    if not accessibles:
-        return {"flags": V2 | PRIVE, "components": [{"type": 17, "accent_color": ROUGE, "components": [_texte("Aucune boutique ne vous est accessible.")]}]}
-    if len(accessibles) == 1:
-        return await vue_boutique(eco, membre, accessibles[0]["id"])
+def erreur_v2(texte: str) -> dict:
+    return {"flags": V2 | PRIVE, "components": [{"type": 17, "accent_color": ROUGE, "components": [_texte(texte)]}]}
+
+
+async def options_boutiques(eco, cfg: dict, membre, exclu: str | None = None) -> list[dict]:
+    """Boutiques du serveur accessibles au membre, puis boutiques de Rostheim ouvertes (identifiants « r_<domaine> »)."""
+    from app import ros_boutique
     options = []
-    for b in accessibles[:25]:
+    for b in eco._boutiques_accessibles(cfg, membre):
         o = {"label": b["nom"][:100], "value": b["id"]}
         if b.get("emoji"):
             o["emoji"] = {"name": b["emoji"]}
         if _acces_txt(b):
             o["description"] = _acces_txt(b)[:100]
         options.append(o)
+    options += [ros_boutique.option(d) for d in await ros_boutique.domaines(eco)]
+    return [o for o in options if o["value"] != exclu][:25]
+
+
+async def vue_choix_boutique(eco, membre) -> dict:
+    """Premier écran de /boutique : « Sur quelle boutique souhaitez-vous naviguer ? »."""
+    cfg = await eco.config()
+    options = await options_boutiques(eco, cfg, membre)
+    if not options:
+        return {"flags": V2 | PRIVE, "components": [{"type": 17, "accent_color": ROUGE, "components": [_texte("Aucune boutique ne vous est accessible.")]}]}
+    if len(options) == 1:
+        return await vue_boutique(eco, membre, options[0]["value"])
     return {"flags": V2 | PRIVE, "components": [
         {"type": 17, "accent_color": OR_DEFAUT, "components": [_texte("**Sur quelle boutique souhaitez-vous naviguer ?**")]},
         {"type": 1, "components": [{"type": 3, "custom_id": "eco:shop", "placeholder": "Sélectionnez une boutique…", "options": options}]},
@@ -106,6 +117,9 @@ def _trier(articles: list[dict], tri: str) -> list[dict]:
 
 
 async def vue_boutique(eco, membre, boutique_id: str, page: int = 0, tri: str | None = None) -> dict:
+    from app import ros_boutique
+    if boutique_id.startswith(ros_boutique.PREFIXE):
+        return await ros_boutique.vue(eco, membre, boutique_id, page)
     cfg = await eco.config()
     accessibles = eco._boutiques_accessibles(cfg, membre)
     b = next((x for x in accessibles if x["id"] == boutique_id), None)
@@ -147,11 +161,9 @@ async def vue_boutique(eco, membre, boutique_id: str, page: int = 0, tri: str | 
     blocs.append({"type": 1, "components": [{"type": 3, "custom_id": f'eco:tri:{b["id"]}', "placeholder": "Trier par…",
                                               "options": [{"label": t, "value": k, "default": k == tri} for k, t in TRIS]}]})
     composants = [{"type": 17, "accent_color": _couleur(b.get("couleur")), "components": blocs}]
-    autres = [x for x in accessibles if x["id"] != b["id"]]
+    autres = await options_boutiques(eco, cfg, membre, exclu=b["id"])
     if autres:
-        composants.append({"type": 1, "components": [{"type": 3, "custom_id": "eco:shop", "placeholder": "Sélectionnez une autre boutique…",
-                                                      "options": [{"label": x["nom"][:100], "value": x["id"], **({"emoji": {"name": x["emoji"]}} if x.get("emoji") else {}),
-                                                                   **({"description": _acces_txt(x)[:100]} if _acces_txt(x) else {})} for x in autres[:25]]}]})
+        composants.append({"type": 1, "components": [{"type": 3, "custom_id": "eco:shop", "placeholder": "Sélectionnez une autre boutique…", "options": autres}]})
     return {"flags": V2 | PRIVE, "components": composants}
 
 

@@ -10,7 +10,7 @@ import logging
 import discord
 import httpx
 
-from app import drop, eco_actions, eco_vues, loteries, receleur
+from app import drop, eco_actions, eco_vues, loteries, receleur, ros_boutique
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
@@ -223,6 +223,12 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
                 return {"type": FENETRE, "data": fenetre}
         _en_fond(taches, _achat, eco, payload, membre, app_id, boutique_id, article_id, 1)
         return {"type": DIFFERE, "data": {"flags": PRIVE}}
+    if morceaux[1] == "rbuy":
+        modal = await ros_boutique.fenetre(eco, morceaux[2], morceaux[3])
+        if modal:
+            return {"type": FENETRE, "data": modal}
+        _en_fond(taches, _achat_ros, eco, payload, membre, app_id, morceaux[2], morceaux[3], "")
+        return {"type": DIFFERE, "data": {"flags": PRIVE}}
     if morceaux[1] == "top":
         async def page_top():
             embed, comp = await eco_vues.vue_classement(eco, morceaux[2], int(morceaux[3]))
@@ -273,11 +279,24 @@ async def _achat(eco, payload, membre, app_id, boutique_id, article_id, quantite
     await _modifier(app_id, payload["token"], [eco_vues.resultat_achat(ok, texte)])
 
 
+async def _achat_ros(eco, payload, membre, app_id, domaine_id, rec_id, precision):
+    ok, texte = await ros_boutique.acheter(eco, membre, domaine_id, rec_id, precision, payload.get("channel_id"))
+    await _modifier(app_id, payload["token"], [eco_vues.resultat_achat(ok, texte)])
+
+
 # ---------------------------------------------------------------- fenêtre de quantité
 
 async def _fenetre(eco, payload, membre, taches, app_id) -> dict:
     data = payload["data"]
     morceaux = data["custom_id"].split(":")
+    if morceaux[1] == "rmod":
+        precision = ""
+        for rangee in data.get("components", []):
+            for c in rangee.get("components", []):
+                if c.get("custom_id") == "precision":
+                    precision = (c.get("value") or "").strip()
+        _en_fond(taches, _achat_ros, eco, payload, membre, app_id, morceaux[2], morceaux[3], precision)
+        return {"type": DIFFERE, "data": {"flags": PRIVE}}
     if morceaux[1] != "buyq":
         return {"type": DIFFERE_MAJ}
     valeur = "1"
