@@ -69,6 +69,17 @@ async def startup():
     async def on_ready():
         log.info("Économie connectée à Discord en tant que %s", gateway.user)
         synchro_listes()
+        # /session (sessions de jeu des fiches) : déclarée ici, sans toucher aux autres commandes ni relancer
+        # scripts/register_commands.py à la main.
+        try:
+            from scripts.register_commands import COMMANDS
+            session = next(c for c in COMMANDS if c["name"] == "session")
+            if os.getenv("GUILD_ID"):
+                await gateway.http.upsert_guild_command(DISCORD_APPLICATION_ID, os.getenv("GUILD_ID"), session)
+            else:
+                await gateway.http.upsert_global_command(DISCORD_APPLICATION_ID, session)
+        except Exception:
+            log.exception("Impossible de déclarer la commande /session")
 
     asyncio.create_task(gateway.start(DISCORD_TOKEN))
     asyncio.create_task(economie.boucle_roles_temporaires())
