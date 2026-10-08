@@ -115,6 +115,11 @@ class Economie:
         self._charge_a = time.time()
         return self.cfg
 
+    @staticmethod
+    def rostheim_types(commande: str) -> tuple:
+        from app.rostheim import TYPES_CONVERSION, TYPES_GAIN
+        return TYPES_GAIN if commande == "recompense" else TYPES_CONVERSION
+
     def _verrou(self, uid: int) -> asyncio.Lock:
         return self._verrous.setdefault(uid, asyncio.Lock())
 

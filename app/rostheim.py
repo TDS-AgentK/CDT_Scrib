@@ -51,6 +51,24 @@ def _nombre(n) -> str:
     return f"{n:,}".replace(",", " ")
 
 
+class Appel:
+    """Appel par commande slash, présenté comme un message pour réutiliser les contrôles et les gains des commandes ??."""
+
+    def __init__(self, membre, channel, origine: str):
+        self.author, self.channel, self.guild, self.jump_url = membre, channel, membre.guild, origine
+        self.reponses: list[str] = []
+
+    async def reply(self, texte: str, **_):
+        self.reponses.append(texte)
+
+    @property
+    def reussi(self) -> bool:
+        return bool(self.reponses) and self.reponses[-1].startswith("+")
+
+
+TYPES_GAIN, TYPES_CONVERSION = ("gain",), ("conversion_or", "conversion_xp")
+
+
 class Rostheim:
     def __init__(self, eco):
         self.eco = eco
@@ -112,6 +130,43 @@ class Rostheim:
         else:
             log.info("Commande Rostheim « %s » (type %s) : rien à faire côté bot pour l'instant.", cmd.get("commande"), type_)
         return True
+
+    # ------------------------------------------------------------ commandes slash (/recompense, /convertir)
+
+    @staticmethod
+    def nom_court(cmd: dict) -> str:
+        """« ??texte » → « Texte », « ??gold-sachoir » → « Gold sachoir »."""
+        brut = (cmd.get("commande") or "").lstrip("?!-").replace("-", " ").strip()
+        return brut[:1].upper() + brut[1:]
+
+    async def actions(self, types: tuple, zone: str | None = None) -> list[tuple[dict, dict]]:
+        """Couples (domaine, commande) actifs des types donnés, éventuellement d'une seule zone (id de domaine)."""
+        commandes, domaines, _ = await self._lire()
+        par_id = {d["id"]: d for d in domaines}
+        return [(par_id[c["domaine"]], c) for c in commandes
+                if c.get("type") in types and c.get("domaine") in par_id and (not zone or c["domaine"] == zone)]
+
+    async def slash(self, membre: discord.Member, cmd_id: str, types: tuple, channel_id: str | None, origine: str) -> tuple[bool, str]:
+        if not (await self.eco.config())["reglages"].get("rostheim_actif"):
+            return False, "L'événement Rostheim n'est pas actif."
+        trouve = next(((d, c) for d, c in await self.actions(types) if c["id"] == cmd_id), None)
+        if not trouve:
+            return False, "Action inconnue : choisissez-la dans la liste proposée."
+        domaine, cmd = trouve
+        canal = self.eco.client.get_channel(int(channel_id)) if channel_id and str(channel_id).isdigit() else None
+        if canal is None and channel_id:
+            try:
+                canal = await self.eco.client.fetch_channel(int(channel_id))
+            except discord.HTTPException:
+                canal = None
+        appel = Appel(membre, canal, origine)
+        joueur = await self._autorise(appel, cmd, domaine)
+        if joueur:
+            if cmd["type"] in TYPES_GAIN:
+                await self.gain(appel, joueur, cmd, domaine)
+            else:
+                await self.conversion(appel, joueur, cmd, domaine)
+        return appel.reussi, " ".join(appel.reponses) or "Rien à faire."
 
     # ------------------------------------------------------------ contrôles
 
