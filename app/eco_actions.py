@@ -96,7 +96,7 @@ async def payer(eco, de: discord.Member, vers: discord.Member, montant: int, mon
     maxi = cfg["reglages"].get("echange_max_jour") or 0
     if maxi:
         debut = datetime.now(timezone.utc).strftime("%Y-%m-%d 00:00:00.000Z")
-        deja = await eco.pb.lister("eco_gains", f'joueur="{echapper(j_de["id"])}" && commande="payer" && montant<0 && monnaie!="Or" && created>="{debut}"')
+        deja = await eco.pb.lister("eco_gains", f'joueur="{echapper(j_de["id"])}" && commande="payer" && montant<0 && monnaie!="Or" && annule!=true && created>="{debut}"')
         if len(deja) >= maxi:
             return False, f"Limite atteinte : {maxi} échange(s) de monnaie par jour."
     rostheim = eco.rostheim

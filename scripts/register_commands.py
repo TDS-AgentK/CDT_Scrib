@@ -119,6 +119,13 @@ COMMANDS = [
             {"type": 4, "name": "quantite", "description": "Quantité (1 par défaut)", "required": False, "min_value": 1},
         ],
     },
+    {
+        "name": "recompense", "description": "Réclamer la récompense d'une action de Rostheim (texte, lore, quiz…)",
+        "options": [
+            {"type": 3, "name": "zone", "description": "Zone : Académie, Veille, Théâtre…", "required": True, "autocomplete": True},
+            {"type": 3, "name": "type", "description": "Action réalisée dans cette zone", "required": True, "autocomplete": True},
+        ],
+    },
     {"name": "receleur", "description": "Voir ce que le Receleur reprend et vend, et vos ventes de la semaine", "options": []},
     {
         "name": "racheter", "description": "Acheter un objet au Receleur",

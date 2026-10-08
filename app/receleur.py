@@ -121,7 +121,8 @@ async def vendre(eco, membre: discord.Member, objet_id: str, q: int, origine: st
             return False, f"Tu n'as que {possede} × {objet['nom']}."
         await retirer_objet(eco, joueur["id"], objet["id"], q, "vente_receleur", f"{prix} Or l'unité")
         j = await changer_or(eco, joueur["id"], prix * q)
-        await eco.pb.maj("rec_objets", ligne["id"], {"stock": (ligne.get("stock") or 0) + q})
+        frais_ligne = await eco.pb.requete("GET", f'/api/collections/rec_objets/records/{ligne["id"]}')  # stock à jour (drops)
+        await eco.pb.maj("rec_objets", ligne["id"], {"stock": (frais_ligne.get("stock") or 0) + q})
         await _mouvement(eco, joueur["id"], objet["id"], q, prix, "reprise", origine)
     await _gain(eco, joueur["id"], f"receleur : vente de {objet['nom']}", "Or", prix * q, origine)
     return True, (f"Vendu au Receleur : **{q} × {objet['nom']}** pour **{_n(prix * q)}** {eco_vues.or_txt(cfg)}. "

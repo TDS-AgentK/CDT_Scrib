@@ -16,7 +16,7 @@ log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
              "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
-             "session"}
+             "session", "recompense"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -179,7 +179,22 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             sous = data["options"][0]
             ok, txt = await loteries.creer(eco, membre, _options(sous), payload.get("channel_id"))
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+        if nom == "recompense":
+            types = eco.rostheim_types(nom)
+            ok, txt = await eco.rostheim.slash(membre, opt.get("type"), types, payload.get("channel_id"), _origine(payload))
+            if not ok:
+                return await _modifier(app_id, jeton, [eco_vues.erreur(txt)])
+            await _modifier(app_id, jeton, [eco_vues.resultat(True, "C'est enregistré.")])
+            return await _webhook("POST", f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}",
+                                  {"content": f"{membre.mention} {txt}", "allowed_mentions": {"parse": ["users"]}})
         if nom == "utiliser":
+            o = await eco_actions.objet_par_nom(eco, opt.get("objet") or "")
+            if ros_boutique.est_boite_a_role(o):
+                joueur = await eco.joueur_de(membre)
+                if not joueur or (await eco_actions.quantite(eco, joueur["id"], o["id"]))[1] < 1:
+                    return await _modifier(app_id, jeton, [eco_vues.erreur(f"Vous n'avez pas de {o['nom']}.")])
+                embed, comp = await ros_boutique.menu_boite(eco, membre)
+                return await _modifier(app_id, jeton, [embed], comp)
             salon = membre.guild.get_channel(int(payload["channel_id"])) if payload.get("channel_id") else None
             ok, txt = await eco_actions.utiliser(eco, membre, opt.get("objet"), salon)
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
@@ -204,7 +219,7 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             await _modifier(app_id, jeton, [eco_vues.erreur("Une erreur est survenue : préviens un admin avec l'heure de ta commande.")])
 
     _en_fond(taches, travail_sur)
-    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie") else {}}
+    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie", "recompense") else {}}
 
 
 async def _vue_echange(eco, e: dict, de, vers, statut: str | None = None) -> tuple[dict, list]:
@@ -253,6 +268,15 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
             return {"type": FENETRE, "data": modal}
         _en_fond(taches, _achat_ros, eco, payload, membre, app_id, morceaux[2], morceaux[3], "")
         return {"type": DIFFERE, "data": {"flags": PRIVE}}
+    if morceaux[1] == "bar":
+        if str(membre.id) != morceaux[2]:
+            return {"type": MESSAGE, "data": {"embeds": [eco_vues.erreur("Ce choix appartient à un autre joueur.")], "flags": PRIVE}}
+
+        async def choix_role():
+            ok, txt = await ros_boutique.ouvrir_boite(eco, membre, valeurs[0], payload.get("channel_id"))
+            await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)], [])
+        _en_fond(taches, choix_role)
+        return {"type": DIFFERE_MAJ}
     if morceaux[1] == "top":
         async def page_top():
             embed, comp = await eco_vues.vue_classement(eco, morceaux[2], int(morceaux[3]))
@@ -369,6 +393,18 @@ async def _autocompletion(eco, payload) -> dict:
                 if o and tape in o["nom"].lower():
                     suffixe = f" — reprise {reprises[o['id']]} Or" if reprises.get(o["id"]) else ""
                     choix.append({"name": f'{o["nom"]} (×{l["quantite"]}){suffixe}'[:100], "value": o["id"]})
+    elif data["name"] == "recompense" and focus["name"] in ("zone", "type"):
+        from app.rostheim import TYPES_GAIN
+        types = TYPES_GAIN
+        zone = next((o.get("value") for o in options if o["name"] == "zone"), None)
+        couples = await eco.rostheim.actions(types, zone if focus["name"] == "type" else None)
+        if focus["name"] == "zone":
+            vus = {}
+            for d, _c in couples:
+                vus[d["id"]] = d.get("nom") or ""
+            choix = [{"name": n[:100], "value": i} for i, n in vus.items() if tape in n.lower()]
+        else:
+            choix = [{"name": eco.rostheim.nom_court(c)[:100], "value": c["id"]} for _d, c in couples if tape in eco.rostheim.nom_court(c).lower()]
     elif focus["name"] == "perso" and data["name"] == "session":
         membre = await _membre(eco, payload)
         joueur = await eco.joueur_de(membre) if membre else None
