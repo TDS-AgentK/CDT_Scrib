@@ -1,0 +1,765 @@
+<title>Table des Dés CDT</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Nunito+Sans:wght@400;600;700&display=swap">
+<style>
+/* Mise en page : maquettes des fiches de jeu dans l'habillage « Nuit » des CDT, sélecteur de variantes en haut comme sur les autres aperçus */
+:root{
+  --nuit:#14161a; --panneau:#1e2024; --panneau2:#26282d; --or:#c9a24c; --or-pale:#e4c983; --texte:#e9e5dc; --doux:#a7a196;
+  --sang:#b0473b; --vert:#6fae7a; --bleu:#5b8fd6;
+  --dc-bg:#313338; --dc-bg2:#2b2d31; --dc-txt:#dbdee1; --dc-doux:#949ba4; --dc-btn:#4e5058; --dc-blurple:#5865f2;
+  --f-titre:"Libre Baskerville",Georgia,"Times New Roman",serif;
+  --f-corps:"Nunito Sans","Avenir Next",Avenir,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--nuit);color:var(--texte);font-family:var(--f-corps);font-size:15px;line-height:1.5;
+  background-image:radial-gradient(ellipse at 50% -10%,#3a2c1a 0%,transparent 55%);}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:20px 60px}
+h1,h2,h3{font-family:var(--f-titre);font-weight:400;text-wrap:balance;margin:0}
+.topbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:space-between;
+  background:linear-gradient(90deg,#5a3a1c,#3d2814 40%,#a27a46);padding:10px 16px;border-radius:2px}
+.topbar .logo{font-family:var(--f-titre);color:var(--or-pale)}
+.topbar .user{display:flex;align-items:center;gap:14px;font-size:13px}
+.dice-btn{display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid transparent;color:var(--texte);cursor:pointer;padding:4px 8px;border-radius:3px;font:inherit;font-size:13px}
+.dice-btn:hover,.dice-btn:focus-visible{border-color:var(--or);outline:none}
+.dice-btn svg{width:30px;height:30px}
+.dice-btn.off{opacity:.75}
+.switch{margin:22px auto 8px;border:1px dashed var(--or);padding:10px 14px;display:flex;flex-wrap:wrap;gap:6px 10px;justify-content:center;align-items:center;background:#1a1b1fcc;font-size:13px}
+.switch b{font-weight:600;color:var(--doux)}
+.switch button{background:none;border:1px solid transparent;color:var(--texte);font:inherit;padding:4px 9px;cursor:pointer}
+.switch button[aria-pressed="true"]{border-color:var(--or);color:var(--or)}
+.switch button:focus-visible{outline:1px solid var(--or-pale)}
+.sep{width:1px;height:20px;background:#555;margin-inline:6px}
+.intro{text-align:center;max-width:720px;margin:14px auto 22px;color:var(--doux);font-style:italic}
+.page-title{text-align:center;margin-top:10px}
+.page-title h2{font-size:clamp(30px,5vw,46px)}
+.page-title h2 .fl{color:var(--or);font-size:.6em;vertical-align:middle;margin-inline:10px}
+.page-title .sub{font-family:var(--f-titre);font-style:italic;color:var(--or);font-size:18px}
+.mode{display:flex;gap:8px;justify-content:center;margin:14px 0 20px;flex-wrap:wrap}
+.chip{border:1px solid var(--or);color:var(--or);background:none;padding:5px 12px;font:inherit;font-size:13px;cursor:pointer}
+.chip.on{background:var(--or);color:var(--nuit)}
+.chip.rouge{border-color:var(--sang);color:#e07a6e}
+.cadre{border:1px solid #6b5a30;padding:6px}
+.cadre>.in{border:1px solid var(--or);background:#1c1d21f0}
+.lbl{font-family:var(--f-titre);color:var(--or);font-size:15px}
+.roll{cursor:pointer;border:1px solid #5d4f2c;background:#2a2620;color:var(--or-pale);font-variant-numeric:tabular-nums;font-size:13px;padding:2px 8px;border-radius:2px;font-family:var(--f-corps);white-space:nowrap}
+.roll:hover,.roll:focus-visible{background:var(--or);color:var(--nuit);outline:none}
+.roll::before{content:"⚄ ";}
+.num{font-variant-numeric:tabular-nums}
+.pos{color:var(--vert)} .neg{color:#e07a6e}
+.note{font-size:12.5px;color:var(--doux)}
+input.edit,select.edit{background:#101114;border:1px solid var(--or);color:var(--texte);font:inherit;padding:2px 6px;width:64px}
+select.edit{width:auto;max-width:100%}
+.view[hidden]{display:none}
+
+/* --- 1. Grimoire ouvert --- */
+.livre{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.livre .p{padding:26px 28px;min-width:0}
+.livre .p+.p{border-left:1px solid #6b5a30}
+.medaillons{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:16px 0}
+.med{text-align:center}
+.med .rond{width:78px;height:78px;margin:0 auto;border-radius:50%;border:2px solid var(--or);display:grid;place-items:center;font-family:var(--f-titre);font-size:24px;background:radial-gradient(circle,#2e2a22,#16171a);position:relative}
+.med .mod{position:absolute;bottom:-10px;left:50%;transform:translateX(-50%);background:var(--nuit);border:1px solid var(--or);border-radius:10px;font-size:12px;padding:0 7px;font-family:var(--f-corps)}
+.med .n{margin-top:14px;font-size:13px;color:var(--doux)}
+.lignes{display:grid;gap:0}
+.lignes .l{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #3a352a}
+.comp{display:grid;grid-template-columns:1fr 1fr;column-gap:22px}
+.comp .l{font-size:14px}
+.spe{color:var(--or);font-size:11px;margin-left:4px}
+.pv{height:10px;background:#3a1d1a;border:1px solid var(--sang);margin-top:6px}
+.pv i{display:block;height:100%;background:linear-gradient(90deg,#8e2f25,#d0574a)}
+table.t{width:100%;border-collapse:collapse;font-size:14px}
+table.t th{font-family:var(--f-titre);font-weight:400;color:var(--or);text-align:left;padding:6px 6px;border-bottom:1px solid var(--or)}
+table.t td{padding:6px;border-bottom:1px solid #3a352a;vertical-align:middle}
+.scroll{overflow-x:auto}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+
+/* --- 2. Planche --- */
+.planche{display:grid;grid-template-columns:240px 1fr 260px;gap:18px;align-items:start}
+.planche .col{min-width:0;display:grid;gap:18px}
+.portrait{aspect-ratio:3/4;max-width:100%;border:1px solid var(--or);background:
+  radial-gradient(circle at 50% 38%,#4b3f63 0,#22202b 45%,#121216 75%);display:grid;place-items:center;position:relative;overflow:hidden}
+.portrait .ombre{width:46%;aspect-ratio:1;border-radius:50% 50% 45% 45%;background:#0b0b0f;box-shadow:0 0 60px 20px #6b4a9a55;margin-top:-20%}
+.portrait .corps{position:absolute;bottom:-8%;width:80%;height:45%;background:#0b0b0f;border-radius:50% 50% 0 0}
+.portrait .cap{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-size:12px;color:var(--doux)}
+.ring{display:flex;justify-content:space-around;flex-wrap:wrap;gap:12px;margin-top:-56px;position:relative;padding-inline:8px}
+.ring .med .rond{width:66px;height:66px;font-size:20px}
+.encart{border:1px solid var(--or);background:#1c1d21f0;padding:14px 16px}
+.encart h3{font-size:16px;color:var(--or);margin-bottom:8px;text-align:center;letter-spacing:.03em}
+.bandeau{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center}
+.bandeau .k{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--doux)}
+.bandeau .v{font-family:var(--f-titre);font-size:22px}
+
+/* --- 3. Codex à onglets --- */
+.codex-head{display:grid;grid-template-columns:120px 1fr auto;gap:20px;align-items:center;padding:18px 22px}
+.codex-head .mini{width:120px;height:120px;border-radius:50%;border:2px solid var(--or);background:radial-gradient(circle at 50% 40%,#4b3f63,#121216 70%)}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--or);padding-inline:22px;flex-wrap:wrap}
+.tabs button{background:none;border:1px solid transparent;border-bottom:none;color:var(--doux);padding:9px 16px;font-family:var(--f-titre);font-size:15px;cursor:pointer}
+.tabs button[aria-selected="true"]{color:var(--or);border-color:var(--or);background:#1c1d21;margin-bottom:-1px}
+.tabpane{padding:22px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.tile{border:1px solid #4b4230;padding:10px 12px;display:grid;gap:4px;background:#202126}
+.tile .k{font-size:12px;color:var(--doux)}
+.tile .v{font-family:var(--f-titre);font-size:20px}
+
+/* --- 4. Table de jeu --- */
+.table-jeu{display:grid;grid-template-columns:1fr;gap:16px}
+.bar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px 16px}
+.bar .nom{font-family:var(--f-titre);font-size:22px}
+.bar .grow{flex:1;min-width:160px}
+.rack{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.de{border:1px solid #5d4f2c;background:linear-gradient(180deg,#26231d,#1a1a1d);padding:12px;text-align:center;cursor:pointer;color:var(--texte);font:inherit;display:grid;gap:4px}
+.de:hover,.de:focus-visible{border-color:var(--or);box-shadow:0 0 0 1px var(--or) inset;outline:none}
+.de .f{font-family:var(--f-titre);color:var(--or-pale);font-size:20px}
+.de .k{font-size:12px;color:var(--doux)}
+.groupe{font-family:var(--f-titre);color:var(--or);margin:8px 0 2px;font-size:15px}
+
+/* --- Discord --- */
+.dc{background:var(--dc-bg);color:var(--dc-txt);font-family:"gg sans","Noto Sans","Helvetica Neue",Arial,sans-serif;font-size:15px;padding:16px 16px 20px;border-radius:6px;max-width:760px;margin:0 auto;display:grid;gap:22px}
+.msg{display:grid;grid-template-columns:40px 1fr;gap:14px}
+.msg .av{width:40px;height:40px;border-radius:50%;background:radial-gradient(circle,#d6b25e,#7a5a24);display:grid;place-items:center;color:#1b1b1b;font-weight:700;font-size:14px}
+.msg .who{font-weight:600;color:#f2f3f5}
+.msg .who .bot{background:var(--dc-blurple);color:#fff;font-size:10px;padding:1px 4px;border-radius:3px;margin-left:4px;vertical-align:2px}
+.msg .who time{color:var(--dc-doux);font-size:12px;font-weight:400;margin-left:6px}
+.msg .cmd{color:var(--dc-doux);font-size:13px}
+.msg .cmd b{color:#c9cdfb;font-weight:500}
+.embed{background:var(--dc-bg2);border-left:4px solid var(--or);border-radius:4px;padding:10px 14px 14px;margin-top:6px;max-width:520px;display:grid;gap:8px;min-width:0}
+.embed .t{font-weight:700;color:#f2f3f5}
+.embed .d{font-size:14px}
+.embed .fields{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 14px}
+.embed .fields .fk{font-size:13px;font-weight:700;color:#f2f3f5}
+.embed .fields .fv{font-size:14px}
+.embed .foot{font-size:12px;color:var(--dc-doux)}
+.embed .big{font-size:40px;font-weight:800;color:#fff;line-height:1}
+.embed code,.dc code{background:#1e1f22;padding:1px 4px;border-radius:3px;font-size:13px}
+.thumb{float:right;width:64px;height:64px;border-radius:4px;background:radial-gradient(circle at 50% 40%,#4b3f63,#121216 70%);margin-left:10px}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.btns span{background:var(--dc-btn);color:#fff;font-size:14px;padding:6px 14px;border-radius:3px}
+.btns span.p{background:var(--dc-blurple)}
+.btns span.g{background:#248046}
+.selectm{background:#1e1f22;border:1px solid #1e1f22;color:var(--dc-doux);padding:9px 12px;border-radius:4px;margin-top:8px;max-width:420px;font-size:14px;display:flex;justify-content:space-between}
+.ansi{background:#2b2d31;border:1px solid #1e1f22;border-radius:4px;padding:10px 12px;font-family:Consolas,"Courier New",monospace;font-size:13.5px;white-space:pre;overflow-x:auto;margin-top:6px;max-width:520px}
+.ansi .y{color:#d8b44c}.ansi .c{color:#4cb3c7}.ansi .gr{color:#8a8f98}.ansi .w{color:#fff;font-weight:700}
+.eph{font-size:12px;color:var(--dc-doux);margin-top:4px}
+.variante{font-family:var(--f-titre);color:var(--or);font-size:17px;margin-top:6px}
+.variante small{font-family:var(--f-corps);color:var(--doux);font-size:13px;display:block}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#1c1d21;border:1px solid var(--or);padding:10px 16px;max-width:min(92vw,460px);font-size:14px;box-shadow:0 8px 24px #000a;display:flex;gap:12px;align-items:center}
+.toast b{font-family:var(--f-titre);font-size:26px;color:var(--or-pale)}
+.legende{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;margin:6px 0 4px;font-size:13px;color:var(--doux)}
+.legende div{display:flex;align-items:center;gap:8px}
+
+/* --- Statistiques --- */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.stat{border:1px solid #4b4230;background:#202126;padding:12px 14px;display:grid;gap:2px}
+.stat .k{font-size:12px;color:var(--doux);letter-spacing:.04em}
+.stat .v{font-family:var(--f-titre);font-size:26px;font-variant-numeric:tabular-nums}
+.stat .s{font-size:12px;color:var(--doux)}
+.filtres{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.histo{position:relative}
+.histo svg{width:100%;height:auto;display:block}
+.histo .tip{position:absolute;pointer-events:none;background:#101114;border:1px solid var(--or);padding:4px 8px;font-size:12px;white-space:nowrap}
+.deux{display:grid;grid-template-columns:1.3fr 1fr;gap:18px}
+/* --- Session, XP, sac --- */
+.banniere{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;border:1px solid var(--or);background:linear-gradient(90deg,#2a2112,#1c1d21,#2a2112);padding:8px 14px;margin:6px 0 4px;font-size:14px}
+.banniere b{color:var(--or-pale);font-family:var(--f-titre);font-weight:400}
+.xp{max-width:420px;margin:10px auto 0;display:grid;gap:4px;text-align:center}
+.xp .barre{height:8px;border:1px solid var(--or);background:#16171a}
+.xp .barre i{display:block;height:100%;width:68%;background:linear-gradient(90deg,#8c6c2c,var(--or-pale))}
+.niv{display:inline-block;border:1px solid var(--or);border-radius:999px;padding:0 10px;font-size:12px;color:var(--or);margin-left:6px;vertical-align:4px;font-family:var(--f-corps)}
+.sac{display:flex;gap:8px;flex-wrap:wrap}
+.sac span{border:1px solid #5d4f2c;background:#26231d;padding:3px 9px;font-size:13px}
+.sac span b{color:var(--or-pale);margin-left:4px}
+.panneau-mj{border:1px dashed var(--or);padding:12px 14px;margin-top:16px;display:grid;gap:8px}
+
+@media (max-width:900px){.deux{grid-template-columns:1fr}}
+
+@media (max-width:900px){
+  .livre{grid-template-columns:1fr}.livre .p+.p{border-left:none;border-top:1px solid #6b5a30}
+  .planche{grid-template-columns:1fr}
+  .codex-head{grid-template-columns:80px 1fr}.codex-head .mini{width:80px;height:80px}.codex-head .actions{grid-column:1/-1}
+}
+@media (max-width:520px){
+  .comp{grid-template-columns:1fr}.medaillons{grid-template-columns:repeat(3,1fr);gap:10px}
+  .embed .fields{grid-template-columns:1fr 1fr}.bandeau{grid-template-columns:1fr 1fr}
+  .livre .p{padding:18px 14px}
+}
+@media (prefers-reduced-motion:no-preference){
+  .toast{animation:monte .25s ease-out}
+  @keyframes monte{from{transform:translate(-50%,10px);opacity:.4}}
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="d20" viewBox="0 0 64 64">
+    <polygon points="32,3 58,18 58,46 32,61 6,46 6,18" fill="currentColor" opacity=".18" stroke="currentColor" stroke-width="2.5"/>
+    <polygon points="32,14 49,42 15,42" fill="none" stroke="currentColor" stroke-width="2.2"/>
+    <path d="M32 3 32 14 M58 18 49 42 M6 18 15 42 M32 61 15 42 M32 61 49 42 M6 46 15 42 M58 46 49 42 M6 18 32 14 M58 18 32 14" stroke="currentColor" stroke-width="1.6" fill="none"/>
+    <text x="32" y="36" text-anchor="middle" font-size="12" font-family="Georgia,serif" fill="currentColor">20</text>
+  </symbol>
+</svg>
+
+<div class="wrap">
+  <header class="topbar">
+    <span class="logo">Les Chroniques du Temps</span>
+    <div class="user">
+      <button class="dice-btn" id="de-nav" type="button" title="Ma fiche de jeu" aria-label="Ouvrir ma fiche de jeu">
+        <svg style="color:var(--or)"><use href="#d20"/></svg>
+      </button>
+      <span>Connecté·e : <b>Spy</b></span>
+    </div>
+  </header>
+
+  <div class="legende" aria-label="États de l'icône de dé">
+    <div><svg width="26" height="26" style="color:var(--or)"><use href="#d20"/></svg> Fiche disponible (ton emoji doré)</div>
+    <div><svg width="26" height="26" style="color:#7d7f86"><use href="#d20"/></svg> Aucune fiche : propose d'en créer une (ton emoji gris)</div>
+    <div>Invisible pour les visiteurs non connectés</div>
+  </div>
+
+  <nav class="switch" aria-label="Choisir une maquette">
+    <b>Site :</b>
+    <button type="button" data-v="v1" aria-pressed="true">1. Grimoire ouvert ✓</button>
+    <button type="button" data-v="v2" aria-pressed="false">2. Planche</button>
+    <button type="button" data-v="v3" aria-pressed="false">3. Codex à onglets</button>
+    <button type="button" data-v="v4" aria-pressed="false">4. Table de jeu</button>
+    <button type="button" data-v="v5" aria-pressed="false">Onglet Statistiques</button>
+    <span class="sep"></span>
+    <b>Discord :</b>
+    <button type="button" data-v="d1" aria-pressed="false">A. Fiche + boutons (A1 ✓)</button>
+    <button type="button" data-v="d2" aria-pressed="false">B. Résultats de jet (B1 ✓)</button>
+    <button type="button" data-v="d3" aria-pressed="false">C. Rappel des DD (C1 ✓)</button>
+    <button type="button" data-v="d4" aria-pressed="false">D. Relancer une session (D1 + D2 ✓)</button>
+    <button type="button" data-v="d5" aria-pressed="false">E. Combat</button>
+    <button type="button" data-v="d6" aria-pressed="false">F. Session &amp; XP</button>
+  </nav>
+  <p class="intro">Maquettes remplies avec la fiche de Spy tirée de ton Excel (valeurs recalculées à l'identique). Chaque bouton de dé est cliquable : le résultat part sur Discord.</p>
+
+  <div class="mode" id="mode">
+    <button type="button" class="chip on" data-m="lecture">Lecture seule</button>
+    <button type="button" class="chip" data-m="edition">Modifier ma fiche</button>
+    <button type="button" class="chip" id="relance" title="PV au maximum et sorts rechargés">↻ Relancer une session</button>
+    <button type="button" class="chip" id="rappel">✦ Rappel des DD de magie</button>
+  </div>
+
+  <!-- 1. GRIMOIRE -->
+  <section class="view" id="v1">
+    <div class="banniere">🎲 Session en cours, dirigée par <b>Kyanite</b> · table : Spy, Nils, Gabrielle</div>
+    <div class="page-title"><h2><span class="fl">❦</span>Spy <span class="niv">Niv. 4</span><span class="fl">❦</span></h2><div class="sub">Humain · Assassin · Mage</div>
+      <div class="xp"><div class="barre"><i></i></div><div class="note num">268 / 300 XP · prochain palier : 4e spécialisation</div></div></div>
+    <div class="cadre" style="margin-top:20px"><div class="in livre">
+      <div class="p">
+        <div class="lbl">Caractéristiques</div>
+        <div class="medaillons" id="g-carac"></div>
+        <div class="note" id="g-points"></div>
+        <div style="margin-top:18px" class="lbl">Défense</div>
+        <div class="lignes">
+          <div class="l"><span>Armure</span><span>Étoffe enchantée <span class="note">(mage, Int &gt; 70)</span></span></div>
+          <div class="l"><span>Classe d'armure</span><button class="roll" data-f="1d30" data-k="Classe d'armure">1d30</button></div>
+          <div class="l"><span>Points de vie</span><span class="num" id="g-pv"></span></div>
+        </div>
+        <div class="pv"><i id="g-pvbar"></i></div>
+        <div style="margin-top:18px" class="lbl">Jets de sauvegarde</div>
+        <div class="lignes" id="g-saves"></div>
+      </div>
+      <div class="p">
+        <div class="lbl">Compétences <span class="note">(★ spécialisation, 3 au maximum)</span></div>
+        <div class="comp lignes" id="g-comp"></div>
+        <div style="margin-top:18px" class="lbl">Armement</div>
+        <div class="scroll"><table class="t" id="g-armes"></table></div>
+        <div style="margin-top:18px" class="lbl">Magie · Ombromancie <span class="note">(Énergie ténébreuse, Expert)</span></div>
+        <div class="scroll"><table class="t" id="g-sorts"></table></div>
+        <div style="margin-top:18px" class="lbl">Sac de hasard</div>
+        <div class="sac"><span>🍀 Trèfle à 10 feuilles<b>×2</b></span><span>🍷 Verre à moitié plein<b>×1</b></span><span>🔁 Try again<b>×1</b></span><span>⚖️ Ça ne compte que pour un<b>×1</b></span></div>
+        <div class="panneau-mj">
+          <div class="lbl">Panneau du MJ <span class="note">(visible seulement de Kyanite pendant sa session)</span></div>
+          <div class="actions" style="margin:0"><button type="button" class="chip">✦ Donner de l'XP</button><button type="button" class="chip">🎁 Donner un objet</button><button type="button" class="chip">↻ Relancer la table</button><button type="button" class="chip rouge">Clore la session</button></div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- 2. PLANCHE -->
+  <section class="view" id="v2" hidden>
+    <div class="planche">
+      <div class="col">
+        <div class="encart"><h3>Compétences</h3><div class="lignes" id="p-comp"></div></div>
+      </div>
+      <div class="col">
+        <div class="encart">
+          <div class="bandeau">
+            <div><div class="k">Classe d'armure</div><div class="v"><button class="roll" data-f="1d30" data-k="Classe d'armure">1d30</button></div></div>
+            <div><div class="k">Points de vie</div><div class="v num" id="p-pv"></div></div>
+            <div><div class="k">Niveau magique</div><div class="v" style="font-size:16px">Expert</div></div>
+            <div><div class="k">Spécialisations</div><div class="v">3 / 3</div></div>
+          </div>
+        </div>
+        <div class="portrait"><div class="ombre"></div><div class="corps"></div><div class="cap">Portrait tiré de la galerie de personnages</div></div>
+        <div class="ring" id="p-carac"></div>
+        <div class="encart"><h3>Attaques &amp; incantations</h3><div class="scroll"><table class="t" id="p-att"></table></div></div>
+      </div>
+      <div class="col">
+        <div class="encart"><h3>Sauvegardes</h3><div class="lignes" id="p-saves"></div></div>
+        <div class="encart"><h3>Artefacts</h3>
+          <div class="lignes">
+            <div class="l" style="display:block"><b>Fumerolle</b> <span class="note">· bague</span><br><span class="note">+2 Intelligence, +2 Arcanes, +2 Discrétion. Facilite les déplacements dans l'ombre.</span></div>
+            <div class="l" style="display:block"><b>Maskul</b> <span class="note">· masque</span><br><span class="note">Un crâne qui semble impossible à retirer.</span></div>
+            <div class="l note">3e emplacement libre</div>
+          </div>
+        </div>
+        <div class="encart"><h3>Traits</h3><p class="note" style="margin:0">Humain : pas de faiblesse particulière. Mage : excelle en Intelligence, faible en Force et Constitution, bonus en armure légère.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. CODEX -->
+  <section class="view" id="v3" hidden>
+    <div class="cadre"><div class="in">
+      <div class="codex-head">
+        <div class="mini" role="img" aria-label="Portrait"></div>
+        <div style="min-width:0">
+          <h2 style="font-size:30px">Spy</h2>
+          <div class="note">Humain · Assassin · Mage · Ombromancie (Expert)</div>
+          <div style="margin-top:8px;max-width:340px"><div class="note num" id="c-pv"></div><div class="pv"><i id="c-pvbar"></i></div></div>
+        </div>
+        <div class="actions" style="margin:0">
+          <button class="roll" data-f="1d100" data-k="Jet libre d100">d100 libre</button>
+        </div>
+      </div>
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-t="t1">Caractéristiques</button>
+        <button role="tab" aria-selected="false" data-t="t2">Compétences</button>
+        <button role="tab" aria-selected="false" data-t="t3">Combat</button>
+        <button role="tab" aria-selected="false" data-t="t4">Magie</button>
+        <button role="tab" aria-selected="false" data-t="t5">Artefacts</button>
+      </div>
+      <div class="tabpane" id="t1"><div class="tiles" id="c-carac"></div></div>
+      <div class="tabpane" id="t2" hidden><div class="tiles" id="c-comp"></div></div>
+      <div class="tabpane" id="t3" hidden><div class="tiles" id="c-combat"></div></div>
+      <div class="tabpane" id="t4" hidden><div class="tiles" id="c-magie"></div></div>
+      <div class="tabpane" id="t5" hidden><p class="note">Fumerolle (bague) · Maskul (masque) · 3e emplacement libre. En mode édition, chaque artefact a son type, ses bonus de caractéristiques, compétences, sorts, attaque, dégâts et CA, comme dans l'Excel.</p></div>
+    </div></div>
+  </section>
+
+  <!-- 4. TABLE DE JEU -->
+  <section class="view" id="v4" hidden>
+    <div class="table-jeu">
+      <div class="cadre"><div class="in bar">
+        <span class="nom">Spy</span><span class="note">Mage · Ombromancie</span>
+        <div class="grow"><div class="note num" id="t-pv"></div><div class="pv"><i id="t-pvbar"></i></div></div>
+        <span class="note num" id="t-sorts"></span>
+      </div></div>
+      <div><div class="groupe">Combat</div><div class="rack" id="t-combat"></div></div>
+      <div><div class="groupe">Magie</div><div class="rack" id="t-magie"></div></div>
+      <div><div class="groupe">Sauvegardes</div><div class="rack" id="t-saves"></div></div>
+      <div><div class="groupe">Compétences (d100 + bonus)</div><div class="rack" id="t-comp"></div></div>
+    </div>
+  </section>
+
+  <!-- 5. STATISTIQUES -->
+  <section class="view" id="v5" hidden>
+    <div class="page-title"><h2><span class="fl">❦</span>Spy · Statistiques<span class="fl">❦</span></h2><div class="sub">Données d'exemple, générées pour la maquette</div></div>
+    <div class="cadre" style="margin-top:20px"><div class="in" style="padding:22px">
+      <div class="filtres">
+        <label class="note" for="f-type">Type de jet</label>
+        <select class="edit" id="f-type"><option value="all">Tous les d100</option><option value="comp">Compétences</option><option value="save">Sauvegardes</option></select>
+        <label class="note" for="f-per">Période</label>
+        <select class="edit" id="f-per"><option>Depuis toujours</option><option>Event en cours</option><option>Dernière session</option></select>
+      </div>
+      <div class="stats-grid" id="s-tiles"></div>
+      <div class="deux" style="margin-top:22px">
+        <div style="min-width:0">
+          <div class="lbl">Répartition des résultats du dé (d100, avant bonus)</div>
+          <div class="histo" id="s-histo"></div>
+          <div class="note">Ligne pointillée : moyenne théorique (50,5). Survolez une barre pour le détail.</div>
+        </div>
+        <div style="min-width:0">
+          <div class="lbl">Combat</div>
+          <div class="lignes">
+            <div class="l"><span>Attaques lancées</span><b class="num">23</b></div>
+            <div class="l"><span>Attaques réussies</span><b class="num">14 · 61 %</b></div>
+            <div class="l"><span>Défenses réussies</span><b class="num">9 / 15 · 60 %</b></div>
+            <div class="l"><span>Égalités (votes · 1d2)</span><b class="num">2 · 1</b></div>
+            <div class="l"><span>Dégâts infligés · moyenne</span><b class="num">58 · 4,1</b></div>
+            <div class="l"><span>Dégâts subis</span><b class="num">37</b></div>
+            <div class="l"><span>Plus gros coup</span><b class="num">23 (sort majeur)</b></div>
+            <div class="l"><span>Adversaire favori</span><b>Nils · 5 V / 2 D</b></div>
+            <div class="l"><span>Objet le plus utilisé</span><b>Brise-garde ×4</b></div>
+          </div>
+          <div class="lbl" style="margin-top:16px">Magie</div>
+          <div class="lignes">
+            <div class="l"><span>Mineur · moyenne / DD</span><b class="num">15,8 / 39</b></div>
+            <div class="l"><span>Médian · moyenne / DD</span><b class="num">19,4 / 54</b></div>
+            <div class="l"><span>Majeur · lancers</span><b class="num">3</b></div>
+          </div>
+        </div>
+      </div>
+      <div class="lbl" style="margin-top:22px">Derniers jets</div>
+      <div class="scroll"><table class="t" id="s-last"></table></div>
+    </div></div>
+  </section>
+
+  <!-- DISCORD A -->
+  <section class="view" id="d1" hidden>
+    <div class="dc">
+      <div class="variante">A1. Fiche complète avec boutons<small>Commande /perso voir. Un clic lance le jet, sans retaper de commande.</small></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="cmd">Spy a utilisé <b>/perso voir</b></div>
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 21:04</time></div>
+        <div class="embed" style="border-color:#6b4a9a">
+          <div><span class="thumb"></span><div class="t">Spy</div><div class="d">Humain · Assassin · Mage · Ombromancie (Expert)</div></div>
+          <div class="fields">
+            <div><div class="fk">❤️ PV</div><div class="fv">22 / 22</div></div>
+            <div><div class="fk">🛡️ CA</div><div class="fv"><code>1d30</code></div></div>
+            <div><div class="fk">✨ Sorts</div><div class="fv">∞ · 5 · 1</div></div>
+            <div><div class="fk">FOR</div><div class="fv">30 (−10)</div></div>
+            <div><div class="fk">DEX</div><div class="fv">55 (0)</div></div>
+            <div><div class="fk">CON</div><div class="fv">50 (0)</div></div>
+            <div><div class="fk">INT</div><div class="fv">80 (+15)</div></div>
+            <div><div class="fk">SAG</div><div class="fv">50 (0)</div></div>
+            <div><div class="fk">CHA</div><div class="fv">40 (−5)</div></div>
+          </div>
+          <div class="foot">Fiche modifiable sur le site · chroniquesdutemps</div>
+        </div>
+        <div class="btns"><span class="p">⚔️ Arme courte</span><span class="p">✨ Mineur</span><span class="p">✨ Médian</span><span class="p">✨ Majeur</span><span>🛡️ CA</span></div>
+        <div class="btns"><span>Réflexe</span><span>Vigueur</span><span>Volonté</span><span>📜 Rappel des DD</span></div>
+        <div class="selectm"><span>🎯 Lancer une compétence…</span><span>⌄</span></div>
+      </div></div>
+
+      <div class="variante">A2. Carte de visite compacte<small>Pour /perso sans argument : juste l'essentiel et quatre boutons, moins de place dans le salon.</small></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 21:05</time></div>
+        <div class="embed" style="border-color:#6b4a9a">
+          <div class="t">Spy · ❤️ 22/22 · 🛡️ 1d30</div>
+          <div class="d">✨ Mineur <code>1d29</code> · Médian <code>1d37</code> ×5 · Majeur <code>1d41</code> ×1</div>
+        </div>
+        <div class="btns"><span class="p">⚔️ Attaquer</span><span class="p">✨ Sort</span><span>🛡️ Sauvegarde</span><span>🎯 Compétence</span></div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- DISCORD B -->
+  <section class="view" id="d2" hidden>
+    <div class="dc">
+      <div class="variante">B1. Embed doré<small>Le message apparaît d'abord en « 🎲 Les dés roulent… » puis se met à jour. Sans phrase d'ambiance, même rendu depuis le site ou Discord. Pas de verdict hors combat.</small></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="cmd">Spy a cliqué sur <b>✨ Médian</b></div>
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 21:07</time></div>
+        <div class="embed">
+          <div class="t">✨ Spy lance un sort médian</div>
+          <div class="big">31</div>
+          <div class="d">Jet d'attaque <code>1d37</code> → <b>31</b> · DD du sort : <b>&gt; 54</b></div>
+                    <div class="foot">Sorts médians restants : 4 / 5 · lancé depuis Discord</div>
+        </div>
+        <div class="btns"><span class="g">💥 Lancer les dégâts (3d7)</span><span>🔁 Try again</span><span style="background:#8e2f25">💀 Échec critique</span></div>
+      </div></div>
+
+      <div class="variante">B2. Une seule ligne<small>Pour les salons d'event très actifs.</small></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 21:08</time></div>
+        <div>🎲 <b>Spy</b> · Discrétion <code>1d100+27</code> → <b>64</b> + 27 = <b>91</b></div>
+      </div></div>
+
+      <div class="variante">B3. Parchemin coloré<small>Bloc de code ANSI, lisible partout, même sur mobile.</small></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 21:09</time></div>
+<div class="ansi"><span class="y">⚔  Spy — Arme courte</span>
+<span class="gr">────────────────────────</span>
+Attaque  <span class="c">1d4+2</span>  [3] + 2  = <span class="w">5</span>
+Dégâts   <span class="c">1d4</span>    [4]      = <span class="w">4</span></div>
+      </div></div>
+
+      <div class="variante">B4. Lancé depuis le site<small>Même rendu, avec une mention de l'origine.</small></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 21:10</time></div>
+        <div class="embed" style="border-color:#7d7f86">
+          <div class="t">🛡️ Spy · Jet de Volonté</div>
+          <div class="d"><code>1d100+0</code> → <b>12</b></div>
+          <div class="foot">🌐 lancé depuis le site</div>
+        </div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- DISCORD C -->
+  <section class="view" id="d3" hidden>
+    <div class="dc">
+      <div class="variante">C1. Tableau des degrés de difficulté<small>Commande /perso dd nom:spy, ou bouton 📜 sous la fiche, ou bouton sur le site.</small></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 21:12</time></div>
+        <div class="embed" style="border-color:#6b4a9a">
+          <div class="t">📜 Rappel des DD de magie · Spy</div>
+          <div class="d">Énergie ténébreuse · Magie des Ténèbres · Ombromancie · Expert (15 ans)</div>
+          <div class="fields">
+            <div><div class="fk">Sort mineur</div><div class="fv">DD <b>&gt; 39</b><br>Jet <code>1d29</code><br>Dégâts <code>2d5</code><br>∞ lancers</div></div>
+            <div><div class="fk">Sort médian</div><div class="fv">DD <b>&gt; 54</b><br>Jet <code>1d37</code><br>Dégâts <code>3d7</code><br>4 / 5 lancers</div></div>
+            <div><div class="fk">Sort majeur</div><div class="fv">DD <b>&gt; 69</b><br>Jet <code>1d41</code><br>Dégâts <code>5d9</code><br>1 / 1 lancer</div></div>
+          </div>
+        </div>
+      </div></div>
+
+      <div class="variante">C2. Version groupe (MJ)<small>Option tous:oui : tous les personnages de l'event sur un seul message.</small></div>
+      <div class="msg"><div class="av">K</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 21:13</time></div>
+<div class="ansi"><span class="y">📜 DD de magie — Event en cours</span>
+<span class="gr">Perso        Mineur  Médian  Majeur</span>
+Spy          <span class="w">&gt; 39</span>    <span class="w">&gt; 54</span>    <span class="w">&gt; 69</span>
+Gabrielle    <span class="w">&gt; …</span>     <span class="w">&gt; …</span>     <span class="w">&gt; …</span>
+<span class="gr">(seuls les persos avec un niveau de magie)</span></div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- DISCORD D -->
+  <section class="view" id="d4" hidden>
+    <div class="dc">
+      <div class="variante">D1. Un personnage<small>Depuis le site ou /perso relancer. PV au maximum, sorts rechargés.</small></div>
+      <div class="msg"><div class="av">K</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 18:00</time></div>
+        <div class="embed" style="border-color:#6fae7a">
+          <div class="t">↻ Nouvelle session pour Spy</div>
+          <div class="d">❤️ PV : 9 → <b>22 / 22</b><br>✨ Sorts médians : 1 → <b>5 / 5</b> · majeurs : 0 → <b>1 / 1</b></div>
+          <div class="foot">Relancé par Agent K</div>
+        </div>
+      </div></div>
+      <div class="variante">D2. Toute la table (MJ)<small>Une seule annonce pour tous les personnages de l'event.</small></div>
+      <div class="msg"><div class="av">K</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 18:00</time></div>
+        <div class="embed" style="border-color:#6fae7a">
+          <div class="t">🌅 Une nouvelle session commence</div>
+          <div class="d">Les blessures se referment et l'énergie revient. 11 personnages sont remis à neuf : PV au maximum, sorts rechargés.</div>
+        </div>
+      </div></div>
+    </div>
+  </section>
+  <!-- DISCORD E : COMBAT -->
+  <section class="view" id="d5" hidden>
+    <div class="dc">
+      <div class="variante">E1. Le défi<small>L'attaquant lance /attaque. Seul le joueur de la cible peut choisir un objet de son inventaire et accepter.</small></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="cmd">Spy a utilisé <b>/attaque type:Arme courte cible:Nils hasard:Brise-garde</b></div>
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 21:20</time></div>
+        <div class="embed" style="border-color:var(--sang)">
+          <div class="t">⚔️ Spy attaque Nils</div>
+          <div class="d">Arme courte · attaque <code>1d4+2</code><br>Objet de hasard : <b>🛡️💥 Brise-garde</b> (la garde sera ignorée)</div>
+          <div class="d">@Nils, à toi de répondre.</div>
+        </div>
+        <div class="selectm"><span>🎒 Utiliser un objet… (facultatif)</span><span>⌄</span></div>
+        <div class="embed" style="border-color:#4e5058;max-width:420px;padding:8px 12px">
+          <div class="d">🥛 Verre à moitié vide · ×1<br>⚖️ Ça ne compte que pour un · ×2<br><span style="color:var(--dc-doux)">Seuls les objets du sac de Nils sont proposés.</span></div>
+        </div>
+        <div class="btns"><span class="g">🛡️ Accepter l'attaque</span><span>Refuser</span></div>
+      </div></div>
+
+      <div class="variante">E2. L'attaque passe<small>ATK &gt; DEF : le bot lance aussitôt les dégâts de l'attaquant.</small></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 21:21</time></div>
+        <div class="embed" style="border-color:var(--vert)">
+          <div class="t">⚔️ Spy → Nils</div>
+          <div class="fields" style="grid-template-columns:1fr 1fr">
+            <div><div class="fk">Attaque</div><div class="fv"><code>1d4+2</code> → <b>6</b></div></div>
+            <div><div class="fk">Défense (CA)</div><div class="fv"><code>1d22</code> → <b>4</b></div></div>
+          </div>
+          <div class="d">L'attaque surpasse la défense. <b>3 points de dégâts.</b></div>
+          <div class="foot">Dégâts <code>1d4</code> → 3 · PV de Nils : 31 → 28</div>
+        </div>
+      </div></div>
+
+      <div class="variante">E3. L'attaque échoue<small>ATK &lt; DEF : une seule phrase, sans RP.</small></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 21:22</time></div>
+        <div class="embed" style="border-color:#7d7f86">
+          <div class="t">⚔️ Spy → Nils</div>
+          <div class="d">Attaque <code>1d4+2</code> → <b>3</b> · Défense <code>1d22</code> → <b>17</b></div>
+          <div class="d">L'attaque ne surpasse pas la défense.</div>
+        </div>
+      </div></div>
+
+      <div class="variante">E4. Égalité<small>ATK = DEF, ou les deux au maximum naturel. Chaque joueur vote ; en cas de désaccord, le bot lance 1d2 (1 : l'attaque passe ; 2 : elle échoue).</small></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 21:23</time></div>
+        <div class="embed" style="border-color:var(--or)">
+          <div class="t">⚖️ Égalité : 5 contre 5</div>
+          <div class="d">Spy : <i>en attente</i> · Nils : <b>avantage défenseur</b></div>
+        </div>
+        <div class="btns"><span class="p">Avantage attaquant</span><span>Avantage défenseur</span></div>
+      </div></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 21:24</time></div>
+        <div>⚖️ Désaccord : <code>1d2</code> → <b>1</b>. L'attaque passe. Dégâts <code>1d4</code> → <b>2</b>.</div>
+      </div></div>
+
+      <div class="variante">E5. Maximum naturel<small>Le dé de l'attaquant tombe sur sa face maximale : dégâts maximum de l'arme. Si c'est la défense, l'attaque échoue d'office.</small></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 21:25</time></div>
+        <div class="embed" style="border-color:var(--sang)">
+          <div class="t">💥 Spy → Nils · maximum naturel</div>
+          <div class="d">Attaque <code>1d4+2</code> → <b>4</b> + 2 = 6 · Défense <code>1d22</code> → <b>11</b></div>
+          <div class="d">L'attaque surpasse la défense. <b>4 points de dégâts</b> (maximum de l'arme).</div>
+        </div>
+      </div></div>
+    </div>
+  </section>
+  <!-- DISCORD F : SESSION & XP -->
+  <section class="view" id="d6" hidden>
+    <div class="dc">
+      <div class="variante">F1. Ouverture de session<small>/session ouvrir mj:@Kyanite. Le MJ dirige et ne joue pas de personnage.</small></div>
+      <div class="msg"><div class="av">K</div><div style="min-width:0">
+        <div class="cmd">Kelora a utilisé <b>/session ouvrir mj:@Kyanite</b></div>
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 20:30</time></div>
+        <div class="embed">
+          <div class="t">🎲 La session s'ouvre</div>
+          <div class="d">Maître du jeu : <b>Kyanite</b><br>Table : Spy · Nils · Gabrielle</div>
+          <div class="foot">Rejoindre : /session rejoindre, ou lancer un premier jet</div>
+        </div>
+        <div class="btns"><span class="p">Rejoindre la table</span></div>
+      </div></div>
+
+      <div class="variante">F2. Objet utilisé hors combat<small>Menu « Utiliser un objet » avant le jet, Try again sous le résultat.</small></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 20:41</time></div>
+        <div class="embed">
+          <div class="t">🎯 Spy · Discrétion</div>
+          <div class="big">97</div>
+          <div class="d">⚖️ Ça ne compte que pour un : <code>1d100</code> → 41 et <b>70</b>, on garde 70 · + 27 = <b>97</b></div>
+        </div>
+        <div class="btns"><span>🔁 Try again (×1)</span></div>
+      </div></div>
+
+      <div class="variante">F2b. Échec critique joué par un autre joueur<small>Le bouton apparaît sous chaque jet. Seuls les autres joueurs de la session qui en possèdent un peuvent cliquer, pendant 30 secondes. Le jet frappé ne peut plus être relancé.</small></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 20:46</time></div>
+        <div class="embed">
+          <div class="t">🎯 Spy · Perception</div>
+          <div class="big">84</div>
+          <div class="d"><code>1d100</code> → <b>84</b> + 0 = <b>84</b></div>
+        </div>
+        <div class="btns"><span>🔁 Try again</span><span style="background:#8e2f25">💀 Échec critique</span></div>
+      </div></div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="cmd">Le même message, après le clic de Nils</div>
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 20:46</time></div>
+        <div class="embed" style="border-color:var(--sang)">
+          <div class="t">🎯 Spy · Perception</div>
+          <div class="big">1</div>
+          <div class="d"><s>84</s> → 💀 Échec critique joué par <b>Nils</b> : <code>1d100</code> → <b>1</b> + 0 = <b>1</b></div>
+          <div class="foot">Ce jet ne peut plus être relancé.</div>
+        </div>
+      </div></div>
+
+      <div class="variante">F3. Clôture et XP<small>/session clore. Le MJ distribue l'XP de personnage (distincte de l'XP Dranig) sur le site ou avec /xp donner.</small></div>
+      <div class="msg"><div class="av">K</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 23:05</time></div>
+        <div class="embed">
+          <div class="t">📜 Fin de session · dirigée par Kyanite</div>
+          <div class="fields">
+            <div><div class="fk">Spy</div><div class="fv">+35 XP<br><span style="color:var(--dc-doux);font-size:13px">présence, belle scène</span></div></div>
+            <div><div class="fk">Nils</div><div class="fv">+30 XP<br><span style="color:var(--dc-doux);font-size:13px">présence, combat remporté</span></div></div>
+            <div><div class="fk">Gabrielle</div><div class="fv">+25 XP<br><span style="color:var(--dc-doux);font-size:13px">présence, objectif</span></div></div>
+          </div>
+          <div class="foot">XP de MJ : +15 pour le personnage choisi par Kyanite · 61 jets, 4 combats</div>
+        </div>
+      </div></div>
+
+      <div class="variante">F4. Montée de niveau</div>
+      <div class="msg"><div class="av">S</div><div style="min-width:0">
+        <div class="who">CDT_Scrib<span class="bot">APP</span><time>Aujourd'hui à 23:05</time></div>
+        <div class="embed" style="border-color:var(--or-pale)">
+          <div class="t">✨ Spy atteint le niveau 5</div>
+          <div class="d">Nouvelle spécialisation disponible. À choisir sur le site, dans la fiche.</div>
+        </div>
+      </div></div>
+    </div>
+  </section>
+
+</div>
+
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+const C=[["Force",40,30,-10],["Dextérité",60,55,0],["Constitution",55,50,0],["Intelligence",60,80,15],["Sagesse",55,50,0],["Charisme",30,40,-5]];
+const S=[["Acrobaties",10],["Dressage",-10],["Arcanes",55,1],["Athlétisme",-10],["Tromperie",0],["Histoire",20],["Intimidation",0],["Investigation",35,1],["Médecine",-10],["Nature",5],["Perception",0],["Perspicacité",5],["Représentation",-5],["Persuasion",-5],["Religion",15],["Escamotage",10],["Discrétion",27,1],["Survie",-10]];
+const SAVES=[["Réflexe","1d100+0"],["Vigueur","1d100+0"],["Volonté","1d100+0"]];
+const SORTS=[["Sort mineur","1d29","> 39","2d5",Infinity,Infinity],["Sort médian","1d37","> 54","3d7",5,5],["Sort majeur","1d41","> 69","5d9",1,1]];
+const st={pv:22,pvMax:22,deg:13,edition:false};
+const sgn=n=>n>0?"+"+n:n<0?"−"+Math.abs(n):"0";
+const cls=n=>n>0?"pos":n<0?"neg":"";
+const R=(f,k)=>`<button class="roll" type="button" data-f="${f}" data-k="${k}">${f}</button>`;
+const left=s=>s[4]===Infinity?"∞":`${s[5]} / ${s[4]}`;
+function pvTxt(){return `${st.pv-st.deg} / ${st.pvMax} PV`}
+function render(){
+  const ed=st.edition;
+  const val=(c)=>ed?`<input class="edit" id="e-${c[0]}" type="number" min="30" max="70" value="${c[1]}" aria-label="${c[0]} (répartition)">`:c[2];
+  document.getElementById("g-carac").innerHTML=C.map(c=>`<div class="med"><div class="rond">${val(c)}<span class="mod ${cls(c[3])}">${sgn(c[3])}</span></div><div class="n">${c[0]}</div></div>`).join("");
+  document.getElementById("g-points").innerHTML=ed?"Points restants : <b>0</b> / 300 · entre 30 et 70 par caractéristique · race, métier et classe s'ajoutent ensuite":"Répartition 300 points, total final après race, métier, classe et artefacts.";
+  const comp=s=>`<div class="l"><span>${s[0]}${s[2]?'<span class="spe">★</span>':''}</span>${ed?`<input type="checkbox" aria-label="Spécialisation ${s[0]}" ${s[2]?"checked":""}>`:""}${R("1d100"+(s[1]>=0?"+":"")+s[1],s[0])}</div>`;
+  document.getElementById("g-comp").innerHTML=S.map(comp).join("");
+  document.getElementById("p-comp").innerHTML=S.map(comp).join("");
+  ["g-pv","p-pv","c-pv","t-pv"].forEach(i=>document.getElementById(i).textContent=pvTxt());
+  ["g-pvbar","c-pvbar","t-pvbar"].forEach(i=>document.getElementById(i).style.width=((st.pv-st.deg)/st.pvMax*100)+"%");
+  const saves=SAVES.map(s=>`<div class="l"><span>${s[0]}</span>${R(s[1],s[0])}</div>`).join("");
+  document.getElementById("g-saves").innerHTML=saves; document.getElementById("p-saves").innerHTML=saves;
+  const arme=ed?`<select class="edit" id="e-arme" aria-label="Arme"><option>Arme courte</option><option>Arme tranchante 1M</option><option>Arc</option><option>Pas d'armes</option></select>`:"Arme courte";
+  document.getElementById("g-armes").innerHTML=`<tr><th>Arme</th><th>Attaque</th><th>Dégâts</th><th>Propriété</th></tr><tr><td>${arme} <span class="spe">maîtrisée</span></td><td>${R("1d4+2","Attaque arme courte")}</td><td>${R("1d4","Dégâts arme courte")}</td><td class="note">Légère · action bonus</td></tr>`;
+  document.getElementById("g-sorts").innerHTML=`<tr><th>Sort</th><th>Jet</th><th>DD</th><th>Dégâts</th><th>Lancers</th></tr>`+SORTS.map(s=>`<tr><td>${s[0]}</td><td>${R(s[1],s[0])}</td><td>${s[2]}</td><td>${R(s[3],"Dégâts "+s[0].toLowerCase())}</td><td class="num">${left(s)}</td></tr>`).join("");
+  document.getElementById("p-carac").innerHTML=C.map(c=>`<div class="med"><div class="rond">${val(c)}<span class="mod ${cls(c[3])}">${sgn(c[3])}</span></div><div class="n">${c[0].slice(0,3).toUpperCase()}</div></div>`).join("");
+  document.getElementById("p-att").innerHTML=`<tr><th>Nom</th><th>Jet</th><th>Dégâts</th><th>DD</th></tr><tr><td>Arme courte</td><td>${R("1d4+2","Attaque arme courte")}</td><td>${R("1d4","Dégâts arme courte")}</td><td class="note">—</td></tr>`+SORTS.map(s=>`<tr><td>${s[0]} <span class="note">${left(s)}</span></td><td>${R(s[1],s[0])}</td><td>${R(s[3],"Dégâts "+s[0].toLowerCase())}</td><td>${s[2]}</td></tr>`).join("");
+  document.getElementById("c-carac").innerHTML=C.map(c=>`<div class="tile"><span class="k">${c[0]}</span><span class="v">${val(c)} <span class="${cls(c[3])}" style="font-size:15px">${sgn(c[3])}</span></span><span class="note">Répartition ${c[1]}</span></div>`).join("");
+  document.getElementById("c-comp").innerHTML=S.map(s=>`<div class="tile"><span class="k">${s[0]}${s[2]?' ★':''}</span><span class="v ${cls(s[1])}">${sgn(s[1])}</span>${R("1d100"+(s[1]>=0?"+":"")+s[1],s[0])}</div>`).join("");
+  document.getElementById("c-combat").innerHTML=`<div class="tile"><span class="k">Classe d'armure</span><span class="v">Étoffe enchantée</span>${R("1d30","Classe d'armure")}</div><div class="tile"><span class="k">Arme courte · attaque</span><span class="v">+2</span>${R("1d4+2","Attaque arme courte")}</div><div class="tile"><span class="k">Arme courte · dégâts</span><span class="v">d4</span>${R("1d4","Dégâts arme courte")}</div>`+SAVES.map(s=>`<div class="tile"><span class="k">${s[0]}</span><span class="v">+0</span>${R(s[1],s[0])}</div>`).join("");
+  document.getElementById("c-magie").innerHTML=SORTS.map(s=>`<div class="tile"><span class="k">${s[0]} · DD ${s[2]}</span><span class="v">${left(s)}</span>${R(s[1],s[0])} ${R(s[3],"Dégâts "+s[0].toLowerCase())}</div>`).join("");
+  const de=(f,k,sub)=>`<button class="de" type="button" data-f="${f}" data-k="${k}"><span class="k">${k}</span><span class="f">${f}</span>${sub?`<span class="note">${sub}</span>`:""}</button>`;
+  document.getElementById("t-combat").innerHTML=de("1d4+2","Attaque arme courte")+de("1d4","Dégâts arme courte")+de("1d30","Classe d'armure");
+  document.getElementById("t-magie").innerHTML=SORTS.map(s=>de(s[1],s[0],"DD "+s[2]+" · "+left(s))+de(s[3],"Dégâts "+s[0].slice(5))).join("");
+  document.getElementById("t-saves").innerHTML=SAVES.map(s=>de(s[1],s[0])).join("");
+  document.getElementById("t-comp").innerHTML=S.map(s=>de("1d100"+(s[1]>=0?"+":"")+s[1],s[0])).join("");
+  document.getElementById("t-sorts").textContent="Sorts : ∞ · "+left(SORTS[1])+" · "+left(SORTS[2]);
+}
+function roll(f){const m=f.match(/(\d+)d(\d+)([+-]\d+)?/);const n=+m[1],d=+m[2],b=+(m[3]||0);let t=0,ds=[];for(let i=0;i<n;i++){const r=d>0?1+Math.floor(Math.random()*d):0;ds.push(r);t+=r}return{ds,b,tot:t+b}}
+let tt;
+function toast(html){const el=document.getElementById("toast");el.innerHTML=html;el.hidden=false;clearTimeout(tt);tt=setTimeout(()=>el.hidden=true,3600)}
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-f]");
+  if(b){const r=roll(b.dataset.f);const k=b.dataset.k;
+    const s=SORTS.find(x=>x[0]===k); if(s&&s[4]!==Infinity){ if(s[5]>0) s[5]--; render(); }
+    toast(`<b>${r.tot}</b><span>${k} · <code>${b.dataset.f}</code> [${r.ds.join(", ")}]${r.b?(r.b>0?" + ":" − ")+Math.abs(r.b):""}<br><span class="note">Envoyé dans le salon de jeu sur Discord</span></span>`);return}
+  const v=e.target.closest(".switch button");
+  if(v){document.querySelectorAll(".switch button").forEach(x=>x.setAttribute("aria-pressed",x===v));document.querySelectorAll(".view").forEach(x=>x.hidden=x.id!==v.dataset.v);
+    document.getElementById("mode").hidden=v.dataset.v.startsWith("d");try{localStorage.setItem("cdt-v",v.dataset.v)}catch(_){}return}
+  const m=e.target.closest("[data-m]");
+  if(m){st.edition=m.dataset.m==="edition";document.querySelectorAll("[data-m]").forEach(x=>x.classList.toggle("on",x===m));render();return}
+  if(e.target.id==="relance"){st.deg=0;SORTS.forEach(s=>s[5]=s[4]);render();toast(`<b>↻</b><span>Nouvelle session : PV au maximum, sorts rechargés.<br><span class="note">Annonce envoyée sur Discord (maquette D)</span></span>`);return}
+  if(e.target.id==="rappel"){toast(`<b>✦</b><span>DD de magie de Spy : mineur &gt; 39 · médian &gt; 54 · majeur &gt; 69<br><span class="note">Envoyé sur Discord (maquette C)</span></span>`);return}
+  if(e.target.closest("#de-nav")){toast(`<b>⚄</b><span>Ouvre la fiche de jeu de Spy.<br><span class="note">Sans fiche, le dé est gris et propose d'en créer une.</span></span>`);return}
+  const t=e.target.closest("[role=tab]");
+  if(t){document.querySelectorAll("[role=tab]").forEach(x=>x.setAttribute("aria-selected",x===t));document.querySelectorAll(".tabpane").forEach(p=>p.hidden=p.id!==t.dataset.t)}
+});
+// --- Statistiques (exemple) ---
+(function(){
+  let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646};
+  const comps=S.map(x=>x[0]);
+  const rolls=[];for(let i=0;i<142;i++){const t=i%5===0?"save":"comp";const k=t==="save"?SAVES[i%3][0]:comps[Math.floor(rnd()*comps.length)];
+    const b=t==="save"?0:(S.find(x=>x[0]===k)[1]);const d=1+Math.floor(rnd()*100);rolls.push({t,k,d,b,tot:d+b,src:rnd()<.4?"site":"Discord"})}
+  function draw(){
+    const f=document.getElementById("f-type").value;const r=rolls.filter(x=>f==="all"||x.t===f);
+    const ds=r.map(x=>x.d).sort((a,b)=>a-b);const n=ds.length;const moy=ds.reduce((a,b)=>a+b,0)/n;
+    const med=n%2?ds[(n-1)/2]:(ds[n/2-1]+ds[n/2])/2;const sd=Math.sqrt(ds.reduce((a,b)=>a+(b-moy)**2,0)/n);
+    const fr=v=>v.toLocaleString("fr-FR",{maximumFractionDigits:1});
+    const luck=moy-50.5;
+    const tiles=[["Jets",n,"dont "+r.filter(x=>x.src==="site").length+" depuis le site"],["Moyenne",fr(moy),"théorique 50,5"],["Médiane",fr(med),""],["Écart-type",fr(sd),""],["Minimum",ds[0],""],["Maximum",ds[n-1],""],["Indice de chance",(luck>=0?"+":"−")+fr(Math.abs(luck)),luck>=0?"au-dessus de l'attendu":"en dessous de l'attendu"],["100 naturels",ds.filter(x=>x===100).length,"faces minimales : "+ds.filter(x=>x===1).length]];
+    document.getElementById("s-tiles").innerHTML=tiles.map(t=>`<div class="stat"><span class="k">${t[0]}</span><span class="v">${t[1]}</span><span class="s">${t[2]}</span></div>`).join("");
+    const bins=Array(10).fill(0);ds.forEach(d=>bins[Math.min(9,Math.floor((d-1)/10))]++);
+    const W=520,H=220,pl=34,pb=26,pt=10,max=Math.max(...bins),top=Math.ceil(max/5)*5;const bw=(W-pl-8)/10;
+    const y=v=>pt+(H-pt-pb)*(1-v/top);
+    let g="";for(let v=0;v<=top;v+=5){g+=`<line x1="${pl}" x2="${W-4}" y1="${y(v)}" y2="${y(v)}" stroke="#3a352a" stroke-width="1"/><text x="${pl-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="#a7a196">${v}</text>`}
+    const exp=n/10;g+=`<line x1="${pl}" x2="${W-4}" y1="${y(exp)}" y2="${y(exp)}" stroke="#e4c983" stroke-dasharray="4 4" stroke-width="1.5"/>`;
+    bins.forEach((c,i)=>{const x=pl+i*bw+1,h=y(0)-y(c);g+=`<path data-i="${i}" d="M${x} ${y(0)} V${y(c)+4} q0 -4 4 -4 H${x+bw-6} q4 0 4 4 V${y(0)} Z" fill="#c9a24c"/><rect data-i="${i}" x="${pl+i*bw}" y="${pt}" width="${bw}" height="${H-pt-pb}" fill="transparent"/><text x="${x+bw/2-1}" y="${H-8}" text-anchor="middle" font-size="11" fill="#a7a196">${i*10+1}–${i*10+10}</text>`});
+    const el=document.getElementById("s-histo");el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Histogramme des résultats">${g}</svg><div class="tip" hidden></div>`;
+    const tip=el.querySelector(".tip");
+    el.querySelectorAll("rect[data-i]").forEach(rc=>{rc.addEventListener("mousemove",e=>{const i=+rc.dataset.i;const b=el.getBoundingClientRect();tip.hidden=false;tip.style.left=(e.clientX-b.left+10)+"px";tip.style.top=(e.clientY-b.top-30)+"px";tip.textContent=`${i*10+1} à ${i*10+10} : ${bins[i]} jets (${fr(bins[i]/n*100)} %)`});rc.addEventListener("mouseleave",()=>tip.hidden=true)});
+    document.getElementById("s-last").innerHTML=`<tr><th>Jet</th><th>Dé</th><th>Bonus</th><th>Total</th><th>Origine</th></tr>`+r.slice(-8).reverse().map(x=>`<tr><td>${x.k}</td><td class="num">${x.d}</td><td class="num">${sgn(x.b)}</td><td class="num"><b>${x.tot}</b></td><td class="note">${x.src}</td></tr>`).join("");
+  }
+  document.getElementById("f-type").addEventListener("change",draw);draw();
+})();
+
+render();
+try{const v=localStorage.getItem("cdt-v");if(v){const b=document.querySelector(`.switch [data-v="${v}"]`);b&&b.click()}}catch(_){}
+</script>

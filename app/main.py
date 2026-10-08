@@ -69,6 +69,17 @@ async def startup():
     async def on_ready():
         log.info("Économie connectée à Discord en tant que %s", gateway.user)
         synchro_listes()
+        # /session (sessions de jeu des fiches) : déclarée ici, sans toucher aux autres commandes ni relancer
+        # scripts/register_commands.py à la main.
+        try:
+            from scripts.register_commands import COMMANDS
+            session = next(c for c in COMMANDS if c["name"] == "session")
+            if os.getenv("GUILD_ID"):
+                await gateway.http.upsert_guild_command(DISCORD_APPLICATION_ID, os.getenv("GUILD_ID"), session)
+            else:
+                await gateway.http.upsert_global_command(DISCORD_APPLICATION_ID, session)
+        except Exception:
+            log.exception("Impossible de déclarer la commande /session")
 
     asyncio.create_task(gateway.start(DISCORD_TOKEN))
     asyncio.create_task(economie.boucle_roles_temporaires())
@@ -84,6 +95,9 @@ async def startup():
     # Nouveaux objets : ligne au Receleur et rappel à Kyanite de fixer le prix de reprise.
     from app import receleur
     asyncio.create_task(receleur.surveiller_nouveaux_objets(economie))
+    # Jets de dés lancés depuis les fiches de jeu du site : publiés dans le salon choisi (#random ou salon perso).
+    from app import jets_site
+    asyncio.create_task(jets_site.boucle(gateway, pocketbase))
 
 
 @app.on_event("shutdown")

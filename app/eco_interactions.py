@@ -10,12 +10,13 @@ import logging
 import discord
 import httpx
 
-from app import drop, eco_actions, eco_vues, loteries, receleur, ros_boutique
+from app import drop, eco_actions, eco_vues, loteries, receleur, ros_boutique, sessions_jeu
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
-             "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie", "recompense"}
+             "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
+             "session", "recompense"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -158,6 +159,22 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
         if nom == "dropadmin":
             ok, txt = await drop.lancer_admin(eco, membre, opt.get("objet"), int(opt.get("quantite") or 1), int(opt.get("or") or 0), int(opt.get("duree") or 0), payload.get("channel_id"))
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+        if nom == "session":
+            # Sessions de jeu des fiches du site (app/sessions_jeu.py), annoncées dans le salon.
+            sous = data["options"][0]
+            o = _options(sous)
+            if sous["name"] == "ouvrir":
+                mj = await _membre(eco, payload, o["mj"]) if o.get("mj") else None
+                if o.get("mj") and not mj:
+                    return await _modifier(app_id, jeton, [eco_vues.erreur("Membre introuvable.")])
+                _, embed = await sessions_jeu.ouvrir(eco, membre, mj, o.get("event"))
+            elif sous["name"] == "rejoindre":
+                _, embed = await sessions_jeu.rejoindre(eco, membre, o.get("perso"))
+            elif sous["name"] == "clore":
+                _, embed = await sessions_jeu.clore(eco, membre)
+            else:
+                embed = await sessions_jeu.voir(eco)
+            return await _modifier(app_id, jeton, [embed])
         if nom == "loterie":
             sous = data["options"][0]
             ok, txt = await loteries.creer(eco, membre, _options(sous), payload.get("channel_id"))
@@ -194,7 +211,14 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             embed, comp = await _vue_echange(eco, e, membre, vers)
             return await _modifier(app_id, jeton, [embed], comp, contenu=vers.mention)
 
-    _en_fond(taches, travail)
+    async def travail_sur():
+        try:
+            await travail()
+        except Exception:
+            log.exception("Erreur pendant /%s", nom)
+            await _modifier(app_id, jeton, [eco_vues.erreur("Une erreur est survenue : préviens un admin avec l'heure de ta commande.")])
+
+    _en_fond(taches, travail_sur)
     return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie", "recompense") else {}}
 
 
@@ -381,6 +405,13 @@ async def _autocompletion(eco, payload) -> dict:
             choix = [{"name": n[:100], "value": i} for i, n in vus.items() if tape in n.lower()]
         else:
             choix = [{"name": eco.rostheim.nom_court(c)[:100], "value": c["id"]} for _d, c in couples if tape in eco.rostheim.nom_court(c).lower()]
+    elif focus["name"] == "perso" and data["name"] == "session":
+        membre = await _membre(eco, payload)
+        joueur = await eco.joueur_de(membre) if membre else None
+        for f in await sessions_jeu.mes_fiches(eco, joueur):
+            nom = ((f.get("expand") or {}).get("personnage") or {}).get("prenom") or "?"
+            if tape in nom.lower():
+                choix.append({"name": nom[:100], "value": f["id"]})
     elif focus["name"] == "recoit_objet":
         for o in await eco.pb.lister("eco_objets", "actif=true", tri="ordre"):
             if tape in o["nom"].lower():

@@ -44,7 +44,7 @@ async def retirer_objet(eco, joueur_id: str, objet_id: str, q: int, motif: str, 
         await eco.pb.supprimer("eco_inventaire", ligne["id"])
     else:
         await eco.pb.maj("eco_inventaire", ligne["id"], {"quantite": avant - q})
-    await eco.pb.creer("eco_mouvements", {"joueur": joueur_id, "objet": objet_id, "quantite": -q, "motif": motif, "note": note})
+    await eco.tracer_mouvement(joueur_id, objet_id, -q, motif, note)
 
 
 async def _deux_joueurs(eco, de: discord.Member, vers: discord.Member):
