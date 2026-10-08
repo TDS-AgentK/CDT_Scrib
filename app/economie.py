@@ -219,6 +219,8 @@ class Economie:
                 continue
             if m.get("portee") == "salons" and salon["id"] not in (m.get("salons") or []):
                 continue
+            if m.get("min_caracteres") and len(message.content) <= m["min_caracteres"]:
+                continue
             f_xp *= m.get("facteur_xp") or 1
             f_or *= m.get("facteur_or") or 1
 
@@ -429,12 +431,12 @@ class Economie:
         return sorted(l, key=cles.get(boutique.get("tri"), lambda a: (a.get("ordre") or 0, a.get("prix") or 0)))
 
     async def cmd_boutique(self, message: discord.Message, arg: str):
-        await message.reply("La boutique s'ouvre avec la commande **/boutique** (pages, tri, achat par bouton).", mention_author=False)
+        await message.reply("Les boutiques s'ouvrent avec la commande **/boutique** (pages, tri, achat par bouton).", mention_author=False)
 
     async def cmd_acheter(self, message: discord.Message, arg: str):
         cfg = await self.config()
         if not arg:
-            await message.reply(f"Indique l'article : {self.prefixe}acheter <numéro ou nom>, ou utilise le menu de {self.prefixe}boutique.", mention_author=False)
+            await message.reply("Les achats se font avec la commande **/boutique** (bouton « Acheter »).", mention_author=False)
             return
         # Numéro : dans la première boutique accessible qui le contient (même ordre que la boutique) ; sinon par nom.
         trouve = None
