@@ -115,18 +115,17 @@ class Rostheim:
             if await self._lieu_et_role(message, cmd, domaine):
                 await self.reponse_au_hasard(message, cmd)
             return True
+        type_ = cmd.get("type")
+        if type_ in ("boutique", "boite_a_role"):
+            await message.reply("Les boutiques de Rostheim s'ouvrent avec la commande **/boutique**.", mention_author=False)
+            return True
         joueur = await self._autorise(message, cmd, domaine)
         if not joueur:
             return True
-        type_ = cmd.get("type")
         if type_ == "gain":
             await self.gain(message, joueur, cmd, domaine)
         elif type_ in ("conversion_or", "conversion_xp"):
             await self.conversion(message, joueur, cmd, domaine)
-        elif type_ == "boutique":
-            await self.boutique(message, joueur, cmd, domaine, arg.strip())
-        elif type_ == "boite_a_role":
-            await self.boite_a_role(message, joueur, cmd, d["domaines"], arg.strip())
         else:
             log.info("Commande Rostheim « %s » (type %s) : rien à faire côté bot pour l'instant.", cmd.get("commande"), type_)
         return True
@@ -343,60 +342,6 @@ class Rostheim:
     async def _recompenses(self, domaine: dict | None) -> list[dict]:
         filtre = f'actif=true && domaine="{echapper(domaine["id"])}"' if domaine else "actif=true && toute_monnaie=true"
         return await self.pb.lister("ros_recompenses", filtre, tri="ordre")
-
-    async def boutique(self, message: discord.Message, joueur: dict, cmd: dict, domaine: dict, arg: str):
-        """??dépenser-<monnaie> : affiche la boutique du domaine ; avec un numéro, achète l'article."""
-        articles = await self._recompenses(domaine) + await self._recompenses(None)
-        if not arg:
-            lignes = [f'`{i}` **{a["libelle"]}** — {a.get("prix") or 0} {"(toute monnaie)" if a.get("toute_monnaie") else domaine.get("monnaie_nom")} · {a.get("portee")}'
-                      for i, a in enumerate(articles, 1)]
-            embed = discord.Embed(title=f'{domaine.get("nom")} — {domaine.get("monnaie_nom")}', description="\n".join(lignes)[:4096] or "—", color=0xC5A24F)
-            embed.set_footer(text=f'{self._nom(cmd)} <numéro>')
-            await message.channel.send(embed=embed)
-            return
-        if not arg.isdigit() or not 1 <= int(arg) <= len(articles):
-            await message.reply("Numéro d'article inconnu.", mention_author=False)
-            return
-        await self._acheter(message, joueur, domaine, articles[int(arg) - 1], cmd)
-
-    async def _acheter(self, message: discord.Message, joueur: dict, domaine: dict, article: dict, cmd: dict):
-        prix = article.get("prix") or 0
-        async with self.eco._verrou(message.author.id):
-            solde = await self._solde(joueur, domaine)
-            if (solde.get("monnaie") or 0) < prix:
-                await message.reply(f'Il faut {prix} {domaine.get("monnaie_nom")} (tu en as {solde.get("monnaie") or 0}).', mention_author=False)
-                return
-            # Rôle donné avant de débiter : en cas d'échec, rien n'est prélevé.
-            role = article["libelle"][len("Obtenir le rôle "):].strip() if article["libelle"].startswith("Obtenir le rôle ") else ""
-            if role:
-                echec = await self.eco.donner_role(message.author, joueur, None, role, 0)
-                if echec:
-                    await message.reply(f"Achat annulé, rien n'a été prélevé : {echec}.", mention_author=False)
-                    return
-            await self.pb.maj("ros_soldes", solde["id"], {"monnaie": solde["monnaie"] - prix})
-            if article.get("objet"):
-                await self.eco.ajouter_objet(joueur["id"], article["objet"], 1, "rostheim", article["libelle"])
-            await self._tracer(joueur, cmd, f'{cmd["commande"]} : {article["libelle"]}', domaine.get("monnaie_nom") or "", -prix, 0, message)
-        await message.reply(f'Acheté : **{article["libelle"]}** pour {prix} {domaine.get("monnaie_nom")}.', mention_author=False)
-
-    async def boite_a_role(self, message: discord.Message, joueur: dict, cmd: dict, domaines: list[dict], arg: str):
-        """Rôles des boutiques de domaine (« Obtenir le rôle … »), chacun payé dans la monnaie de son domaine."""
-        offres = []
-        for d in domaines:
-            for a in await self._recompenses(d):
-                if a["libelle"].startswith("Obtenir le rôle "):
-                    offres.append((d, a))
-        if not arg:
-            lignes = [f'`{i}` {a["libelle"][len("Obtenir le rôle "):]} — {a.get("prix") or 0} {d.get("monnaie_nom")}' for i, (d, a) in enumerate(offres, 1)]
-            embed = discord.Embed(title="Boîte à rôles", description="\n".join(lignes) or "—", color=0xC5A24F)
-            embed.set_footer(text=f'{self._nom(cmd)} <numéro>')
-            await message.channel.send(embed=embed)
-            return
-        if not arg.isdigit() or not 1 <= int(arg) <= len(offres):
-            await message.reply("Numéro inconnu.", mention_author=False)
-            return
-        d, a = offres[int(arg) - 1]
-        await self._acheter(message, joueur, d, a, cmd)
 
     # ------------------------------------------------------------ commande RP
 
