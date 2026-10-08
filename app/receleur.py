@@ -75,6 +75,16 @@ async def _mouvement(eco, joueur_id: str, objet_id: str, q: int, prix: int, sens
                                           "sens": sens, "date": _pb_date(datetime.now(timezone.utc)), "origine": origine})
 
 
+async def ajouter_stock(eco, objet_id: str, q: int):
+    """Ajoute des unités au stock du Receleur (crée sa ligne, sans prix, si l'objet n'y figure pas encore)."""
+    async with _verrou_stock:
+        ligne = await eco.pb.premier("rec_objets", f'objet="{echapper(objet_id)}"')
+        if ligne:
+            await eco.pb.maj("rec_objets", ligne["id"], {"stock": (ligne.get("stock") or 0) + q})
+        else:
+            await eco.pb.creer("rec_objets", {"objet": objet_id, "prix_reprise": 0, "prix_vente": 0, "stock": q, "actif": True})
+
+
 async def vendre(eco, membre: discord.Member, objet_id: str, q: int, origine: str) -> tuple[bool, str]:
     """Le joueur vend au Receleur."""
     if q <= 0:
@@ -154,7 +164,7 @@ async def vue(eco, membre: discord.Member) -> dict:
         return eco_vues.erreur(msg)
     cfg = await eco.config()
     objets = {o["id"]: o for o in await eco.pb.lister("eco_objets")}
-    lignes = [l for l in await eco.pb.lister("rec_objets", "actif=true") if objets.get(l.get("objet"))]
+    lignes = [l for l in await eco.pb.lister("rec_objets", "actif=true") if objets.get(l.get("objet")) and (l.get("prix_reprise") or l.get("prix_vente"))]
     lignes.sort(key=lambda l: objets[l["objet"]]["nom"].lower())
     texte = []
     for l in lignes:

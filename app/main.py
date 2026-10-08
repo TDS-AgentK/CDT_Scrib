@@ -77,6 +77,10 @@ async def startup():
     # Annonce quotidienne des anniversaires et décès des personnages (réglages : Économie › Anniversaires).
     from app import anniversaires
     asyncio.create_task(anniversaires.boucle(gateway, pocketbase))
+    # Drops d'objets non ramassés (rattrapage après redémarrage) et loteries admin (publication, tirage).
+    from app import drop, loteries
+    asyncio.create_task(drop.boucle(economie))
+    asyncio.create_task(loteries.boucle(economie))
 
 
 @app.on_event("shutdown")
