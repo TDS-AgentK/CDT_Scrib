@@ -2,7 +2,7 @@
 revend avec son propre stock. Réglages, prix, stocks et historique se gèrent sur le site (collections rec_*).
 
 - rec_reglages (cle « general ») : ouvert, ouverture_texte, changement_prix_texte, ventes_par_semaine
-- rec_statuts : rôle Discord → quota de reprises par semaine (le plus haut quota gagne)
+- rec_statuts : succès du site (champ succes) ou rôle Discord → quota de reprises par semaine (le plus haut gagne)
 - rec_objets : objet, prix_reprise (le joueur vend), prix_vente (le joueur achète), stock, actif
 - rec_mouvements : historique (sens « reprise » = le joueur vend, « vente » = le joueur achète)
 """
@@ -41,11 +41,21 @@ def _ferme(r: dict) -> str | None:
     return f"La boutique du Receleur n'est pas encore ouverte.{suite}"
 
 
-async def quota(eco, membre: discord.Member, r: dict) -> int:
-    """Nombre d'objets que ce membre peut vendre par semaine : le plus haut quota de ses statuts, sinon le quota général."""
+async def quota(eco, membre: discord.Member, joueur: dict, r: dict) -> int:
+    """Nombre d'objets que ce joueur peut vendre par semaine : le plus haut quota de ses statuts (succès du site détenu,
+    ou rôle Discord), sinon le quota général."""
     maxi = r.get("ventes_par_semaine") or 0
+    detenus = set()
     for s in await eco.pb.lister("rec_statuts", "actif=true"):
-        if eco._a_le_role(membre, s.get("role_id"), s.get("role_nom")):
+        if s.get("succes") and joueur.get("joueur"):
+            if s["succes"] not in detenus:
+                succes = await eco.pb.requete("GET", f'/api/collections/succes/records/{s["succes"]}')
+                if joueur["joueur"] in (succes.get("members") or []):
+                    detenus.add(s["succes"])
+            a_le_statut = s["succes"] in detenus
+        else:
+            a_le_statut = bool(s.get("role_id") or s.get("role_nom")) and eco._a_le_role(membre, s.get("role_id"), s.get("role_nom"))
+        if a_le_statut:
             maxi = max(maxi, s.get("ventes_par_semaine") or 0)
     return maxi
 
@@ -94,7 +104,7 @@ async def vendre(eco, membre: discord.Member, objet_id: str, q: int, origine: st
         return False, f"Le Receleur ne reprend pas **{objet['nom']}** pour le moment."
     cfg = await eco.config()
     async with eco._verrou(membre.id), _verrou_stock:
-        maxi, fait = await quota(eco, membre, r), await deja_vendu(eco, joueur["id"])
+        maxi, fait = await quota(eco, membre, joueur, r), await deja_vendu(eco, joueur["id"])
         reste = max(0, maxi - fait)
         if q > reste:
             return False, (f"Tu as déjà vendu {fait} objet(s) cette semaine sur {maxi} (du lundi au dimanche)."
@@ -168,7 +178,7 @@ async def vue(eco, membre: discord.Member) -> dict:
              "footer": {"text": f"Prix en {eco_vues.or_txt(cfg)} par objet. « reprend » = ce que tu reçois en vendant, « vend » = ce que tu paies."}}
     joueur = await eco.joueur_de(membre)
     if joueur:
-        maxi, fait = await quota(eco, membre, r), await deja_vendu(eco, joueur["id"])
+        maxi, fait = await quota(eco, membre, joueur, r), await deja_vendu(eco, joueur["id"])
         embed["fields"] = [{"name": "Tes ventes cette semaine", "value": f"{fait} / {maxi} (du lundi au dimanche)", "inline": True}]
     if r.get("changement_prix_texte"):
         embed.setdefault("fields", []).append({"name": "Prochain changement des prix", "value": r["changement_prix_texte"], "inline": True})
