@@ -119,6 +119,12 @@ class Rostheim:
         if type_ in ("boutique", "boite_a_role"):
             await message.reply("Les boutiques de Rostheim s'ouvrent avec la commande **/boutique**.", mention_author=False)
             return True
+        if type_ in TYPES_GAIN:
+            await message.reply("Les récompenses se réclament maintenant avec la commande **/recompense**.", mention_author=False)
+            return True
+        if type_ in TYPES_CONVERSION:
+            await message.reply("Les conversions en Or ou en XP se font maintenant dans **/boutique** (« Gagner 100 gold », « Gagner 50 XP »).", mention_author=False)
+            return True
         joueur = await self._autorise(message, cmd, domaine)
         if not joueur:
             return True
@@ -130,7 +136,7 @@ class Rostheim:
             log.info("Commande Rostheim « %s » (type %s) : rien à faire côté bot pour l'instant.", cmd.get("commande"), type_)
         return True
 
-    # ------------------------------------------------------------ commandes slash (/recompense, /convertir)
+    # ------------------------------------------------------------ commande slash /recompense
 
     @staticmethod
     def nom_court(cmd: dict) -> str:

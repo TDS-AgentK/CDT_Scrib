@@ -151,6 +151,8 @@ async def acheter(eco, membre: discord.Member, domaine_id: str, rec_id: str, pre
         if not sd or (sd.get("monnaie") or 0) < prix:
             return False, f'Il faut {prix} {monnaie} (vous en avez {(sd or {}).get("monnaie") or 0}).'
         if effet["type"] == "role":
+            if eco._a_le_role(membre, None, effet["nom"]):
+                return False, f'Vous avez déjà le rôle « {effet["nom"]} » : rien n\'a été prélevé.'
             echec = await eco.donner_role(membre, joueur, None, effet["nom"], 0)
             if echec:
                 return False, f"Achat annulé, rien n'a été prélevé : {echec}."
