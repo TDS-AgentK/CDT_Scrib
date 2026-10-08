@@ -126,13 +126,6 @@ COMMANDS = [
             {"type": 3, "name": "type", "description": "Action réalisée dans cette zone", "required": True, "autocomplete": True},
         ],
     },
-    {
-        "name": "convertir", "description": "Convertir la monnaie d'une zone de Rostheim en Or ou en XP",
-        "options": [
-            {"type": 3, "name": "zone", "description": "Zone dont vous convertissez la monnaie", "required": True, "autocomplete": True},
-            {"type": 3, "name": "type", "description": "Conversion (vers l'Or ou l'XP)", "required": True, "autocomplete": True},
-        ],
-    },
     {"name": "receleur", "description": "Voir ce que le Receleur reprend et vend, et vos ventes de la semaine", "options": []},
     {
         "name": "racheter", "description": "Acheter un objet au Receleur",

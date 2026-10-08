@@ -15,7 +15,7 @@ from app import drop, eco_actions, eco_vues, loteries, receleur
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
-             "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie", "recompense", "convertir"}
+             "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie", "recompense"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -162,7 +162,7 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             sous = data["options"][0]
             ok, txt = await loteries.creer(eco, membre, _options(sous), payload.get("channel_id"))
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
-        if nom in ("recompense", "convertir"):
+        if nom == "recompense":
             types = eco.rostheim_types(nom)
             ok, txt = await eco.rostheim.slash(membre, opt.get("type"), types, payload.get("channel_id"), _origine(payload))
             if not ok:
@@ -188,7 +188,7 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             return await _modifier(app_id, jeton, [embed], comp, contenu=vers.mention)
 
     _en_fond(taches, travail)
-    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie", "recompense", "convertir") else {}}
+    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie", "recompense") else {}}
 
 
 async def _vue_echange(eco, e: dict, de, vers, statut: str | None = None) -> tuple[dict, list]:
@@ -334,9 +334,9 @@ async def _autocompletion(eco, payload) -> dict:
                 if o and tape in o["nom"].lower():
                     suffixe = f" — reprise {reprises[o['id']]} Or" if reprises.get(o["id"]) else ""
                     choix.append({"name": f'{o["nom"]} (×{l["quantite"]}){suffixe}'[:100], "value": o["id"]})
-    elif data["name"] in ("recompense", "convertir") and focus["name"] in ("zone", "type"):
-        from app.rostheim import TYPES_CONVERSION, TYPES_GAIN
-        types = TYPES_GAIN if data["name"] == "recompense" else TYPES_CONVERSION
+    elif data["name"] == "recompense" and focus["name"] in ("zone", "type"):
+        from app.rostheim import TYPES_GAIN
+        types = TYPES_GAIN
         zone = next((o.get("value") for o in options if o["name"] == "zone"), None)
         couples = await eco.rostheim.actions(types, zone if focus["name"] == "type" else None)
         if focus["name"] == "zone":
