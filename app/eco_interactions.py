@@ -10,12 +10,12 @@ import logging
 import discord
 import httpx
 
-from app import eco_actions, eco_vues
+from app import eco_actions, eco_vues, receleur
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
-             "payer", "donner", "vendre", "utiliser", "echanger"}
+             "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -145,8 +145,13 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             ok, txt = await eco_actions.donner(eco, membre, vers, opt.get("objet"), int(opt.get("quantite") or 1)) if vers else (False, "Membre introuvable.")
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
         if nom == "vendre":
-            ok, txt = await eco_actions.vendre(eco, membre, opt.get("objet"), int(opt.get("quantite") or 1), _origine(payload))
+            ok, txt = await receleur.vendre(eco, membre, opt.get("objet"), int(opt.get("quantite") or 1), _origine(payload))
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+        if nom == "racheter":
+            ok, txt = await receleur.acheter(eco, membre, opt.get("objet"), int(opt.get("quantite") or 1), _origine(payload))
+            return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+        if nom == "receleur":
+            return await _modifier(app_id, jeton, [await receleur.vue(eco, membre)])
         if nom == "utiliser":
             salon = membre.guild.get_channel(int(payload["channel_id"])) if payload.get("channel_id") else None
             ok, txt = await eco_actions.utiliser(eco, membre, opt.get("objet"), salon)
@@ -165,7 +170,7 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             return await _modifier(app_id, jeton, [embed], comp, contenu=vers.mention)
 
     _en_fond(taches, travail)
-    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom == "vendre" else {}}
+    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur") else {}}
 
 
 async def _vue_echange(eco, e: dict, de, vers, statut: str | None = None) -> tuple[dict, list]:
@@ -278,15 +283,24 @@ async def _autocompletion(eco, payload) -> dict:
         return {"type": AUTOCOMPLETE, "data": {"choices": []}}
     tape = str(focus.get("value") or "").lower()
     choix = []
-    if focus["name"] in ("objet", "donne_objet"):
+    if focus["name"] == "objet" and data["name"] == "racheter":
+        objets = {o["id"]: o for o in await eco.pb.lister("eco_objets", "actif=true")}
+        for l in await eco.pb.lister("rec_objets", "actif=true && stock>0 && prix_vente>0"):
+            o = objets.get(l.get("objet"))
+            if o and tape in o["nom"].lower():
+                choix.append({"name": f'{o["nom"]} — {l["prix_vente"]} Or (stock {l["stock"]})'[:100], "value": o["id"]})
+    elif focus["name"] in ("objet", "donne_objet"):
         membre = await _membre(eco, payload)
         joueur = await eco.joueur_de(membre) if membre else None
         if joueur:
             lignes = await eco.pb.lister("eco_inventaire", f'joueur="{joueur["id"]}" && quantite>0', expand="objet")
+            reprises = {}
+            if data["name"] == "vendre":
+                reprises = {l.get("objet"): l.get("prix_reprise") for l in await eco.pb.lister("rec_objets", "actif=true && prix_reprise>0")}
             for l in lignes:
                 o = (l.get("expand") or {}).get("objet")
                 if o and tape in o["nom"].lower():
-                    suffixe = f" — revente {o.get('prix_revente')} Or" if data["name"] == "vendre" and o.get("prix_revente") else ""
+                    suffixe = f" — reprise {reprises[o['id']]} Or" if reprises.get(o["id"]) else ""
                     choix.append({"name": f'{o["nom"]} (×{l["quantite"]}){suffixe}'[:100], "value": o["id"]})
     elif focus["name"] == "recoit_objet":
         for o in await eco.pb.lister("eco_objets", "actif=true", tri="ordre"):

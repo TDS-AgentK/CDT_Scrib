@@ -113,9 +113,17 @@ COMMANDS = [
         ],
     },
     {
-        "name": "vendre", "description": "Revendre un objet de votre inventaire contre de l'Or",
+        "name": "vendre", "description": "Vendre un objet de votre inventaire au Receleur contre de l'Or",
         "options": [
             {"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True},
+            {"type": 4, "name": "quantite", "description": "Quantité (1 par défaut)", "required": False, "min_value": 1},
+        ],
+    },
+    {"name": "receleur", "description": "Voir ce que le Receleur reprend et vend, et vos ventes de la semaine", "options": []},
+    {
+        "name": "racheter", "description": "Acheter un objet au Receleur",
+        "options": [
+            {"type": 3, "name": "objet", "description": "Objet en vente chez le Receleur", "required": True, "autocomplete": True},
             {"type": 4, "name": "quantite", "description": "Quantité (1 par défaut)", "required": False, "min_value": 1},
         ],
     },
