@@ -61,21 +61,30 @@
     "arcanes_div": 200,
     "dd_base": 10,
     "dd_mult": 1.1,
-    "des_degats": 2
+    "des_degats": 2,
+    "degats_arcanes_div": 400,
+    "degats_arcanes_plus": 1,
+    "degats_div": 4
    },
    "median": {
     "jet_bonus": 10,
     "arcanes_div": 100,
     "dd_base": 20,
     "dd_mult": 1.2,
-    "des_degats": 3
+    "des_degats": 3,
+    "degats_arcanes_div": 100,
+    "degats_arcanes_plus": 0.6,
+    "degats_div": 3
    },
    "majeur": {
     "jet_bonus": 20,
     "arcanes_div": 400,
     "dd_base": 30,
     "dd_mult": 1.25,
-    "des_degats": 5
+    "des_degats": 5,
+    "degats_arcanes_div": 400,
+    "degats_arcanes_plus": 1,
+    "degats_div": 3
    }
   },
   "artefacts_max": 3

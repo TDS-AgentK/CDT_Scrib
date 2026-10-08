@@ -95,13 +95,13 @@ export function calculer(fiche, regles) {
       degats: de(nbDes, faceDeg, somme((a) => a.sorts_degats?.[k])),
       lancers: niveau.lancers[k],
     });
+    const tier = (k) => t(k,
+      arrondi(I * (A / S[k].arcanes_div + 1)) + niveau.modif_maitrise + S[k].jet_bonus, S[k].des_degats,
+      arrondi((S[k].jet_bonus / 2 + I * (A / S[k].degats_arcanes_div + S[k].degats_arcanes_plus)) / S[k].degats_div));
     sorts = {
-      mineur: t("mineur", arrondi(I * (A / 200 + 1)) + niveau.modif_maitrise + S.mineur.jet_bonus, S.mineur.des_degats,
-        arrondi((S.mineur.jet_bonus / 2 + I * (A / 400 + 1)) / 4)),
-      median: t("median", arrondi(I * (A / 100 + 1)) + niveau.modif_maitrise + S.median.jet_bonus, S.median.des_degats,
-        arrondi((S.median.jet_bonus / 2 + I * (A / 100 + 0.6)) / 3)),
-      majeur: t("majeur", arrondi(I * (A / 400 + 1)) + niveau.modif_maitrise + S.majeur.jet_bonus, S.majeur.des_degats,
-        arrondi((S.majeur.jet_bonus / 2 + I * (A / 400 + 1)) / 3)),
+      mineur: tier("mineur"),
+      median: tier("median"),
+      majeur: tier("majeur"),
       soin: fiche.magie.courant === "Guérison",
     };
   }
