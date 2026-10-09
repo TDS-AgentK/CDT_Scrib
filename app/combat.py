@@ -46,10 +46,10 @@ def configure() -> bool:
     return bool(_secret())
 
 
-async def site(methode: str, params: dict | None = None, corps: dict | None = None):
+async def site(methode: str, params: dict | None = None, corps: dict | None = None, delai: float = 15):
     """Appel de /api/bot/combat ; lève RuntimeError avec le message du site en cas de refus."""
     url = _site_url() + "/api/bot/combat"
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=delai) as client:
         r = await client.request(methode, url, params=params, json=corps, headers={"X-Bot-Secret": _secret()})
     if r.status_code >= 400:
         raise RuntimeError(r.text or f"Erreur {r.status_code} du site")
@@ -60,21 +60,25 @@ async def autocompletion(discord_id: int, focus: str, options: dict, tape: str) 
     """Choix proposés pour /attaque : perso (vos fiches), type (armes et sorts de la fiche choisie), cible."""
     try:
         if focus == "perso":
-            l = await site("GET", {"discord_id": discord_id, "quoi": "fiches"})
+            l = await site("GET", {"discord_id": discord_id, "quoi": "fiches"}, delai=2.5)
             choix = [{"name": f["nom"][:100], "value": f["fiche"]} for f in l]
         elif focus == "type":
             if not options.get("perso"):
                 return [{"name": "Choisissez d'abord votre personnage", "value": "-"}]
-            l = await site("GET", {"discord_id": discord_id, "quoi": "attaques", "fiche": options["perso"]})
+            l = await site("GET", {"discord_id": discord_id, "quoi": "attaques", "fiche": options["perso"]}, delai=2.5)
             choix = [{"name": a["libelle"][:100], "value": a["action"]} for a in l]
         elif focus == "cible":
-            l = await site("GET", {"discord_id": discord_id, "quoi": "cibles"})
+            l = await site("GET", {"discord_id": discord_id, "quoi": "cibles"}, delai=2.5)
             choix = [{"name": (("⚔ " if c["table"] else "") + c["nom"])[:100], "value": f'{c["fiche"]}:{c["cible"]}'} for c in l]
         else:
             return []
-    except Exception:
+    except Exception as e:
+        # Affiché dans la liste de Discord : sans ça, une erreur du site (mot de passe, adresse) donne une liste vide.
         log.exception("Autocomplétion /attaque")
-        return []
+        motif = str(e) if isinstance(e, RuntimeError) else type(e).__name__
+        return [{"name": f"⚠ Site injoignable ou refus : {motif}"[:100], "value": "-"}]
+    if not choix and focus == "perso":
+        return [{"name": "Aucune fiche de jeu trouvée pour ton compte Discord", "value": "-"}]
     return [c for c in choix if tape.lower() in c["name"].lower()][:25]
 
 
@@ -191,7 +195,9 @@ async def boucle(client: discord.Client, pb: PocketBase):
                 if fin and fin < maintenant:
                     await pb.maj("combats", c["id"], {"statut": "expire", "detail": "Défi non accepté dans les 10 minutes."})
             # Combats dont le statut a changé depuis le dernier affichage (dont ceux lancés depuis le site).
-            for c in await pb.lister("combats", 'salon_id!="" && statut!=discord_poste', tri="created"):
+            # Tri en Python : la collection peut ne pas avoir de champ « created » (PocketBase ≥ 0.23).
+            a_publier = await pb.lister("combats", 'salon_id!="" && statut!=discord_poste')
+            for c in sorted(a_publier, key=lambda x: str(x.get("created") or "")):
                 quand = _date(c.get("created"))
                 if quand and maintenant - quand > FRAICHEUR and not c.get("discord_message_id"):
                     await pb.maj("combats", c["id"], {"discord_poste": c["statut"]})

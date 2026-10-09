@@ -453,7 +453,12 @@ async def _autocompletion(eco, payload) -> dict:
     elif data["name"] == "attaque":
         membre = await _membre(eco, payload)
         valeurs = {o["name"]: o.get("value") for o in options}
-        choix = await combat.autocompletion(membre.id if membre else 0, focus["name"], valeurs, tape) if membre and combat.configure() else []
+        if not combat.configure():
+            choix = [{"name": "⚠ Bot sans CDT_SECRET_PARTAGE : variable absente sur CDT_Scrib", "value": "-"}]
+        elif not membre:
+            choix = [{"name": "⚠ Membre Discord introuvable", "value": "-"}]
+        else:
+            choix = await combat.autocompletion(membre.id, focus["name"], valeurs, tape)
     elif focus["name"] == "perso" and data["name"] == "session":
         membre = await _membre(eco, payload)
         joueur = await eco.joueur_de(membre) if membre else None
