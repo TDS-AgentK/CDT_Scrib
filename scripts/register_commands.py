@@ -138,14 +138,14 @@ COMMANDS = [
         "name": "drop", "description": "Lâcher un objet dans le salon : le premier qui le ramasse le garde, sinon il file chez le Receleur",
         "options": [
             {"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True},
-            {"type": 4, "name": "duree", "description": "Durée en secondes (5 à 120)", "required": True, "min_value": 5, "max_value": 120},
+            {"type": 4, "name": "duree", "description": "Durée en secondes (5 à 120, 30 par défaut)", "required": False, "min_value": 5, "max_value": 120},
             {"type": 4, "name": "quantite", "description": "Quantité (1 par défaut)", "required": False, "min_value": 1},
         ],
     },
     {
         "name": "dropadmin", "description": "Drop d'un objet et/ou d'Or créés pour l'occasion (administrateurs de loterie)",
         "options": [
-            {"type": 4, "name": "duree", "description": "Durée en secondes (5 à 3600)", "required": True, "min_value": 5, "max_value": 3600},
+            {"type": 4, "name": "duree", "description": "Durée en secondes (5 à 3600, 30 par défaut)", "required": False, "min_value": 5, "max_value": 3600},
             {"type": 3, "name": "objet", "description": "Objet du catalogue", "required": False, "autocomplete": True},
             {"type": 4, "name": "quantite", "description": "Quantité de l'objet (1 par défaut)", "required": False, "min_value": 1},
             {"type": 4, "name": "or", "description": "Or à ramasser", "required": False, "min_value": 1},
@@ -165,6 +165,14 @@ COMMANDS = [
                 {"type": 4, "name": "prix_ticket", "description": "Prix d'un ticket en Or (0 = gratuit)", "required": False, "min_value": 0},
                 {"type": 4, "name": "max_tickets", "description": "Tickets maximum par joueur (1 par défaut)", "required": False, "min_value": 1},
                 {"type": 7, "name": "salon", "description": "Salon de l'annonce (le salon actuel par défaut)", "required": False},
+                {"type": 5, "name": "enregistrer", "description": "Enregistrer aussi comme modèle réutilisable", "required": False},
+            ],
+        }, {
+            "type": 1, "name": "relancer", "description": "Relancer une loterie à partir d'un modèle enregistré",
+            "options": [
+                {"type": 3, "name": "modele", "description": "Modèle de loterie", "required": True, "autocomplete": True},
+                {"type": 3, "name": "fin", "description": "Fin du tirage : JJ/MM/AAAA HH:MM (sinon la durée du modèle)", "required": False},
+                {"type": 7, "name": "salon", "description": "Salon de l'annonce (celui du modèle par défaut)", "required": False},
             ],
         }],
     },

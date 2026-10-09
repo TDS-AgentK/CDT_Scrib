@@ -4,11 +4,15 @@ participent avec un bouton (gratuit ou ticket payant), le bot tire au sort à l'
 Création : /loterie creer (réservé aux ID Discord de LOTERIE_ADMINS et de eco_reglages.loterie_admin_ids) ou page
 Loteries du site (Agent K et Kyanite). Le bot publie toute loterie « ouverte » sans message, puis la clôt à sa fin.
 Données : eco_loteries (lot, fin, salon, statut, gagnants), eco_loterie_tickets (un enregistrement par joueur).
+Une loterie peut être planifiée (« debut » futur : annonce publiée à cette heure) ; si le site change sa fin, il coche
+« a_rafraichir » et le bot met l'annonce à jour. Modèles réutilisables : eco_loterie_modeles (durée en minutes),
+relancés depuis le site ou par /loterie relancer ; /loterie creer enregistrer:Oui en crée un.
 """
 import asyncio
 import logging
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import discord
@@ -27,11 +31,21 @@ def _pb_date(d: datetime) -> str:
     return d.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.000Z")
 
 
-def _fin(l: dict) -> datetime | None:
+def _date_pb(v) -> datetime | None:
     try:
-        return datetime.fromisoformat((l.get("fin") or "").replace(" ", "T").replace("Z", "+00:00"))
+        return datetime.fromisoformat((v or "").replace(" ", "T").replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def _fin(l: dict) -> datetime | None:
+    return _date_pb(l.get("fin"))
+
+
+def a_publier(l: dict, maintenant: datetime) -> bool:
+    """Loterie ouverte sans annonce, dont l'heure de publication (« debut », facultative) est arrivée."""
+    debut = _date_pb(l.get("debut"))
+    return l.get("statut") == "ouverte" and not l.get("message_id") and (debut is None or debut <= maintenant)
 
 
 async def est_admin(eco, user_id: int) -> bool:
@@ -114,7 +128,52 @@ async def creer(eco, membre: discord.Member, o: dict, salon_defaut: str | None) 
         "prix_ticket": int(o.get("prix_ticket") or 0), "max_tickets": int(o.get("max_tickets") or 1), "fin": _pb_date(fin),
         "statut": "ouverte", "message_id": "", "cree_par": str(membre.id)})
     await publier(eco, l)
-    return True, f"Loterie « {l['titre']} » créée, tirage le {fin.strftime('%d/%m/%Y à %H:%M')} (heure de Paris)."
+    txt = f"Loterie « {l['titre']} » créée, tirage le {fin.strftime('%d/%m/%Y à %H:%M')} (heure de Paris)."
+    if o.get("enregistrer"):
+        minutes = max(1, round((fin - datetime.now(PARIS)).total_seconds() / 60))
+        await eco.pb.creer("eco_loterie_modeles", {**_copie(l), "nom": l["titre"], "duree_minutes": minutes,
+                                                   "cree_par": str(membre.id)})
+        txt += f" Modèle « {l['titre']} » enregistré (durée {_duree_txt(minutes)})."
+    return True, txt
+
+
+CHAMPS_MODELE = ("titre", "description", "salon_id", "objet", "quantite_objet", "or_lot", "nombre_gagnants", "prix_ticket", "max_tickets", "succes")
+
+
+def _copie(source: dict) -> dict:
+    return {k: source[k] for k in CHAMPS_MODELE if source.get(k) is not None}
+
+
+def _duree_txt(minutes: int) -> str:
+    j, reste = divmod(int(minutes), 1440)
+    h, m = divmod(reste, 60)
+    return " ".join(x for x in (f"{j} j" if j else "", f"{h} h" if h else "", f"{m} min" if m else "") if x) or "0 min"
+
+
+async def relancer(eco, membre: discord.Member, modele_id: str, fin_txt: str | None, salon: str | None) -> tuple[bool, str]:
+    """Nouvelle loterie à partir d'un modèle : fin donnée, sinon maintenant + durée du modèle."""
+    if not await est_admin(eco, membre.id):
+        return False, "Seuls les administrateurs de loterie peuvent relancer une loterie."
+    try:
+        m = await eco.pb.requete("GET", f"/api/collections/eco_loterie_modeles/records/{quote(modele_id or '', safe='')}")
+    except Exception:
+        m = None
+    if not m or not m.get("id"):
+        return False, "Modèle inconnu."
+    if fin_txt:
+        fin = lire_fin(fin_txt)
+        if not fin or fin <= datetime.now(PARIS):
+            return False, "Date de fin invalide ou passée. Format : JJ/MM/AAAA HH:MM (heure de Paris)."
+    else:
+        fin = datetime.now(PARIS) + timedelta(minutes=int(m.get("duree_minutes") or 60))
+    salon_id = str(salon or m.get("salon_id") or "")
+    if not salon_id:
+        return False, "Ce modèle n'a pas de salon : précise-le."
+    l = await eco.pb.creer("eco_loteries", {**_copie(m), "titre": m.get("titre") or m.get("nom") or "Loterie",
+                                            "salon_id": salon_id, "fin": _pb_date(fin), "statut": "ouverte", "message_id": "",
+                                            "cree_par": str(membre.id), "modele": m["id"]})
+    await publier(eco, l)
+    return True, f"Loterie « {l['titre']} » relancée, tirage le {fin.astimezone(PARIS).strftime('%d/%m/%Y à %H:%M')} (heure de Paris)."
 
 
 async def publier(eco, l: dict):
@@ -136,6 +195,8 @@ async def participer(eco, membre: discord.Member, loterie_id: str) -> tuple[bool
         fin = _fin(l)
         if l.get("statut") != "ouverte" or (fin and fin <= datetime.now(timezone.utc)):
             return False, "Cette loterie est terminée."
+        if not a_publier({**l, "message_id": ""}, datetime.now(timezone.utc)):
+            return False, "Cette loterie n'a pas encore commencé."
         t = await eco.pb.premier("eco_loterie_tickets", f'loterie="{echapper(loterie_id)}" && joueur="{echapper(joueur["id"])}"')
         possede, maxi = (t or {}).get("quantite") or 0, l.get("max_tickets") or 1
         if possede >= maxi:
@@ -196,12 +257,29 @@ async def tirer(eco, l: dict):
         log.warning("Annonce du tirage de la loterie %s impossible", l["id"])
 
 
+async def rafraichir(eco, l: dict):
+    """Fin modifiée sur le site : l'annonce affiche la nouvelle heure de tirage."""
+    await eco.pb.maj("eco_loteries", l["id"], {"a_rafraichir": False})
+    salon = await _salon(eco, l)
+    if not salon or not l.get("message_id"):
+        return
+    try:
+        msg = await salon.fetch_message(int(l["message_id"]))
+        await msg.edit(embed=await _embed_ouverte(eco, l), view=_vue(l["id"]))
+    except discord.HTTPException:
+        log.warning("Annonce de la loterie %s non modifiable", l["id"])
+
+
 async def boucle(eco):
     await eco.client.wait_until_ready()
     while not eco.client.is_closed():
         try:
-            for l in await eco.pb.lister("eco_loteries", 'statut="ouverte" && message_id=""'):
-                await publier(eco, l)
+            maintenant = datetime.now(timezone.utc)
+            for l in await eco.pb.lister("eco_loteries", 'statut="ouverte"'):
+                if a_publier(l, maintenant):
+                    await publier(eco, l)
+                elif l.get("message_id") and l.get("a_rafraichir") and not (_fin(l) and _fin(l) <= maintenant):
+                    await rafraichir(eco, l)
             for l in await eco.pb.lister("eco_loteries", f'statut="ouverte" && fin<="{_pb_date(datetime.now(timezone.utc))}"'):
                 await tirer(eco, l)
         except Exception:

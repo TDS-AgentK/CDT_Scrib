@@ -200,7 +200,11 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             return await _modifier(app_id, jeton, [embed])
         if nom == "loterie":
             sous = data["options"][0]
-            ok, txt = await loteries.creer(eco, membre, _options(sous), payload.get("channel_id"))
+            if sous["name"] == "relancer":
+                o = _options(sous)
+                ok, txt = await loteries.relancer(eco, membre, o.get("modele"), o.get("fin"), o.get("salon"))
+            else:
+                ok, txt = await loteries.creer(eco, membre, _options(sous), payload.get("channel_id"))
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
         if nom == "recompense":
             types = eco.rostheim_types(nom)
@@ -435,6 +439,10 @@ async def _autocompletion(eco, payload) -> dict:
             o = objets.get(l.get("objet"))
             if o and tape in o["nom"].lower():
                 choix.append({"name": f'{o["nom"]} — {l["prix_vente"]} Or (stock {l["stock"]})'[:100], "value": o["id"]})
+    elif focus["name"] == "modele" and data["name"] == "loterie":
+        for m in await eco.pb.lister("eco_loterie_modeles", None, tri="nom"):
+            if tape in (m.get("nom") or "").lower():
+                choix.append({"name": (m.get("nom") or m.get("titre") or "Modèle")[:100], "value": m["id"]})
     elif focus["name"] == "objet" and data["name"] in ("loterie", "dropadmin"):
         for o in await eco.pb.lister("eco_objets", "actif=true", tri="ordre"):
             if tape in o["nom"].lower():

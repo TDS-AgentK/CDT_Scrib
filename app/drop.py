@@ -1,6 +1,7 @@
-"""Drop : un joueur lâche un objet de son inventaire dans un salon, pour 5 s à 2 min. Le premier qui clique sur
-« Ramasser » le récupère ; sinon l'objet finit dans le stock du Receleur. Chaque drop est tracé dans eco_drops
-(statut en_cours / ramasse / expire, lanceur, ramasseur, dates), l'objet dans eco_mouvements et rec_mouvements.
+"""Drop : un joueur lâche un objet de son inventaire dans un salon, pour 5 s à 2 min (30 s si la durée n'est pas
+précisée). Le premier qui clique sur « Ramasser » le récupère ; sinon l'objet finit dans le stock du Receleur. Chaque
+drop est tracé dans eco_drops (statut en_cours / ramasse / expire, lanceur, ramasseur, dates), l'objet dans
+eco_mouvements et rec_mouvements. Les drops automatiques (plannings du site) sont lancés par app/drops_auto.py.
 """
 import asyncio
 import logging
@@ -13,6 +14,7 @@ from app.eco_actions import objet_par_nom, quantite, retirer_objet
 
 log = logging.getLogger("cdt_scrib.drop")
 DUREE_MIN, DUREE_MAX = 5, 120
+DUREE_DEFAUT = 30  # /drop et /dropadmin sans durée, drops automatiques sans durée
 DUREE_ADMIN_MAX = 3600  # un drop admin peut durer jusqu'à 1 h
 _verrous: dict[str, asyncio.Lock] = {}
 
@@ -40,12 +42,20 @@ def _embed(lanceur: str, objet: dict | None, q: int, fin_ts: int | None = None, 
     nom = " + ".join(morceaux)
     if statut:
         texte = statut
+    elif not lanceur:  # drop automatique (planning du site)
+        texte = f"Un drop surprise apparaît : {nom} !\nLe premier à cliquer sur « Ramasser » le récupère. Fin <t:{fin_ts}:R>."
     else:
         texte = f"{lanceur} lâche {nom}.\nLe premier à cliquer sur « Ramasser » le récupère. Fin <t:{fin_ts}:R>."
     return discord.Embed(description=texte, color=eco_vues.OR_DEFAUT)
 
 
-async def lancer(eco, membre: discord.Member, objet_id: str, q: int, duree: int, channel_id: str | None) -> tuple[bool, str]:
+def duree_ou_defaut(duree: int | None) -> int:
+    """Option « duree » facultative : absente (ou 0) → 30 s."""
+    return int(duree) if duree else DUREE_DEFAUT
+
+
+async def lancer(eco, membre: discord.Member, objet_id: str, q: int, duree: int | None, channel_id: str | None) -> tuple[bool, str]:
+    duree = duree_ou_defaut(duree)
     if q <= 0:
         return False, "La quantité doit être positive."
     if not DUREE_MIN <= duree <= DUREE_MAX:
@@ -78,9 +88,10 @@ async def lancer(eco, membre: discord.Member, objet_id: str, q: int, duree: int,
     return True, f"Drop lancé pour {duree} s : {q} × {objet['nom']}."
 
 
-async def lancer_admin(eco, membre: discord.Member, objet_id: str | None, q: int, or_: int, duree: int, channel_id: str | None) -> tuple[bool, str]:
+async def lancer_admin(eco, membre: discord.Member, objet_id: str | None, q: int, or_: int, duree: int | None, channel_id: str | None) -> tuple[bool, str]:
     """Drop d'un administrateur de loterie : l'objet et/ou l'Or sont créés, sans toucher à aucun inventaire."""
     from app import loteries
+    duree = duree_ou_defaut(duree)
     if not await loteries.est_admin(eco, membre.id):
         return False, "Seuls les administrateurs de loterie peuvent lancer un drop admin."
     if not DUREE_MIN <= duree <= DUREE_ADMIN_MAX:
@@ -93,22 +104,32 @@ async def lancer_admin(eco, membre: discord.Member, objet_id: str | None, q: int
     salon = eco.client.get_channel(int(channel_id)) if channel_id else None
     if salon is None:
         return False, "Salon introuvable pour ce drop."
+    joueur = await eco.joueur_de(membre)
+    ok = await creer_drop_cree(eco, salon, membre.mention, joueur["id"] if joueur else "", objet, q, or_, duree)
+    return (True, f"Drop admin lancé pour {duree} s.") if ok else (False, "Je ne peux pas écrire dans ce salon : drop annulé.")
+
+
+async def creer_drop_cree(eco, salon, lanceur_txt: str, lanceur_id: str, objet: dict | None, q: int, or_: int, duree: int,
+                          planning_id: str = "") -> bool:
+    """Drop d'objet et/ou d'Or créés pour l'occasion (drop admin ou drop automatique d'un planning)."""
     cfg = await eco.config()
     from app.eco_actions import _n
     or_txt = f"{_n(or_)} {eco_vues.or_txt(cfg)}" if or_ > 0 else ""
-    joueur = await eco.joueur_de(membre)
     fin = datetime.now(timezone.utc) + timedelta(seconds=duree)
-    d = await eco.pb.creer("eco_drops", {"lanceur": joueur["id"] if joueur else "", "objet": objet["id"] if objet else "", "quantite": q if objet else 0,
-                                         "or_montant": or_ if or_ > 0 else 0, "admin": True, "duree_s": duree, "salon_id": str(salon.id),
-                                         "statut": "en_cours", "date": _date(datetime.now(timezone.utc)), "date_fin": _date(fin), "message_id": ""})
+    champs = {"lanceur": lanceur_id, "objet": objet["id"] if objet else "", "quantite": q if objet else 0,
+              "or_montant": or_ if or_ > 0 else 0, "admin": True, "duree_s": duree, "salon_id": str(salon.id),
+              "statut": "en_cours", "date": _date(datetime.now(timezone.utc)), "date_fin": _date(fin), "message_id": ""}
+    if planning_id:
+        champs["planning"] = planning_id
+    d = await eco.pb.creer("eco_drops", champs)
     try:
-        msg = await salon.send(embed=_embed(membre.mention, objet, q, int(fin.timestamp()), or_txt=or_txt), view=_bouton(d["id"]))
+        msg = await salon.send(embed=_embed(lanceur_txt, objet, q, int(fin.timestamp()), or_txt=or_txt), view=_bouton(d["id"]))
     except discord.HTTPException:
         await eco.pb.maj("eco_drops", d["id"], {"statut": "annule"})
-        return False, "Je ne peux pas écrire dans ce salon : drop annulé."
+        return False
     await eco.pb.maj("eco_drops", d["id"], {"message_id": str(msg.id)})
     asyncio.create_task(_attendre(eco, d["id"], duree))
-    return True, f"Drop admin lancé pour {duree} s."
+    return True
 
 
 async def _attendre(eco, drop_id: str, duree: int):

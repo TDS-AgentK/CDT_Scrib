@@ -90,9 +90,11 @@ async def startup():
     from app import anniversaires
     asyncio.create_task(anniversaires.boucle(gateway, pocketbase))
     # Drops d'objets non ramassés (rattrapage après redémarrage) et loteries admin (publication, tirage).
-    from app import drop, loteries
+    from app import drop, drops_auto, loteries
     asyncio.create_task(drop.boucle(economie))
     asyncio.create_task(loteries.boucle(economie))
+    # Drops automatiques programmés sur le site (Loteries & drops › Drops automatiques).
+    asyncio.create_task(drops_auto.boucle(economie))
     # Nouveaux objets : ligne au Receleur et rappel à Kyanite de fixer le prix de reprise.
     from app import receleur
     asyncio.create_task(receleur.surveiller_nouveaux_objets(economie))
