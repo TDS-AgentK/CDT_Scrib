@@ -1,12 +1,17 @@
 """Combat des fiches de jeu (/attaque) : le site arbitre, le bot ne fait que l'interface Discord.
 
-Le moteur de calcul n'existe que sur le site : le bot appelle donc la route `/api/bot/combat` du site (variables
-SITE_URL et CDT_SECRET_PARTAGE, la même valeur que le secret du site) pour déclarer un combat, accepter ou refuser,
-voter en cas d'égalité, et pour l'autocomplétion. Il lit la collection `combats` dans la base pour publier :
+Même principe que Rostheim et les jets du site : le bot et le site ne s'appellent pas, ils passent par la base.
+- /attaque : le bot dépose un combat au statut « demande » (demande = proposer, avec l'identifiant Discord du joueur) ;
+- Accepter / Refuser / votes d'égalité : le bot dépose la demande sur le combat (champ `demande`) ;
+dans les deux cas avec `demande_statut = "a_traiter"`. Le site traite la file (jets, états, dégâts) puis note
+« traitee » ou « erreur » (`demande_erreur`). Le bot « réveille » aussi le site par une simple adresse publique
+(/api/combat-file, sans mot de passe) pour qu'il traite la demande tout de suite.
+Le bot lit ensuite la collection `combats` pour publier :
 - les combats lancés depuis le site (bouton « Attaquer » de la fiche) ;
 - chaque changement de statut (en attente → refusé / expiré / égalité / résolu), en modifiant le même message.
 `combats.discord_poste` garde le dernier statut affiché : tout combat dont le statut a changé depuis est republié.
 Boutons : custom_id « eco:cbt:<id>:ok|no » (accepter / refuser), « eco:cbt:<id>:va|vd » (avantage attaquant / défenseur).
+Les listes de /attaque (vos fiches, leurs armes et sorts, les cibles) sont lues directement dans la base.
 """
 import asyncio
 import logging
@@ -24,61 +29,114 @@ VERIFIER_S = 5
 FRAICHEUR = timedelta(minutes=30)  # un combat plus ancien n'est plus publié (bot arrêté longtemps)
 OR_CDT, VERT, ROUGE, GRIS = 0xC9A24C, 0x6FAE7A, 0xB0473B, 0x7D7F86
 NOMS_MODE = {"avantage": "avantage", "desavantage": "désavantage", "maximum": "maximum"}
-
-
-# ---------------------------------------------------------------- appels au site
-
-def _secret() -> str:
-    # Nom posé sur Railway : CDT_SECRET_PARTAGE (BOT_SITE_SECRET accepté aussi).
-    return os.getenv("CDT_SECRET_PARTAGE") or os.getenv("BOT_SITE_SECRET") or ""
-
-
-# Adresse du site : SITE_URL si elle est posée, sinon le site en ligne (le bot et le site partagent déjà la base,
-# mais le moteur de calcul n'existe que sur le site : il faut l'appeler pour arbitrer).
+NOMS_SORT = {"mineur": "mineur", "median": "médian", "majeur": "majeur"}
+# Adresse publique du site, seulement pour le « réveiller » (facultatif : sans réponse, il traite la file à la visite suivante).
 SITE_PAR_DEFAUT = "https://cdtsite-production.up.railway.app"
 
 
-def _site_url() -> str:
-    return (os.getenv("SITE_URL") or SITE_PAR_DEFAUT).rstrip("/")
+# ---------------------------------------------------------------- demandes déposées dans la base
 
-
-def configure() -> bool:
-    return bool(_secret())
-
-
-async def site(methode: str, params: dict | None = None, corps: dict | None = None, delai: float = 15):
-    """Appel de /api/bot/combat ; lève RuntimeError avec le message du site en cas de refus."""
-    url = _site_url() + "/api/bot/combat"
-    async with httpx.AsyncClient(timeout=delai) as client:
-        r = await client.request(methode, url, params=params, json=corps, headers={"X-Bot-Secret": _secret()})
-    if r.status_code >= 400:
-        raise RuntimeError(r.text or f"Erreur {r.status_code} du site")
-    return r.json()
-
-
-async def autocompletion(discord_id: int, focus: str, options: dict, tape: str) -> list[dict]:
-    """Choix proposés pour /attaque : perso (vos fiches), type (armes et sorts de la fiche choisie), cible."""
+async def _reveiller():
     try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            await client.get((os.getenv("SITE_URL") or SITE_PAR_DEFAUT).rstrip("/") + "/api/combat-file")
+    except httpx.HTTPError:
+        pass  # le site traitera la file à sa prochaine requête
+
+
+async def _attendre(pb: PocketBase, combat_id: str, secondes: float = 12) -> dict:
+    """Attend que le site ait traité la demande ; lève RuntimeError avec son message en cas de refus."""
+    for _ in range(int(secondes / 0.5)):
+        c = await pb.requete("GET", f"/api/collections/combats/records/{combat_id}")
+        if c.get("demande_statut") == "erreur":
+            raise RuntimeError(c.get("demande_erreur") or "Demande refusée par le site.")
+        if c.get("demande_statut") == "traitee":
+            return c
+        await asyncio.sleep(0.5)
+    raise RuntimeError("Le site n'a pas encore traité la demande : réessayez dans un instant.")
+
+
+async def proposer(pb: PocketBase, discord_id: int, fiche: str, attaque: str, cible: str, salon_id: str) -> dict:
+    """/attaque : dépose la demande, attend le site, renvoie le combat ; en cas de refus, la demande est retirée."""
+    if not fiche or fiche == "-" or not attaque or attaque == "-" or not cible or cible == "-":
+        raise RuntimeError("Choisissez votre personnage, une arme ou un sort, et une cible dans les listes.")
+    d = await pb.creer("combats", {
+        "statut": "demande", "origine": "discord", "salon_id": str(salon_id or ""), "discord_poste": "demande",
+        "demande": {"action": "proposer", "discord_id": str(discord_id), "fiche": fiche, "attaque": attaque, "defenseur": cible, "salon_id": str(salon_id or "")},
+        "demande_statut": "a_traiter",
+    })
+    await _reveiller()
+    try:
+        return await _attendre(pb, d["id"])
+    except RuntimeError:
+        await pb.supprimer("combats", d["id"])
+        raise
+
+
+async def agir(pb: PocketBase, discord_id: int, combat_id: str, choix: str) -> dict:
+    """Bouton d'un combat : ok / no (répondre au défi), va / vd (vote d'égalité)."""
+    c = await pb.requete("GET", f"/api/collections/combats/records/{combat_id}")
+    if c.get("demande_statut") == "a_traiter":
+        raise RuntimeError("Une action est déjà en cours sur ce combat : réessayez dans un instant.")
+    demande = {"discord_id": str(discord_id)}
+    demande.update({"action": "repondre", "accepte": choix == "ok"} if choix in ("ok", "no")
+                   else {"action": "voter", "choix": "attaquant" if choix == "va" else "defenseur"})
+    await pb.maj("combats", combat_id, {"demande": demande, "demande_statut": "a_traiter", "demande_erreur": ""})
+    await _reveiller()
+    return await _attendre(pb, combat_id)
+
+
+# ---------------------------------------------------------------- listes de /attaque (lues dans la base)
+
+def _nom_fiche(f: dict) -> str:
+    return ((f.get("expand") or {}).get("personnage") or {}).get("prenom") or f.get("nom") or "?"
+
+
+async def autocompletion(eco, membre, focus: str, options: dict, tape: str) -> list[dict]:
+    """Choix proposés pour /attaque : perso (vos fiches), type (armes et sorts de la fiche choisie), cible."""
+    pb = eco.pb
+    try:
+        joueur = await eco.joueur_de(membre)
+        if not joueur:
+            return [{"name": "⚠ Votre compte Discord n'est relié à aucun joueur du site", "value": "-"}]
+        pseudo = echapper(joueur.get("pseudo") or "")
         if focus == "perso":
-            l = await site("GET", {"discord_id": discord_id, "quoi": "fiches"}, delai=2.5)
-            choix = [{"name": f["nom"][:100], "value": f["fiche"]} for f in l]
+            fiches = await pb.lister("fiches_jeu", f'genre!="mj" && personnage.joueur="{pseudo}"', expand="personnage")
+            choix = [{"name": _nom_fiche(f)[:100], "value": f["id"]} for f in fiches]
+            if not choix:
+                return [{"name": "Aucune fiche de jeu : créez-la sur le site (dé gris de la page du personnage)", "value": "-"}]
         elif focus == "type":
-            if not options.get("perso"):
+            if not options.get("perso") or options.get("perso") == "-":
                 return [{"name": "Choisissez d'abord votre personnage", "value": "-"}]
-            l = await site("GET", {"discord_id": discord_id, "quoi": "attaques", "fiche": options["perso"]}, delai=2.5)
-            choix = [{"name": a["libelle"][:100], "value": a["action"]} for a in l]
+            f = await pb.requete("GET", f'/api/collections/fiches_jeu/records/{options["perso"]}')
+            # Transformé : les armes et la magie de la forme active.
+            src = next((x for x in f.get("formes") or [] if x.get("id") == f.get("forme_active") and x.get("mode") == "transformation"), f)
+            choix = [{"name": a.get("nom", "?")[:100], "value": f"arme:{i + 1}"} for i, a in enumerate(src.get("armes") or [])
+                     if a and a.get("nom") and a.get("nom") != "Pas d'armes"]
+            if (src.get("magie") or {}).get("niveau"):
+                courant = src["magie"].get("courant") or "magie"
+                choix += [{"name": f"Sort {NOMS_SORT[t]} ({courant})"[:100], "value": f"sort:{t}"} for t in ("mineur", "median", "majeur")]
+            if not choix:
+                return [{"name": "Cette fiche n'a ni arme ni magie", "value": "-"}]
         elif focus == "cible":
-            l = await site("GET", {"discord_id": discord_id, "quoi": "cibles"}, delai=2.5)
-            choix = [{"name": (("⚔ " if c["table"] else "") + c["nom"])[:100], "value": f'{c["fiche"]}:{c["cible"]}'} for c in l]
+            sessions = await pb.lister("sessions_jeu", 'statut="ouverte"')
+            table = set((sessions[0].get("table") or []) if sessions else [])
+            choix = []
+            for f in await pb.lister("fiches_jeu", f'genre!="mj" && personnage.joueur!="{pseudo}"', expand="personnage"):
+                marque = "⚔ " if f["id"] in table else ""
+                choix.append((f["id"] not in table, {"name": f"{marque}{_nom_fiche(f)}"[:100], "value": f'{f["id"]}:'}))
+                formes = {x.get("id"): x for x in f.get("formes") or []}
+                for i in f.get("invocations") or []:
+                    fo = formes.get(i.get("forme_id"))
+                    if fo:
+                        lien = "compagnon" if fo.get("mode") == "compagnon" else "invocation"
+                        choix.append((f["id"] not in table, {"name": f"{marque}{fo.get('nom')} ({lien} de {_nom_fiche(f)})"[:100], "value": f'{f["id"]}:{i["id"]}'}))
+            choix = [c for _, c in sorted(choix, key=lambda x: (x[0], x[1]["name"]))]
         else:
             return []
     except Exception as e:
-        # Affiché dans la liste de Discord : sans ça, une erreur du site (mot de passe, adresse) donne une liste vide.
         log.exception("Autocomplétion /attaque")
-        motif = str(e) if isinstance(e, RuntimeError) else type(e).__name__
-        return [{"name": f"⚠ Site injoignable ou refus : {motif}"[:100], "value": "-"}]
-    if not choix and focus == "perso":
-        return [{"name": "Aucune fiche de jeu trouvée pour ton compte Discord", "value": "-"}]
+        return [{"name": f"⚠ Erreur : {type(e).__name__}"[:100], "value": "-"}]
     return [c for c in choix if tape.lower() in c["name"].lower()][:25]
 
 
