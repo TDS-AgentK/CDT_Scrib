@@ -75,7 +75,13 @@ async def proposer(pb: PocketBase, discord_id: int, fiche: str, attaque: str, ci
 
 async def agir(pb: PocketBase, discord_id: int, combat_id: str, choix: str) -> dict:
     """Bouton d'un combat : ok / no (répondre au défi), va / vd (vote d'égalité)."""
-    c = await pb.requete("GET", f"/api/collections/combats/records/{combat_id}")
+    try:
+        c = await pb.requete("GET", f"/api/collections/combats/records/{combat_id}")
+    except RuntimeError as e:
+        # Combat supprimé (essai effacé, nettoyage) : message clair plutôt que l'erreur brute de la base.
+        if "404" in str(e):
+            raise RuntimeError("Ce combat n'existe plus (combat d'essai ou supprimé) : lancez-en un nouveau avec /attaque.") from None
+        raise
     if c.get("demande_statut") == "a_traiter":
         raise RuntimeError("Une action est déjà en cours sur ce combat : réessayez dans un instant.")
     demande = {"discord_id": str(discord_id)}
