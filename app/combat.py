@@ -10,7 +10,10 @@ Le bot lit ensuite la collection `combats` pour publier :
 - les combats lancés depuis le site (bouton « Attaquer » de la fiche) ;
 - chaque changement de statut (en attente → refusé / expiré / égalité / résolu), en modifiant le même message.
 `combats.discord_poste` garde le dernier statut affiché : tout combat dont le statut a changé depuis est republié.
-Boutons : custom_id « eco:cbt:<id>:ok|no » (accepter / refuser), « eco:cbt:<id>:va|vd » (avantage attaquant / défenseur).
+Boutons : custom_id « eco:cbt:<id>:ok|no » (accepter / refuser), « eco:cbt:<id>:va|vd » (avantage attaquant / défenseur),
+« eco:cbt:<id>:ta|ec » (Try again / Échec critique après les jets) ; menu « eco:cbt:<id>:obj » (accepter avec un objet).
+Objets de hasard (inventaire global du joueur, consommés à l'usage) : l'attaquant en choisit un dans /attaque, le
+défenseur dans le menu en acceptant ; après les jets, Try again (10 min) et Échec critique (30 s) recalculent l'issue.
 Les listes de /attaque (vos fiches, leurs armes et sorts, les cibles) sont lues directement dans la base.
 """
 import asyncio
@@ -32,6 +35,33 @@ NOMS_MODE = {"avantage": "avantage", "desavantage": "désavantage", "maximum": "
 NOMS_SORT = {"mineur": "mineur", "median": "médian", "majeur": "majeur"}
 # Adresse publique du site, seulement pour le « réveiller » (facultatif : sans réponse, il traite la file à la visite suivante).
 SITE_PAR_DEFAUT = "https://cdtsite-production.up.railway.app"
+
+# Objets de hasard : clé du site → nom affiché et noms du catalogue (eco_objets). Même table que src/lib/hasard.ts.
+OBJETS = {
+    "trefle": ("🍀 Trèfle à 10 feuilles", ["Trèfle à 10 feuilles"]),
+    "reussite_critique": ("⭐ Réussite critique", ["Réussite critique en Donjon"]),
+    "compte_pour_un": ("⚖️ Ça ne compte que pour un", ["Ça ne compte quand même que pour un", "Ca ne compte quand même que pour un"]),
+    "try_again": ("🔁 Try again", ["Try again"]),
+    "echec_critique": ("💀 Échec critique", ["Echec critique en donjon"]),
+    "brise_garde": ("🛡️💥 Brise-garde", ["Brise Garde 🛡️"]),
+    "verre_plein": ("🍷 Verre à moitié plein", ["Verre à moitié plein"]),
+    "verre_vide": ("🥛 Verre à moitié vide", ["Verre à moitié vide"]),
+}
+POUR_ATTAQUANT = ["brise_garde", "verre_plein", "trefle", "reussite_critique", "compte_pour_un"]
+POUR_DEFENSEUR = ["verre_vide", "trefle", "reussite_critique", "compte_pour_un"]
+DELAI_ECHEC = timedelta(seconds=30)
+DELAI_TRY_AGAIN = timedelta(minutes=10)
+
+
+async def objets_hasard(pb: PocketBase, joueur_id: str) -> dict:
+    """Quantité de chaque objet de hasard d'un joueur (inventaire global)."""
+    par_nom = {n: k for k, (_, noms) in OBJETS.items() for n in noms}
+    out: dict[str, int] = {}
+    for ligne in await pb.lister("eco_inventaire", f'joueur="{echapper(joueur_id)}" && quantite>0', expand="objet"):
+        cle = par_nom.get(((ligne.get("expand") or {}).get("objet") or {}).get("nom") or "")
+        if cle:
+            out[cle] = out.get(cle, 0) + (ligne.get("quantite") or 0)
+    return out
 
 
 # ---------------------------------------------------------------- demandes déposées dans la base
@@ -56,13 +86,26 @@ async def _attendre(pb: PocketBase, combat_id: str, secondes: float = 12) -> dic
     raise RuntimeError("Le site n'a pas encore traité la demande : réessayez dans un instant.")
 
 
-async def proposer(pb: PocketBase, discord_id: int, fiche: str, attaque: str, cible: str, salon_id: str) -> dict:
+async def _attendre_jet(pb: PocketBase, jet_id: str, secondes: float = 12) -> dict:
+    """Comme _attendre, pour une demande déposée sur un jet (objets de hasard sous un jet du site)."""
+    for _ in range(int(secondes / 0.5)):
+        j = await pb.requete("GET", f"/api/collections/jets/records/{jet_id}", params={"expand": "personnage"})
+        if j.get("demande_statut") == "erreur":
+            raise RuntimeError(j.get("demande_erreur") or "Demande refusée par le site.")
+        if j.get("demande_statut") == "traitee":
+            return j
+        await asyncio.sleep(0.5)
+    raise RuntimeError("Le site n'a pas encore traité la demande : réessayez dans un instant.")
+
+
+async def proposer(pb: PocketBase, discord_id: int, fiche: str, attaque: str, cible: str, salon_id: str, objet: str | None = None) -> dict:
     """/attaque : dépose la demande, attend le site, renvoie le combat ; en cas de refus, la demande est retirée."""
     if not fiche or fiche == "-" or not attaque or attaque == "-" or not cible or cible == "-":
         raise RuntimeError("Choisissez votre personnage, une arme ou un sort, et une cible dans les listes.")
     d = await pb.creer("combats", {
         "statut": "demande", "origine": "discord", "salon_id": str(salon_id or ""), "discord_poste": "demande",
-        "demande": {"action": "proposer", "discord_id": str(discord_id), "fiche": fiche, "attaque": attaque, "defenseur": cible, "salon_id": str(salon_id or "")},
+        "demande": {"action": "proposer", "discord_id": str(discord_id), "fiche": fiche, "attaque": attaque, "defenseur": cible,
+                    "salon_id": str(salon_id or ""), "objet": objet if objet and objet != "-" else ""},
         "demande_statut": "a_traiter",
     })
     await _reveiller()
@@ -74,7 +117,8 @@ async def proposer(pb: PocketBase, discord_id: int, fiche: str, attaque: str, ci
 
 
 async def agir(pb: PocketBase, discord_id: int, combat_id: str, choix: str) -> dict:
-    """Bouton d'un combat : ok / no (répondre au défi), va / vd (vote d'égalité)."""
+    """Bouton d'un combat : ok / no (répondre au défi), obj:<objet> (accepter avec un objet), va / vd (vote d'égalité),
+    ta / ec (Try again / Échec critique après les jets)."""
     try:
         c = await pb.requete("GET", f"/api/collections/combats/records/{combat_id}")
     except RuntimeError as e:
@@ -85,8 +129,14 @@ async def agir(pb: PocketBase, discord_id: int, combat_id: str, choix: str) -> d
     if c.get("demande_statut") == "a_traiter":
         raise RuntimeError("Une action est déjà en cours sur ce combat : réessayez dans un instant.")
     demande = {"discord_id": str(discord_id)}
-    demande.update({"action": "repondre", "accepte": choix == "ok"} if choix in ("ok", "no")
-                   else {"action": "voter", "choix": "attaquant" if choix == "va" else "defenseur"})
+    if choix in ("ok", "no"):
+        demande.update({"action": "repondre", "accepte": choix == "ok"})
+    elif choix.startswith("obj:"):
+        demande.update({"action": "repondre", "accepte": True, "objet": choix[4:]})
+    elif choix in ("ta", "ec"):
+        demande.update({"action": "apres", "quoi": "try_again" if choix == "ta" else "echec_critique"})
+    else:
+        demande.update({"action": "voter", "choix": "attaquant" if choix == "va" else "defenseur"})
     await pb.maj("combats", combat_id, {"demande": demande, "demande_statut": "a_traiter", "demande_erreur": ""})
     await _reveiller()
     return await _attendre(pb, combat_id)
@@ -99,7 +149,7 @@ def _nom_fiche(f: dict) -> str:
 
 
 async def autocompletion(eco, membre, focus: str, options: dict, tape: str) -> list[dict]:
-    """Choix proposés pour /attaque : perso (vos fiches), type (armes et sorts de la fiche choisie), cible."""
+    """Choix proposés pour /attaque : perso (vos fiches), type (armes et sorts de la fiche choisie), cible, objet."""
     pb = eco.pb
     try:
         joueur = await eco.joueur_de(membre)
@@ -140,6 +190,11 @@ async def autocompletion(eco, membre, focus: str, options: dict, tape: str) -> l
                         lien = "compagnon" if fo.get("mode") == "compagnon" else "invocation"
                         choix.append((f["id"] not in table, {"name": f"{marque}{fo.get('nom')} ({lien} de {_nom_fiche(f)})"[:100], "value": f'{f["id"]}:{i["id"]}'}))
             choix = [c for _, c in sorted(choix, key=lambda x: (x[0], x[1]["name"]))]
+        elif focus == "objet":
+            stock = await objets_hasard(pb, joueur["id"])
+            choix = [{"name": f"{OBJETS[k][0]} ×{stock[k]}"[:100], "value": k} for k in POUR_ATTAQUANT if stock.get(k)]
+            if not choix:
+                return [{"name": "Aucun objet de hasard utilisable à l'attaque dans votre inventaire", "value": "-"}]
         else:
             return []
     except Exception as e:
@@ -161,7 +216,16 @@ def _jet(j: dict | None) -> str:
         txt += f" · {NOMS_MODE[mode]} (écarté : {', '.join(str(d) for d in j.get('des_ecartes') or [])})"
     if j.get("naturel_max"):
         txt += " · ⭐ maximum naturel"
+    elif j.get("naturel_min"):
+        txt += " · 💀 face minimale"
+    if j.get("objet_utilise"):
+        txt += f" · {j['objet_utilise']}"
     return txt
+
+
+def _ecoule(c: dict) -> timedelta:
+    fin = _date(c.get("resolu_le") or c.get("updated"))
+    return datetime.now(timezone.utc) - fin if fin else timedelta(days=1)
 
 
 async def _mention(pb: PocketBase, user_id: str) -> str:
@@ -180,12 +244,30 @@ def _boutons(c: dict) -> list:
     if c["statut"] == "en_attente":
         return [{"type": 1, "components": [
             {"type": 2, "style": 3, "label": "Accepter", "custom_id": f'eco:cbt:{c["id"]}:ok'},
-            {"type": 2, "style": 4, "label": "Refuser", "custom_id": f'eco:cbt:{c["id"]}:no'}]}]
+            {"type": 2, "style": 4, "label": "Refuser", "custom_id": f'eco:cbt:{c["id"]}:no'}]},
+            # Le menu accepte directement avec l'objet choisi (le site vérifie l'inventaire du défenseur).
+            {"type": 1, "components": [{"type": 3, "custom_id": f'eco:cbt:{c["id"]}:obj', "placeholder": "Accepter avec un objet de hasard…",
+                                        "options": [{"label": OBJETS[k][0], "value": k} for k in POUR_DEFENSEUR]}]}]
+    rangees = []
     if c["statut"] == "egalite":
-        return [{"type": 1, "components": [
+        rangees.append({"type": 1, "components": [
             {"type": 2, "style": 1, "label": "Avantage attaquant", "custom_id": f'eco:cbt:{c["id"]}:va'},
-            {"type": 2, "style": 2, "label": "Avantage défenseur", "custom_id": f'eco:cbt:{c["id"]}:vd'}]}]
-    return []
+            {"type": 2, "style": 2, "label": "Avantage défenseur", "custom_id": f'eco:cbt:{c["id"]}:vd'}]})
+    if c["statut"] in ("resolu", "egalite"):
+        # Après les jets : Try again (10 min) et Échec critique (30 s) ; la boucle retire les boutons une fois passés.
+        apres = []
+        if _ecoule(c) < DELAI_TRY_AGAIN:
+            apres.append({"type": 2, "style": 2, "label": OBJETS["try_again"][0], "custom_id": f'eco:cbt:{c["id"]}:ta'})
+        if _ecoule(c) < DELAI_ECHEC and c.get("attaquant_user") != c.get("defenseur_user"):
+            apres.append({"type": 2, "style": 4, "label": OBJETS["echec_critique"][0], "custom_id": f'eco:cbt:{c["id"]}:ec'})
+        if apres:
+            rangees.append({"type": 1, "components": apres})
+    return rangees
+
+
+def signature_boutons(c: dict) -> str:
+    """Boutons attendus : quand elle change (délai écoulé), la boucle met le message à jour."""
+    return "|".join(b.get("custom_id", "") for r in _boutons(c) for b in r["components"])
 
 
 async def message(pb: PocketBase, c: dict) -> dict:
@@ -194,16 +276,19 @@ async def message(pb: PocketBase, c: dict) -> dict:
     att, dfn = c.get("attaquant_nom") or "?", c.get("defenseur_nom") or "?"
     defenseur = await _mention(pb, c.get("defenseur_user"))
     lignes = [f"Avec : {c.get('action_libelle') or '?'}"]
+    objets = [f"{OBJETS[c[k]][0]} ({qui})" for k, qui in (("objet_attaquant", "attaquant"), ("objet_defenseur", "défenseur")) if c.get(k) in OBJETS]
+    if objets:
+        lignes.append("Objets : " + ", ".join(objets))
     statut, couleur, contenu = c["statut"], OR_CDT, ""
     if statut == "en_attente":
-        lignes.append(f"{defenseur or dfn}, acceptez-vous le combat ? (10 minutes)")
+        lignes.append(f"{defenseur or dfn}, acceptez-vous le combat ? (10 minutes ; le menu accepte avec un objet de hasard)")
         contenu = defenseur
     elif statut in ("refuse", "expire"):
         lignes.append("Défi refusé : rien n'est lancé." if statut == "refuse" else "Défi expiré : personne n'a répondu dans les 10 minutes.")
         couleur = GRIS
     else:
         lignes.append(f"⚔️ Attaque : {_jet(ex.get('jet_attaque'))}")
-        lignes.append(f"🛡️ Défense : {_jet(ex.get('jet_defense'))}")
+        lignes.append(f"🛡️ Défense : {_jet(ex.get('jet_defense')) if ex.get('jet_defense') else '— (Brise-garde : garde ignorée)'}")
         if statut == "egalite":
             votes = c.get("votes") or {}
             lignes.append("**Égalité** : chacun choisit ; en cas de désaccord, 1d2 tranche."
@@ -214,7 +299,7 @@ async def message(pb: PocketBase, c: dict) -> dict:
         else:
             lignes.append("**L'attaque ne surpasse pas la défense.**")
             couleur = ROUGE
-        if c.get("detail") and statut == "resolu":
+        if c.get("detail") and statut in ("resolu", "egalite"):
             lignes.append(f"*{c['detail']}*")
     embed = {"title": f"⚔️ {att} attaque {dfn}", "description": "\n".join(lignes), "color": couleur,
              "footer": {"text": "Combat lancé depuis le site" if c.get("origine") == "site" else "Combat · fiches de jeu CDT"}}
@@ -251,6 +336,7 @@ async def publier(client: discord.Client, pb: PocketBase, c: dict):
 
 
 _attente_discord: dict[str, datetime] = {}  # combats /attaque pas encore publiés par la commande : vus pour la première fois à
+_signatures: dict[str, str] = {}  # boutons affichés des combats récemment joués (Try again / Échec critique)
 
 
 async def boucle(client: discord.Client, pb: PocketBase):
@@ -283,6 +369,16 @@ async def boucle(client: discord.Client, pb: PocketBase):
                 except Exception:
                     log.exception("Combat %s non publié (salon %s)", c.get("id"), c.get("salon_id"))
                     await pb.maj("combats", c["id"], {"discord_poste": c["statut"]})
+            # Délais des objets de hasard écoulés : on retire les boutons Try again / Échec critique du message.
+            depuis = (maintenant - DELAI_TRY_AGAIN - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
+            for c in await pb.lister("combats", f'discord_message_id!="" && resolu_le>="{depuis}" && statut=discord_poste'):
+                sig = signature_boutons(c)
+                if c["id"] in _signatures and _signatures[c["id"]] != sig:
+                    try:
+                        await publier(client, pb, await combat_complet(pb, c["id"]))
+                    except Exception:
+                        log.exception("Combat %s : boutons non retirés", c.get("id"))
+                _signatures[c["id"]] = sig
         except Exception:
             log.exception("Erreur dans la boucle des combats")
         await asyncio.sleep(VERIFIER_S)

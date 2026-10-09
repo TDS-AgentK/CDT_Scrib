@@ -10,7 +10,7 @@ import logging
 import discord
 import httpx
 
-from app import combat, drop, eco_actions, eco_vues, loteries, receleur, ros_boutique, sessions_jeu
+from app import combat, drop, eco_actions, eco_vues, jets_site, loteries, receleur, ros_boutique, sessions_jeu
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
@@ -172,7 +172,7 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
         if nom == "attaque":
             # Combat des fiches de jeu (app/combat.py) : demande déposée dans la base, le site arbitre, le bot affiche.
             try:
-                c = await combat.proposer(eco.pb, membre.id, opt.get("perso"), opt.get("type"), opt.get("cible"), payload.get("channel_id"))
+                c = await combat.proposer(eco.pb, membre.id, opt.get("perso"), opt.get("type"), opt.get("cible"), payload.get("channel_id"), opt.get("objet"))
             except RuntimeError as e:
                 return await _modifier(app_id, jeton, [eco_vues.erreur(str(e))])
             complet = await combat.combat_complet(eco.pb, c["id"])
@@ -273,6 +273,18 @@ async def _combat_bouton(eco, payload, membre, app_id, combat_id, choix):
     await eco.pb.maj("combats", combat_id, {"discord_poste": complet["statut"]})
 
 
+async def _jet_bouton(eco, payload, membre, app_id, jet_id, choix):
+    """Bouton sous un jet du site : demande déposée sur le jet, le site l'applique, puis le message est mis à jour."""
+    jeton = payload["token"]
+    try:
+        jet = await jets_site.agir(eco.pb, membre.id, jet_id, choix)
+    except RuntimeError as e:
+        return await _suivi_prive(app_id, jeton, eco_vues.erreur(str(e)))
+    corps = jets_site.corps_message(jet)
+    await _modifier(app_id, jeton, corps["embeds"], corps["components"])
+    await eco.pb.maj("jets", jet_id, {"discord_a_maj": False})
+
+
 # ---------------------------------------------------------------- menus et boutons
 
 async def _composant(eco, payload, membre, taches, app_id) -> dict:
@@ -286,8 +298,14 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
     if cid == "eco:shop":
         return _maj_v2(await eco_vues.vue_boutique(eco, membre, valeurs[0]))
     if morceaux[1] == "cbt":
-        # Combat : accepter / refuser (défenseur), voter en cas d'égalité (les deux joueurs).
-        _en_fond(taches, _combat_bouton, eco, payload, membre, app_id, morceaux[2], morceaux[3])
+        # Combat : accepter / refuser (défenseur, éventuellement avec un objet du menu), voter en cas d'égalité,
+        # Try again / Échec critique après les jets.
+        choix = f"obj:{valeurs[0]}" if morceaux[3] == "obj" and valeurs else morceaux[3]
+        _en_fond(taches, _combat_bouton, eco, payload, membre, app_id, morceaux[2], choix)
+        return {"type": DIFFERE_MAJ}
+    if morceaux[1] == "jet":
+        # Jet du site publié sur Discord : Try again (le lanceur) / Échec critique (un autre joueur).
+        _en_fond(taches, _jet_bouton, eco, payload, membre, app_id, morceaux[2], morceaux[3])
         return {"type": DIFFERE_MAJ}
     if morceaux[1] == "pg":
         return _maj_v2(await eco_vues.vue_boutique(eco, membre, morceaux[2], int(morceaux[3]), morceaux[4]))
