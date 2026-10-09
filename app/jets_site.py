@@ -96,6 +96,13 @@ def construire_embed(jet: dict) -> discord.Embed:
         detail += f" {'+' if bonus > 0 else '−'} {abs(bonus)}"
     detail += f" = **{jet.get('total')}**"
     lignes = [f"# {jet.get('total')}", detail]
+    # Avantage / désavantage (états, ou « Ça ne compte que pour un ») : les deux jets sont montrés, l'écarté barré.
+    if jet.get("mode_jet") in ("avantage", "desavantage") and jet.get("des_ecartes"):
+        ecarte = ", ".join(str(d) for d in jet["des_ecartes"])
+        garde = "le meilleur" if jet["mode_jet"] == "avantage" else "le moins bon"
+        lignes.append(f"🎲 Deux jets, on garde {garde} : [{', '.join(str(d) for d in des)}] gardé · ~~[{ecarte}]~~ écarté")
+    elif jet.get("mode_jet") == "echec_auto":
+        lignes.append("❌ Échec d'office (état)")
     if jet.get("dd"):
         dd = str(jet["dd"])
         lignes.append(f"DD du sort : **{dd if dd.startswith(('>', '<')) else '> ' + dd}**")
