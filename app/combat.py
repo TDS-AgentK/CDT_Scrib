@@ -33,13 +33,22 @@ def _secret() -> str:
     return os.getenv("CDT_SECRET_PARTAGE") or os.getenv("BOT_SITE_SECRET") or ""
 
 
+# Adresse du site : SITE_URL si elle est posée, sinon le site en ligne (le bot et le site partagent déjà la base,
+# mais le moteur de calcul n'existe que sur le site : il faut l'appeler pour arbitrer).
+SITE_PAR_DEFAUT = "https://cdtsite-production.up.railway.app"
+
+
+def _site_url() -> str:
+    return (os.getenv("SITE_URL") or SITE_PAR_DEFAUT).rstrip("/")
+
+
 def configure() -> bool:
-    return bool(os.getenv("SITE_URL") and _secret())
+    return bool(_secret())
 
 
 async def site(methode: str, params: dict | None = None, corps: dict | None = None):
     """Appel de /api/bot/combat ; lève RuntimeError avec le message du site en cas de refus."""
-    url = os.getenv("SITE_URL", "").rstrip("/") + "/api/bot/combat"
+    url = _site_url() + "/api/bot/combat"
     async with httpx.AsyncClient(timeout=15) as client:
         r = await client.request(methode, url, params=params, json=corps, headers={"X-Bot-Secret": _secret()})
     if r.status_code >= 400:

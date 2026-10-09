@@ -172,7 +172,7 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
         if nom == "attaque":
             # Combat des fiches de jeu (app/combat.py) : le site arbitre, le bot affiche le défi et ses boutons.
             if not combat.configure():
-                return await _modifier(app_id, jeton, [eco_vues.erreur("Le combat n'est pas encore branché (SITE_URL et CDT_SECRET_PARTAGE).")])
+                return await _modifier(app_id, jeton, [eco_vues.erreur("Le combat n'est pas encore branché (variable CDT_SECRET_PARTAGE du bot).")])
             try:
                 c = await combat.site("POST", corps={"discord_id": str(membre.id), "action": "proposer", "fiche": opt.get("perso"),
                                                     "attaque": opt.get("type"), "defenseur": opt.get("cible"), "salon_id": payload.get("channel_id")})

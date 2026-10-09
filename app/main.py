@@ -104,7 +104,7 @@ async def startup():
     if combat.configure():
         asyncio.create_task(combat.boucle(gateway, pocketbase))
     else:
-        log.info("Combat non branché : SITE_URL et CDT_SECRET_PARTAGE absents.")
+        log.info("Combat non branché : CDT_SECRET_PARTAGE absent.")
 
 
 @app.on_event("shutdown")
