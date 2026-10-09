@@ -315,4 +315,7 @@ def vue_discord(composants: list) -> discord.ui.View | None:
             elif c["type"] == 2:
                 vue.add_item(discord.ui.Button(custom_id=c.get("custom_id"), label=c.get("label"), style=discord.ButtonStyle(c.get("style", 2)),
                                                disabled=c.get("disabled", False), row=ligne))
+            elif c["type"] == 3:
+                vue.add_item(discord.ui.Select(custom_id=c["custom_id"], placeholder=c.get("placeholder"), row=ligne,
+                                               options=[discord.SelectOption(label=o["label"], value=o["value"]) for o in c.get("options", [])]))
     return vue

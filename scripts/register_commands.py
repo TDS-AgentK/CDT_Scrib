@@ -175,6 +175,7 @@ COMMANDS = [
             {"type": 3, "name": "perso", "description": "Votre personnage (fiche de jeu)", "required": True, "autocomplete": True},
             {"type": 3, "name": "type", "description": "Arme ou sort utilisé", "required": True, "autocomplete": True},
             {"type": 3, "name": "cible", "description": "Personnage attaqué (⚔ = à la table de la session)", "required": True, "autocomplete": True},
+            {"type": 3, "name": "objet", "description": "Objet de hasard de votre inventaire (facultatif, consommé si le défi est accepté)", "required": False, "autocomplete": True},
         ],
     },
     {
