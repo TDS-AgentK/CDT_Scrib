@@ -1,7 +1,7 @@
 """Combat des fiches de jeu (/attaque) : le site arbitre, le bot ne fait que l'interface Discord.
 
 Le moteur de calcul n'existe que sur le site : le bot appelle donc la route `/api/bot/combat` du site (variables
-SITE_URL et BOT_SITE_SECRET, la même valeur que BOT_SITE_SECRET du site) pour déclarer un combat, accepter ou refuser,
+SITE_URL et CDT_SECRET_PARTAGE, la même valeur que le secret du site) pour déclarer un combat, accepter ou refuser,
 voter en cas d'égalité, et pour l'autocomplétion. Il lit la collection `combats` dans la base pour publier :
 - les combats lancés depuis le site (bouton « Attaquer » de la fiche) ;
 - chaque changement de statut (en attente → refusé / expiré / égalité / résolu), en modifiant le même message.
@@ -28,15 +28,20 @@ NOMS_MODE = {"avantage": "avantage", "desavantage": "désavantage", "maximum": "
 
 # ---------------------------------------------------------------- appels au site
 
+def _secret() -> str:
+    # Nom posé sur Railway : CDT_SECRET_PARTAGE (BOT_SITE_SECRET accepté aussi).
+    return os.getenv("CDT_SECRET_PARTAGE") or os.getenv("BOT_SITE_SECRET") or ""
+
+
 def configure() -> bool:
-    return bool(os.getenv("SITE_URL") and os.getenv("BOT_SITE_SECRET"))
+    return bool(os.getenv("SITE_URL") and _secret())
 
 
 async def site(methode: str, params: dict | None = None, corps: dict | None = None):
     """Appel de /api/bot/combat ; lève RuntimeError avec le message du site en cas de refus."""
     url = os.getenv("SITE_URL", "").rstrip("/") + "/api/bot/combat"
     async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.request(methode, url, params=params, json=corps, headers={"X-Bot-Secret": os.getenv("BOT_SITE_SECRET", "")})
+        r = await client.request(methode, url, params=params, json=corps, headers={"X-Bot-Secret": _secret()})
     if r.status_code >= 400:
         raise RuntimeError(r.text or f"Erreur {r.status_code} du site")
     return r.json()
