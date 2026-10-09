@@ -122,9 +122,11 @@ async def autocompletion(eco, membre, focus: str, options: dict, tape: str) -> l
             sessions = await pb.lister("sessions_jeu", 'statut="ouverte"')
             table = set((sessions[0].get("table") or []) if sessions else [])
             choix = []
-            for f in await pb.lister("fiches_jeu", f'genre!="mj" && personnage.joueur!="{pseudo}"', expand="personnage"):
+            # Vos autres personnages sont proposés aussi (combat entre ses propres fiches) ; seule la fiche qui attaque est exclue.
+            for f in await pb.lister("fiches_jeu", 'genre!="mj"', expand="personnage"):
                 marque = "⚔ " if f["id"] in table else ""
-                choix.append((f["id"] not in table, {"name": f"{marque}{_nom_fiche(f)}"[:100], "value": f'{f["id"]}:'}))
+                if f["id"] != options.get("perso"):
+                    choix.append((f["id"] not in table, {"name": f"{marque}{_nom_fiche(f)}"[:100], "value": f'{f["id"]}:'}))
                 formes = {x.get("id"): x for x in f.get("formes") or []}
                 for i in f.get("invocations") or []:
                     fo = formes.get(i.get("forme_id"))
