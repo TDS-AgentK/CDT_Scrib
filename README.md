@@ -37,6 +37,12 @@ Sessions de jeu des fiches du site (`app/sessions_jeu.py`, collection `sessions_
 `/session rejoindre perso` (une fiche de jeu de vos personnages), `/session voir`, `/session clore` (MJ, personne qui
 l'a ouverte ou administrateur du serveur). Les jets lancés depuis le site pendant la session y sont rattachés.
 
+Combat des fiches de jeu (`app/combat.py`, collection `combats`) : `/attaque perso type cible` (autocomplétion de vos
+fiches, de leurs armes et sorts, et des cibles ; ⚔ = à la table de la session). Le site arbitre (route
+`/api/bot/combat`, variables `SITE_URL` et `CDT_SECRET_PARTAGE`) : le joueur de la cible accepte ou refuse (10 minutes),
+jets d'attaque et de CA avec les états, égalité tranchée par vote puis 1d2, dégâts retirés des PV. Le bot publie aussi
+les combats lancés depuis le site et met à jour le même message à chaque étape.
+
 Événement Rostheim et commande RP (définis dans la base : `ros_commandes`, `ros_domaines`, `ros_paliers`,
 `ros_recompenses`, `eco_commande_rp`) : commandes de gain (`??texte`, `??lore`…) avec rôle requis, salon autorisé et
 limites ; conversions `??gold-<monnaie>` / `??xp-<monnaie>` ; boutiques de domaine `??dépenser-<monnaie> [numéro]` ;

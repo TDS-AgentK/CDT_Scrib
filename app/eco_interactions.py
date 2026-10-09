@@ -10,13 +10,13 @@ import logging
 import discord
 import httpx
 
-from app import drop, eco_actions, eco_vues, loteries, receleur, ros_boutique, sessions_jeu
+from app import combat, drop, eco_actions, eco_vues, loteries, receleur, ros_boutique, sessions_jeu
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
              "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
-             "session", "recompense"}
+             "session", "recompense", "attaque"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -41,6 +41,16 @@ async def _webhook(methode: str, url: str, corps: dict, fichier: bytes | None = 
 async def _modifier(app_id: str, jeton: str, embeds: list[dict], composants: list | None = None, fichier: bytes | None = None, contenu: str = ""):
     corps = {"content": contenu, "embeds": embeds, "components": composants or [], "allowed_mentions": {"parse": ["users"]}}
     await _webhook("PATCH", f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}/messages/@original", corps, fichier)
+
+
+async def _original(app_id: str, jeton: str) -> str:
+    """Identifiant du message de réponse d'une interaction (pour le modifier plus tard)."""
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}/messages/@original", timeout=10)
+            return str(r.json().get("id") or "") if r.status_code < 400 else ""
+    except httpx.HTTPError:
+        return ""
 
 
 async def _suivi_prive(app_id: str, jeton: str, embed: dict):
@@ -159,6 +169,22 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
         if nom == "dropadmin":
             ok, txt = await drop.lancer_admin(eco, membre, opt.get("objet"), int(opt.get("quantite") or 1), int(opt.get("or") or 0), int(opt.get("duree") or 0), payload.get("channel_id"))
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+        if nom == "attaque":
+            # Combat des fiches de jeu (app/combat.py) : le site arbitre, le bot affiche le défi et ses boutons.
+            if not combat.configure():
+                return await _modifier(app_id, jeton, [eco_vues.erreur("Le combat n'est pas encore branché (SITE_URL et CDT_SECRET_PARTAGE).")])
+            try:
+                c = await combat.site("POST", corps={"discord_id": str(membre.id), "action": "proposer", "fiche": opt.get("perso"),
+                                                    "attaque": opt.get("type"), "defenseur": opt.get("cible"), "salon_id": payload.get("channel_id")})
+            except RuntimeError as e:
+                return await _modifier(app_id, jeton, [eco_vues.erreur(str(e))])
+            complet = await combat.combat_complet(eco.pb, c["id"])
+            m = await combat.message(eco.pb, complet)
+            await _modifier(app_id, jeton, m["embeds"], m["components"], contenu=m["content"])
+            # Le message du défi sera mis à jour au fil du combat (réponse sur le site comprise).
+            original = await _original(app_id, jeton)
+            await eco.pb.maj("combats", c["id"], {"discord_poste": complet["statut"], "discord_message_id": original})
+            return
         if nom == "session":
             # Sessions de jeu des fiches du site (app/sessions_jeu.py), annoncées dans le salon.
             sous = data["options"][0]
@@ -236,6 +262,21 @@ async def _vue_echange(eco, e: dict, de, vers, statut: str | None = None) -> tup
     ]}]
 
 
+async def _combat_bouton(eco, payload, membre, app_id, combat_id, choix):
+    """Bouton d'un message de combat : le site tranche, puis le message est mis à jour (ou une erreur privée)."""
+    jeton = payload["token"]
+    corps = {"discord_id": str(membre.id), "combat": combat_id}
+    corps.update({"action": "repondre", "accepte": choix == "ok"} if choix in ("ok", "no") else {"action": "voter", "choix": "attaquant" if choix == "va" else "defenseur"})
+    try:
+        await combat.site("POST", corps=corps)
+    except RuntimeError as e:
+        return await _suivi_prive(app_id, jeton, eco_vues.erreur(str(e)))
+    complet = await combat.combat_complet(eco.pb, combat_id)
+    m = await combat.message(eco.pb, complet)
+    await _modifier(app_id, jeton, m["embeds"], m["components"], contenu=m["content"])
+    await eco.pb.maj("combats", combat_id, {"discord_poste": complet["statut"]})
+
+
 # ---------------------------------------------------------------- menus et boutons
 
 async def _composant(eco, payload, membre, taches, app_id) -> dict:
@@ -248,6 +289,10 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
         return _maj_v2(eco_vues.boutique_fermee())
     if cid == "eco:shop":
         return _maj_v2(await eco_vues.vue_boutique(eco, membre, valeurs[0]))
+    if morceaux[1] == "cbt":
+        # Combat : accepter / refuser (défenseur), voter en cas d'égalité (les deux joueurs).
+        _en_fond(taches, _combat_bouton, eco, payload, membre, app_id, morceaux[2], morceaux[3])
+        return {"type": DIFFERE_MAJ}
     if morceaux[1] == "pg":
         return _maj_v2(await eco_vues.vue_boutique(eco, membre, morceaux[2], int(morceaux[3]), morceaux[4]))
     if morceaux[1] == "tri":
@@ -405,6 +450,10 @@ async def _autocompletion(eco, payload) -> dict:
             choix = [{"name": n[:100], "value": i} for i, n in vus.items() if tape in n.lower()]
         else:
             choix = [{"name": eco.rostheim.nom_court(c)[:100], "value": c["id"]} for _d, c in couples if tape in eco.rostheim.nom_court(c).lower()]
+    elif data["name"] == "attaque":
+        membre = await _membre(eco, payload)
+        valeurs = {o["name"]: o.get("value") for o in options}
+        choix = await combat.autocompletion(membre.id if membre else 0, focus["name"], valeurs, tape) if membre and combat.configure() else []
     elif focus["name"] == "perso" and data["name"] == "session":
         membre = await _membre(eco, payload)
         joueur = await eco.joueur_de(membre) if membre else None
