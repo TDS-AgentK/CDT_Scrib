@@ -101,10 +101,8 @@ async def startup():
     asyncio.create_task(jets_site.boucle(gateway, pocketbase))
     # Combats (/attaque et bouton « Attaquer » du site) : défis lancés depuis le site, changements de statut, expirations.
     from app import combat
-    # La boucle ne lit que la base partagée : elle tourne même sans secret (combats lancés depuis le site).
+    # Tout passe par la base partagée (comme Rostheim) : aucune variable à poser.
     asyncio.create_task(combat.boucle(gateway, pocketbase))
-    if not combat.configure():
-        log.warning("CDT_SECRET_PARTAGE absent : /attaque ne pourra pas joindre le site.")
 
 
 @app.on_event("shutdown")

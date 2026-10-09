@@ -170,12 +170,9 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             ok, txt = await drop.lancer_admin(eco, membre, opt.get("objet"), int(opt.get("quantite") or 1), int(opt.get("or") or 0), int(opt.get("duree") or 0), payload.get("channel_id"))
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
         if nom == "attaque":
-            # Combat des fiches de jeu (app/combat.py) : le site arbitre, le bot affiche le défi et ses boutons.
-            if not combat.configure():
-                return await _modifier(app_id, jeton, [eco_vues.erreur("Le combat n'est pas encore branché (variable CDT_SECRET_PARTAGE du bot).")])
+            # Combat des fiches de jeu (app/combat.py) : demande déposée dans la base, le site arbitre, le bot affiche.
             try:
-                c = await combat.site("POST", corps={"discord_id": str(membre.id), "action": "proposer", "fiche": opt.get("perso"),
-                                                    "attaque": opt.get("type"), "defenseur": opt.get("cible"), "salon_id": payload.get("channel_id")})
+                c = await combat.proposer(eco.pb, membre.id, opt.get("perso"), opt.get("type"), opt.get("cible"), payload.get("channel_id"))
             except RuntimeError as e:
                 return await _modifier(app_id, jeton, [eco_vues.erreur(str(e))])
             complet = await combat.combat_complet(eco.pb, c["id"])
@@ -263,12 +260,11 @@ async def _vue_echange(eco, e: dict, de, vers, statut: str | None = None) -> tup
 
 
 async def _combat_bouton(eco, payload, membre, app_id, combat_id, choix):
-    """Bouton d'un message de combat : le site tranche, puis le message est mis à jour (ou une erreur privée)."""
+    """Bouton d'un message de combat : demande déposée dans la base, le site tranche, puis le message est mis à jour
+    (ou une erreur privée)."""
     jeton = payload["token"]
-    corps = {"discord_id": str(membre.id), "combat": combat_id}
-    corps.update({"action": "repondre", "accepte": choix == "ok"} if choix in ("ok", "no") else {"action": "voter", "choix": "attaquant" if choix == "va" else "defenseur"})
     try:
-        await combat.site("POST", corps=corps)
+        await combat.agir(eco.pb, membre.id, combat_id, choix)
     except RuntimeError as e:
         return await _suivi_prive(app_id, jeton, eco_vues.erreur(str(e)))
     complet = await combat.combat_complet(eco.pb, combat_id)
@@ -453,12 +449,10 @@ async def _autocompletion(eco, payload) -> dict:
     elif data["name"] == "attaque":
         membre = await _membre(eco, payload)
         valeurs = {o["name"]: o.get("value") for o in options}
-        if not combat.configure():
-            choix = [{"name": "⚠ Bot sans CDT_SECRET_PARTAGE : variable absente sur CDT_Scrib", "value": "-"}]
-        elif not membre:
+        if not membre:
             choix = [{"name": "⚠ Membre Discord introuvable", "value": "-"}]
         else:
-            choix = await combat.autocompletion(membre.id, focus["name"], valeurs, tape)
+            choix = await combat.autocompletion(eco, membre, focus["name"], valeurs, tape)
     elif focus["name"] == "perso" and data["name"] == "session":
         membre = await _membre(eco, payload)
         joueur = await eco.joueur_de(membre) if membre else None
