@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, Request, Response
 from fastapi.responses import FileResponse
 
+from app import eco_interactions
 from app.database import Database
 from app.discord_types import EPHEMERAL_FLAG, InteractionType, ResponseType
 from app.handlers import find_subcommand, handle_autocomplete, handle_command, handle_modal_submit, validate_image_upload
@@ -15,6 +16,7 @@ from app.verify import verify_signature
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)  # une ligne par requête PocketBase sinon
 log = logging.getLogger("cdt_scrib")
 
 DISCORD_PUBLIC_KEY = os.getenv("DISCORD_PUBLIC_KEY")
@@ -30,10 +32,86 @@ if not DISCORD_PUBLIC_KEY:
 app = FastAPI()
 db = Database(DATABASE_PATH)
 
+# Économie (connexion Gateway permanente, en plus de l'endpoint /interactions) : démarrée seulement si
+# le jeton du bot et l'accès à la base du site sont configurés ; sinon le bot fonctionne comme avant.
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+PB_URL = os.getenv("PB_URL")
+gateway = None
+pocketbase = None
+economie = None
+
+
+@app.on_event("startup")
+async def startup():
+    global gateway, pocketbase, economie
+    if not (DISCORD_TOKEN and PB_URL):
+        log.info("Économie désactivée (DISCORD_TOKEN ou PB_URL absent).")
+        return
+    import asyncio
+
+    import discord
+
+    from app.economie import Economie
+    from app.pocketbase import PocketBase
+
+    intents = discord.Intents.default()
+    intents.message_content = True
+    intents.members = True
+    gateway = discord.Client(intents=intents)
+    pocketbase = PocketBase(PB_URL, os.getenv("PB_EMAIL", ""), os.getenv("PB_PASSWORD", ""))
+    economie = Economie(pocketbase, gateway, os.getenv("ECO_PREFIX", "??"), os.getenv("ECO_GUILD_ID") or None)
+    gateway.event(economie.on_message)
+    # Salons et rôles du serveur copiés dans la base, pour les listes déroulantes de la page Économie du site.
+    from app import discord_listes
+    synchro_listes = discord_listes.brancher(gateway, pocketbase, economie.guild_id)
+
+    @gateway.event
+    async def on_ready():
+        log.info("Économie connectée à Discord en tant que %s", gateway.user)
+        synchro_listes()
+        # /session et /attaque (fiches de jeu) : déclarées ici, sans toucher aux autres commandes ni relancer
+        # scripts/register_commands.py à la main.
+        from scripts.register_commands import COMMANDS
+        for nom in ("session", "attaque"):
+            try:
+                commande = next(c for c in COMMANDS if c["name"] == nom)
+                if os.getenv("GUILD_ID"):
+                    await gateway.http.upsert_guild_command(DISCORD_APPLICATION_ID, os.getenv("GUILD_ID"), commande)
+                else:
+                    await gateway.http.upsert_global_command(DISCORD_APPLICATION_ID, commande)
+            except Exception:
+                log.exception("Impossible de déclarer la commande /%s", nom)
+
+    asyncio.create_task(gateway.start(DISCORD_TOKEN))
+    asyncio.create_task(economie.boucle_roles_temporaires())
+    # Embeds de palier Rostheim envoyés à la demande depuis le site (bouton « Envoyer dans le salon »).
+    asyncio.create_task(economie.rostheim.boucle_envois())
+    # Annonce quotidienne des anniversaires et décès des personnages (réglages : Économie › Anniversaires).
+    from app import anniversaires
+    asyncio.create_task(anniversaires.boucle(gateway, pocketbase))
+    # Drops d'objets non ramassés (rattrapage après redémarrage) et loteries admin (publication, tirage).
+    from app import drop, loteries
+    asyncio.create_task(drop.boucle(economie))
+    asyncio.create_task(loteries.boucle(economie))
+    # Nouveaux objets : ligne au Receleur et rappel à Kyanite de fixer le prix de reprise.
+    from app import receleur
+    asyncio.create_task(receleur.surveiller_nouveaux_objets(economie))
+    # Jets de dés lancés depuis les fiches de jeu du site : publiés dans le salon choisi (#random ou salon perso).
+    from app import jets_site
+    asyncio.create_task(jets_site.boucle(gateway, pocketbase))
+    # Combats (/attaque et bouton « Attaquer » du site) : défis lancés depuis le site, changements de statut, expirations.
+    from app import combat
+    # Tout passe par la base partagée (comme Rostheim) : aucune variable à poser.
+    asyncio.create_task(combat.boucle(gateway, pocketbase))
+
 
 @app.on_event("shutdown")
 async def shutdown():
     await db.close()
+    if gateway:
+        await gateway.close()
+    if pocketbase:
+        await pocketbase.close()
 
 
 @app.get("/")
@@ -109,6 +187,17 @@ async def interactions(request: Request, background_tasks: BackgroundTasks):
         return {"type": ResponseType.PONG}
 
     member_or_user = payload.get("member", {}).get("user") or payload.get("user")
+
+    # Économie : commandes slash (/boutique, /argent…), autocomplétion, clics sur ses menus/boutons et
+    # fenêtres (custom_id « eco:… »).
+    donnees = payload.get("data") or {}
+    if economie is not None and (
+        (interaction_type in (InteractionType.APPLICATION_COMMAND, InteractionType.APPLICATION_COMMAND_AUTOCOMPLETE)
+         and donnees.get("name") in eco_interactions.COMMANDES)
+        or (interaction_type in (InteractionType.MESSAGE_COMPONENT, InteractionType.MODAL_SUBMIT)
+            and donnees.get("custom_id", "").startswith("eco:"))
+    ):
+        return await eco_interactions.repondre(economie, payload, background_tasks, DISCORD_APPLICATION_ID)
 
     if interaction_type == InteractionType.APPLICATION_COMMAND:
         data = payload["data"]

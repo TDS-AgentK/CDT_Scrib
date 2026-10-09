@@ -84,7 +84,135 @@ COMMANDS = [
                 "description": "Lister toutes les fiches disponibles",
             },
         ],
-    }
+    },
+    # Économie (app/eco_interactions.py)
+    *[
+        {"name": nom, "description": desc,
+         "options": [{"type": 6, "name": "membre", "description": "Membre à afficher (vous par défaut)", "required": False}]}
+        for nom, desc in (("argent", "Votre Or, votre place et votre record"),
+                          ("niveau", "Votre niveau et votre progression"),
+                          ("inventaire", "Votre Or, vos monnaies Rostheim et vos objets"))
+    ],
+    {"name": "topargent", "description": "Classement d'économie (Or)"},
+    {"name": "topniveau", "description": "Classement des niveaux (XP)"},
+    {"name": "boutique", "description": "Ouvrir la boutique et acheter des articles"},
+    {
+        "name": "payer", "description": "Donner de l'Or (ou une monnaie Rostheim) à un membre",
+        "options": [
+            {"type": 6, "name": "membre", "description": "Membre qui reçoit", "required": True},
+            {"type": 4, "name": "montant", "description": "Montant", "required": True, "min_value": 1},
+            {"type": 3, "name": "monnaie", "description": "Or par défaut", "required": False, "autocomplete": True},
+        ],
+    },
+    {
+        "name": "donner", "description": "Donner un objet de votre inventaire à un membre",
+        "options": [
+            {"type": 6, "name": "membre", "description": "Membre qui reçoit", "required": True},
+            {"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True},
+            {"type": 4, "name": "quantite", "description": "Quantité (1 par défaut)", "required": False, "min_value": 1},
+        ],
+    },
+    {
+        "name": "vendre", "description": "Vendre un objet de votre inventaire au Receleur contre de l'Or",
+        "options": [
+            {"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True},
+            {"type": 4, "name": "quantite", "description": "Quantité (1 par défaut)", "required": False, "min_value": 1},
+        ],
+    },
+    {
+        "name": "recompense", "description": "Réclamer la récompense d'une action de Rostheim (texte, lore, quiz…)",
+        "options": [
+            {"type": 3, "name": "zone", "description": "Zone : Académie, Veille, Théâtre…", "required": True, "autocomplete": True},
+            {"type": 3, "name": "type", "description": "Action réalisée dans cette zone", "required": True, "autocomplete": True},
+        ],
+    },
+    {"name": "receleur", "description": "Voir ce que le Receleur reprend et vend, et vos ventes de la semaine", "options": []},
+    {
+        "name": "racheter", "description": "Acheter un objet au Receleur",
+        "options": [
+            {"type": 3, "name": "objet", "description": "Objet en vente chez le Receleur", "required": True, "autocomplete": True},
+            {"type": 4, "name": "quantite", "description": "Quantité (1 par défaut)", "required": False, "min_value": 1},
+        ],
+    },
+    {
+        "name": "drop", "description": "Lâcher un objet dans le salon : le premier qui le ramasse le garde, sinon il file chez le Receleur",
+        "options": [
+            {"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True},
+            {"type": 4, "name": "duree", "description": "Durée en secondes (5 à 120)", "required": True, "min_value": 5, "max_value": 120},
+            {"type": 4, "name": "quantite", "description": "Quantité (1 par défaut)", "required": False, "min_value": 1},
+        ],
+    },
+    {
+        "name": "dropadmin", "description": "Drop d'un objet et/ou d'Or créés pour l'occasion (administrateurs de loterie)",
+        "options": [
+            {"type": 4, "name": "duree", "description": "Durée en secondes (5 à 3600)", "required": True, "min_value": 5, "max_value": 3600},
+            {"type": 3, "name": "objet", "description": "Objet du catalogue", "required": False, "autocomplete": True},
+            {"type": 4, "name": "quantite", "description": "Quantité de l'objet (1 par défaut)", "required": False, "min_value": 1},
+            {"type": 4, "name": "or", "description": "Or à ramasser", "required": False, "min_value": 1},
+        ],
+    },
+    {
+        "name": "loterie", "description": "Loteries (administrateurs de loterie)",
+        "options": [{
+            "type": 1, "name": "creer", "description": "Créer une loterie",
+            "options": [
+                {"type": 3, "name": "titre", "description": "Titre de la loterie", "required": True},
+                {"type": 3, "name": "fin", "description": "Fin du tirage : JJ/MM/AAAA HH:MM (heure de Paris)", "required": True},
+                {"type": 4, "name": "gagnants", "description": "Nombre de gagnants (1 par défaut)", "required": False, "min_value": 1},
+                {"type": 4, "name": "or", "description": "Or gagné par chaque gagnant", "required": False, "min_value": 1},
+                {"type": 3, "name": "objet", "description": "Objet gagné par chaque gagnant", "required": False, "autocomplete": True},
+                {"type": 4, "name": "quantite", "description": "Quantité de l'objet (1 par défaut)", "required": False, "min_value": 1},
+                {"type": 4, "name": "prix_ticket", "description": "Prix d'un ticket en Or (0 = gratuit)", "required": False, "min_value": 0},
+                {"type": 4, "name": "max_tickets", "description": "Tickets maximum par joueur (1 par défaut)", "required": False, "min_value": 1},
+                {"type": 7, "name": "salon", "description": "Salon de l'annonce (le salon actuel par défaut)", "required": False},
+            ],
+        }],
+    },
+    {
+        # Combat des fiches de jeu (app/combat.py) : le site arbitre, le joueur de la cible accepte ou refuse.
+        "name": "attaque", "description": "Attaquer un personnage avec une arme ou un sort de votre fiche de jeu",
+        "options": [
+            {"type": 3, "name": "perso", "description": "Votre personnage (fiche de jeu)", "required": True, "autocomplete": True},
+            {"type": 3, "name": "type", "description": "Arme ou sort utilisé", "required": True, "autocomplete": True},
+            {"type": 3, "name": "cible", "description": "Personnage attaqué (⚔ = à la table de la session)", "required": True, "autocomplete": True},
+            {"type": 3, "name": "objet", "description": "Objet de hasard de votre inventaire (facultatif, consommé si le défi est accepté)", "required": False, "autocomplete": True},
+        ],
+    },
+    {
+        # Sessions de jeu des fiches du site (app/sessions_jeu.py) : utilisables par tout le monde.
+        "name": "session", "description": "Sessions de jeu (MJ, table) des fiches de jeu du site",
+        "options": [
+            {"type": 1, "name": "ouvrir", "description": "Ouvrir une session de jeu (vous êtes MJ par défaut)", "options": [
+                {"type": 6, "name": "mj", "description": "Le MJ de la session (vous par défaut)", "required": False},
+                {"type": 3, "name": "event", "description": "Nom de l'event (facultatif)", "required": False, "max_length": 200},
+            ]},
+            {"type": 1, "name": "rejoindre", "description": "Mettre un de vos personnages à la table", "options": [
+                {"type": 3, "name": "perso", "description": "Fiche de jeu de votre personnage", "required": True, "autocomplete": True},
+            ]},
+            {"type": 1, "name": "voir", "description": "Voir la session en cours (MJ, table, jets)"},
+            {"type": 1, "name": "clore", "description": "Clore la session (MJ, personne qui l'a ouverte ou administrateur)"},
+        ],
+    },
+    {
+        "name": "utiliser", "description": "Utiliser un objet de votre inventaire",
+        "options": [{"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True}],
+    },
+    {
+        "name": "echanger", "description": "Proposer un échange (objets, Or et/ou monnaies Rostheim) à un membre",
+        "options": [
+            {"type": 6, "name": "membre", "description": "Membre à qui proposer l'échange", "required": True},
+            {"type": 3, "name": "donne_objet", "description": "Objet que vous donnez", "required": False, "autocomplete": True},
+            {"type": 4, "name": "donne_quantite", "description": "Quantité donnée (1 par défaut)", "required": False, "min_value": 1},
+            {"type": 4, "name": "donne_or", "description": "Or que vous donnez", "required": False, "min_value": 1},
+            {"type": 3, "name": "recoit_objet", "description": "Objet que vous voulez recevoir", "required": False, "autocomplete": True},
+            {"type": 4, "name": "recoit_quantite", "description": "Quantité reçue (1 par défaut)", "required": False, "min_value": 1},
+            {"type": 4, "name": "recoit_or", "description": "Or que vous voulez recevoir", "required": False, "min_value": 1},
+            {"type": 3, "name": "donne_monnaie", "description": "Monnaie Rostheim que vous donnez", "required": False, "autocomplete": True},
+            {"type": 4, "name": "donne_montant", "description": "Montant de cette monnaie", "required": False, "min_value": 1},
+            {"type": 3, "name": "recoit_monnaie", "description": "Monnaie Rostheim que vous voulez recevoir", "required": False, "autocomplete": True},
+            {"type": 4, "name": "recoit_montant", "description": "Montant de cette monnaie", "required": False, "min_value": 1},
+        ],
+    },
 ]
 
 
