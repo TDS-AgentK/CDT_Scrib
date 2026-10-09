@@ -195,7 +195,9 @@ async def boucle(client: discord.Client, pb: PocketBase):
                 if fin and fin < maintenant:
                     await pb.maj("combats", c["id"], {"statut": "expire", "detail": "Défi non accepté dans les 10 minutes."})
             # Combats dont le statut a changé depuis le dernier affichage (dont ceux lancés depuis le site).
-            for c in await pb.lister("combats", 'salon_id!="" && statut!=discord_poste', tri="created"):
+            # Tri en Python : la collection peut ne pas avoir de champ « created » (PocketBase ≥ 0.23).
+            a_publier = await pb.lister("combats", 'salon_id!="" && statut!=discord_poste')
+            for c in sorted(a_publier, key=lambda x: str(x.get("created") or "")):
                 quand = _date(c.get("created"))
                 if quand and maintenant - quand > FRAICHEUR and not c.get("discord_message_id"):
                     await pb.maj("combats", c["id"], {"discord_poste": c["statut"]})
