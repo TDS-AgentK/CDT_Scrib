@@ -242,6 +242,9 @@ async def publier(client: discord.Client, pb: PocketBase, c: dict):
     await pb.maj("combats", c["id"], maj)
 
 
+_attente_discord: dict[str, datetime] = {}  # combats /attaque pas encore publiés par la commande : vus pour la première fois à
+
+
 async def boucle(client: discord.Client, pb: PocketBase):
     await client.wait_until_ready()
     while not client.is_closed():
@@ -256,6 +259,13 @@ async def boucle(client: discord.Client, pb: PocketBase):
             # Tri en Python : la collection peut ne pas avoir de champ « created » (PocketBase ≥ 0.23).
             a_publier = await pb.lister("combats", 'salon_id!="" && statut!=discord_poste')
             for c in sorted(a_publier, key=lambda x: str(x.get("created") or "")):
+                if c.get("origine") == "discord" and not c.get("discord_message_id"):
+                    # /attaque publie lui-même son défi juste après le traitement du site : on lui laisse 30 s,
+                    # sinon la boucle passerait parfois avant lui et le défi serait posté deux fois.
+                    vu = _attente_discord.setdefault(c["id"], maintenant)
+                    if maintenant - vu < timedelta(seconds=30):
+                        continue
+                _attente_discord.pop(c["id"], None)
                 quand = _date(c.get("created"))
                 if quand and maintenant - quand > FRAICHEUR and not c.get("discord_message_id"):
                     await pb.maj("combats", c["id"], {"discord_poste": c["statut"]})
