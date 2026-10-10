@@ -20,8 +20,10 @@ BOUTIQUE = {"id": "cbout", "commande": "??dépenser-marque", "domaine": "dplace"
 
 
 class FauxPb:
+    commandes = [WUT, VIDE, TEXTE, BOUTIQUE]
+
     async def lister(self, collection, filtre=None, tri=None):
-        return {"ros_commandes": [WUT, VIDE, TEXTE, BOUTIQUE], "ros_domaines": [ACAD, PLACE]}.get(collection, [])
+        return {"ros_commandes": self.commandes, "ros_domaines": [ACAD, PLACE]}.get(collection, [])
 
     async def premier(self, collection, filtre=None):
         return None
@@ -109,6 +111,13 @@ class Recompense(unittest.TestCase):
         m = Message("!!texte", membre("Érudit"), self.place)
         self.assertTrue(lancer(self.r.traiter(m)))
         self.assertIn("/recompense", m.reponses[0])
+
+    def test_commande_supprimee_tapee(self):
+        # ??dépenser-marque supprimée de la base : le message n'est plus une commande Rostheim, rien ne plante.
+        self.r.pb.commandes = [WUT, TEXTE]
+        m = Message("!!dépenser-marque", membre("Fou du roi"), self.place)
+        self.assertFalse(lancer(self.r.traiter(m)))
+        self.assertEqual((m.reponses, m.envoyes), ([], []))
 
 
 if __name__ == "__main__":
