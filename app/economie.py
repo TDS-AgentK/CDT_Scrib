@@ -117,8 +117,8 @@ class Economie:
 
     @staticmethod
     def rostheim_types(commande: str) -> tuple:
-        from app.rostheim import TYPES_CONVERSION, TYPES_GAIN
-        return TYPES_GAIN if commande == "recompense" else TYPES_CONVERSION
+        from app.rostheim import TYPES_CONVERSION, TYPES_RECOMPENSE
+        return TYPES_RECOMPENSE if commande == "recompense" else TYPES_CONVERSION
 
     def _verrou(self, uid: int) -> asyncio.Lock:
         return self._verrous.setdefault(uid, asyncio.Lock())

@@ -461,8 +461,7 @@ async def _autocompletion(eco, payload) -> dict:
                     suffixe = f" — reprise {reprises[o['id']]} Or" if reprises.get(o["id"]) else ""
                     choix.append({"name": f'{o["nom"]} (×{l["quantite"]}){suffixe}'[:100], "value": o["id"]})
     elif data["name"] == "recompense" and focus["name"] in ("zone", "type"):
-        from app.rostheim import TYPES_GAIN
-        types = TYPES_GAIN
+        types = eco.rostheim_types("recompense")
         zone = next((o.get("value") for o in options if o["name"] == "zone"), None)
         couples = await eco.rostheim.actions(types, zone if focus["name"] == "type" else None)
         if focus["name"] == "zone":

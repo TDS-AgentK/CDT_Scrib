@@ -66,7 +66,9 @@ class Appel:
         return bool(self.reponses) and self.reponses[-1].startswith("+")
 
 
-TYPES_GAIN, TYPES_CONVERSION = ("gain",), ("conversion_or", "conversion_xp")
+TYPES_GAIN, TYPES_CONVERSION, TYPES_OUTIL = ("gain",), ("conversion_or", "conversion_xp"), ("outil",)
+# Tout ce que propose /recompense : les gains et les outils à réponse tirée au hasard (--wut).
+TYPES_RECOMPENSE = TYPES_GAIN + TYPES_OUTIL
 
 
 class Rostheim:
@@ -111,9 +113,9 @@ class Rostheim:
             return True
         domaine = next((x for x in d["domaines"] if x["id"] == cmd.get("domaine")), None)
         if cmd.get("type") == "outil" and (cmd.get("reponses") or "").strip():
-            # Ex. --wut : une réponse tirée au hasard, sans fiche joueur ni gain.
-            if await self._lieu_et_role(message, cmd, domaine):
-                await self.reponse_au_hasard(message, cmd)
+            # Ex. --wut : se lance maintenant avec /recompense (zone du domaine, action « Wut »).
+            zone = f' (zone {domaine.get("nom")}, action « {self.nom_court(cmd)} »)' if domaine else ""
+            await message.reply(f"Cette commande se lance maintenant avec **/recompense**{zone}.", mention_author=False)
             return True
         type_ = cmd.get("type")
         if type_ in ("boutique", "boite_a_role"):
@@ -149,7 +151,8 @@ class Rostheim:
         commandes, domaines, _ = await self._lire()
         par_id = {d["id"]: d for d in domaines}
         return [(par_id[c["domaine"]], c) for c in commandes
-                if c.get("type") in types and c.get("domaine") in par_id and (not zone or c["domaine"] == zone)]
+                if c.get("type") in types and c.get("domaine") in par_id and (not zone or c["domaine"] == zone)
+                and (c.get("type") != "outil" or (c.get("reponses") or "").strip())]
 
     async def slash(self, membre: discord.Member, cmd_id: str, types: tuple, channel_id: str | None, origine: str) -> tuple[bool, str]:
         if not (await self.eco.config())["reglages"].get("rostheim_actif"):
@@ -165,6 +168,11 @@ class Rostheim:
             except discord.HTTPException:
                 canal = None
         appel = Appel(membre, canal, origine)
+        if cmd["type"] in TYPES_OUTIL:
+            # Outil (--wut) : rôle et salon contrôlés, une réponse tirée au hasard, ni fiche joueur ni gain.
+            if not await self._lieu_et_role(appel, cmd, domaine):
+                return False, " ".join(appel.reponses)
+            return True, self.tirer_reponse(cmd)
         joueur = await self._autorise(appel, cmd, domaine)
         if joueur:
             if cmd["type"] in TYPES_GAIN:
@@ -186,6 +194,9 @@ class Rostheim:
         salon = (cmd.get("salon_autorise") or "").strip()
         if salon:
             ch = message.channel.parent if isinstance(message.channel, discord.Thread) else message.channel
+            if ch is None:  # /recompense lancée dans un salon que le bot ne voit pas
+                await message.reply(f"Cette commande se lance dans le salon #{salon}.", mention_author=False)
+                return False
             ids = {str(domaine.get("salon_id"))} if domaine and domaine.get("salon_id") and domaine.get("salon_nom") == salon else set()
             if str(ch.id) not in ids and not meme_nom(ch.name, salon):
                 await message.reply(f"Cette commande se lance dans le salon #{salon}.", mention_author=False)
@@ -210,16 +221,11 @@ class Rostheim:
                 return None
         return joueur
 
-    async def reponse_au_hasard(self, message: discord.Message, cmd: dict):
-        """Envoie une des réponses de la commande (une par ligne), et supprime le message déclencheur si demandé."""
+    @staticmethod
+    def tirer_reponse(cmd: dict) -> str:
+        """Une des réponses de l'outil (une par ligne), tirée au hasard."""
         import random
-        reponses = [l for l in (cmd.get("reponses") or "").splitlines() if l.strip()]
-        await message.channel.send(random.choice(reponses))
-        if cmd.get("supprimer_declencheur"):
-            try:
-                await message.delete()
-            except discord.HTTPException:
-                log.warning("Impossible de supprimer le message de commande (permission « Gérer les messages » ?)")
+        return random.choice([l for l in (cmd.get("reponses") or "").splitlines() if l.strip()])
 
     async def _solde(self, joueur: dict, domaine: dict) -> dict:
         s = await self.pb.premier("ros_soldes", f'joueur="{echapper(joueur["id"])}" && domaine="{echapper(domaine["id"])}"')
