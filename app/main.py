@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, Request, Response
 from fastapi.responses import FileResponse
 
-from app import eco_interactions
+from app import eco_interactions, fiche_ephemere
 from app.database import Database
 from app.discord_types import EPHEMERAL_FLAG, InteractionType, ResponseType
 from app.handlers import find_subcommand, handle_autocomplete, handle_command, handle_modal_submit, validate_image_upload
@@ -44,11 +44,14 @@ economie = None
 @app.on_event("startup")
 async def startup():
     global gateway, pocketbase, economie
+    import asyncio
+
+    # Messages de /fiche voir supprimés 24 h après publication (balayage au démarrage puis toutes les 5 min).
+    if DISCORD_TOKEN:
+        asyncio.create_task(fiche_ephemere.boucle(db, DISCORD_TOKEN))
     if not (DISCORD_TOKEN and PB_URL):
         log.info("Économie désactivée (DISCORD_TOKEN ou PB_URL absent).")
         return
-    import asyncio
-
     import discord
 
     from app.economie import Economie
@@ -130,15 +133,40 @@ async def get_image(filename: str):
     return FileResponse(path)
 
 
-async def _send_followup(interaction_token: str, embed: dict):
+async def _send_followup(interaction_token: str, embed: dict) -> dict | None:
+    """Renvoie le message publié (JSON Discord), ou None en cas d'échec."""
     url = f"https://discord.com/api/v10/webhooks/{DISCORD_APPLICATION_ID}/{interaction_token}"
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(url, json={"embeds": [embed]}, timeout=10)
             if resp.status_code >= 400:
                 log.error("Échec de l'envoi du message de suivi: %s %s", resp.status_code, resp.text)
-    except httpx.HTTPError as exc:
+                return None
+            return resp.json()
+    except (httpx.HTTPError, ValueError) as exc:
         log.error("Erreur réseau lors de l'envoi du message de suivi: %s", exc)
+        return None
+
+
+async def _get_original(interaction_token: str) -> dict | None:
+    url = f"https://discord.com/api/v10/webhooks/{DISCORD_APPLICATION_ID}/{interaction_token}/messages/@original"
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, timeout=10)
+            if resp.status_code >= 400:
+                log.error("Message d'origine introuvable: %s %s", resp.status_code, resp.text)
+                return None
+            return resp.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        log.error("Erreur réseau lors de la lecture du message d'origine: %s", exc)
+        return None
+
+
+async def _fiche_voir_suite(interaction_token: str, followup_embed: dict | None):
+    """/fiche voir : envoie les illustrations, puis programme la suppression des deux messages dans 24 h."""
+    await fiche_ephemere.programmer(db, await _get_original(interaction_token))
+    if followup_embed:
+        await fiche_ephemere.programmer(db, await _send_followup(interaction_token, followup_embed))
 
 
 async def _edit_original(interaction_token: str, content: str):
@@ -219,7 +247,9 @@ async def interactions(request: Request, background_tasks: BackgroundTasks):
             }
 
         response, followup_embed = await handle_command(db, data, member_or_user)
-        if followup_embed:
+        if sub_name == "voir" and not response.get("data", {}).get("flags"):
+            background_tasks.add_task(_fiche_voir_suite, payload["token"], followup_embed)
+        elif followup_embed:
             background_tasks.add_task(_send_followup, payload["token"], followup_embed)
         return response
 
