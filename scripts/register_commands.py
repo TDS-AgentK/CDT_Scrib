@@ -167,6 +167,7 @@ COMMANDS = [
                 {"type": 7, "name": "salon", "description": "Salon de l'annonce (le salon actuel par défaut)", "required": False},
                 {"type": 8, "name": "role", "description": "Rôle Discord gagné par chaque gagnant", "required": False},
                 {"type": 3, "name": "role_duree", "description": "Durée du rôle : 7j, 12h, 1j12h (vide = rôle définitif)", "required": False},
+                {"type": 3, "name": "gain", "description": "Gain personnalisé, remis à la main par un administrateur", "required": False, "max_length": 500},
                 {"type": 5, "name": "enregistrer", "description": "Enregistrer aussi comme modèle réutilisable", "required": False},
             ],
         }, {

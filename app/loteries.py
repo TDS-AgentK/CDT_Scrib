@@ -11,6 +11,8 @@ Lot possible : un rôle Discord (role_id, role_nom), définitif (role_heures = 0
 donné par Economie.donner_role ; un rôle temporaire est noté dans eco_roles_temporaires et retiré à l'échéance par
 Economie.boucle_roles_temporaires (rattrapage après redémarrage). Un rôle impossible à donner (rôle supprimé, rôle
 au-dessus de celui du bot) ne bloque pas le tirage : la raison est annoncée et notée dans « erreurs_lot ».
+Gain personnalisé (« gain_perso », texte libre) : affiché dans l'annonce et le tirage, rien n'est distribué sur Discord ;
+un administrateur le remet et le coche sur le site (« gains_remis »).
 """
 import re
 import asyncio
@@ -108,6 +110,8 @@ def _lot_txt(l: dict, objet: dict | None, cfg: dict) -> str:
         morceaux.append(_role_txt(l))
     if l.get("succes"):
         morceaux.append("un succès")
+    if (l.get("gain_perso") or "").strip():
+        morceaux.append(f"🎁 {l['gain_perso'].strip()}")
     return " + ".join(morceaux) or "—"
 
 
@@ -177,15 +181,16 @@ async def creer(eco, membre: discord.Member, o: dict, salon_defaut: str | None) 
         heures = lire_duree_role(o.get("role_duree"))
         if heures is None:
             return False, "Durée du rôle illisible : « 7j », « 12h », « 1j12h » ou vide pour un rôle définitif."
-    if not (o.get("or") or objet or role):
-        return False, "Indique un lot : de l'Or, un objet et/ou un rôle."
+    gain = (o.get("gain") or "").strip()[:500]
+    if not (o.get("or") or objet or role or gain):
+        return False, "Indique un lot : de l'Or, un objet, un rôle et/ou un gain personnalisé."
     salon_id = str(o.get("salon") or salon_defaut or "")
     l = await eco.pb.creer("eco_loteries", {
         "titre": o.get("titre") or "Loterie", "description": o.get("description") or "", "salon_id": salon_id, "objet": objet["id"] if objet else "",
         "quantite_objet": int(o.get("quantite") or 1) if objet else 0, "or_lot": int(o.get("or") or 0), "nombre_gagnants": int(o.get("gagnants") or 1),
         "prix_ticket": int(o.get("prix_ticket") or 0), "max_tickets": int(o.get("max_tickets") or 1), "fin": _pb_date(fin),
         "statut": "ouverte", "message_id": "", "cree_par": str(membre.id),
-        "role_id": str(role.id) if role else "", "role_nom": role.name if role else "", "role_heures": heures})
+        "role_id": str(role.id) if role else "", "role_nom": role.name if role else "", "role_heures": heures, "gain_perso": gain})
     await publier(eco, l)
     txt = f"Loterie « {l['titre']} » créée, tirage le {fin.strftime('%d/%m/%Y à %H:%M')} (heure de Paris)."
     if o.get("enregistrer"):
@@ -197,7 +202,7 @@ async def creer(eco, membre: discord.Member, o: dict, salon_defaut: str | None) 
 
 
 CHAMPS_MODELE = ("titre", "description", "salon_id", "objet", "quantite_objet", "or_lot", "nombre_gagnants", "prix_ticket", "max_tickets", "succes",
-                 "role_id", "role_nom", "role_heures")
+                 "role_id", "role_nom", "role_heures", "gain_perso")
 
 
 def _copie(source: dict) -> dict:
@@ -317,6 +322,8 @@ async def tirer(eco, l: dict):
     if not salon:
         return
     texte = ("Gagnant(s) : " + ", ".join(mentions) + f"\nLot : {_lot_txt(l, objet, cfg)}") if mentions else "Personne n'a participé."
+    if mentions and (l.get("gain_perso") or "").strip():
+        texte += f"\n\n🎁 Gain personnalisé : {l['gain_perso'].strip()} — remis par un administrateur."
     if erreurs:
         texte += "\n\n⚠️ Rôle non donné — un administrateur s'en chargera :\n" + "\n".join(erreurs)
     fin = discord.Embed(title=l.get("titre") or "Loterie", color=eco_vues.OR_DEFAUT, description=texte)
