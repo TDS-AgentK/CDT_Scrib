@@ -37,7 +37,10 @@ async def synchroniser(pb: PocketBase, guild: discord.Guild):
         if c.type in TYPES_SALONS:
             salons[str(c.id)] = {"nom": c.name, "type": TYPES_SALONS[c.type],
                                  "categorie": c.category.name if c.category else "", "position": c.position}
-    roles = {str(r.id): {"nom": r.name, "couleur": f"#{r.color.value:06x}" if r.color.value else "", "position": r.position}
+    # « gerable » : le bot peut donner ce rôle (permission « Gérer les rôles » et rôle du bot placé au-dessus).
+    peut = guild.me.guild_permissions.manage_roles
+    roles = {str(r.id): {"nom": r.name, "couleur": f"#{r.color.value:06x}" if r.color.value else "", "position": r.position,
+                         "gerable": bool(peut and r < guild.me.top_role)}
              for r in guild.roles if not r.is_default() and not r.managed}
     await _miroir(pb, "discord_salons", "salon_id", gid, salons)
     await _miroir(pb, "discord_roles", "role_id", gid, roles)

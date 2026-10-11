@@ -165,6 +165,8 @@ COMMANDS = [
                 {"type": 4, "name": "prix_ticket", "description": "Prix d'un ticket en Or (0 = gratuit)", "required": False, "min_value": 0},
                 {"type": 4, "name": "max_tickets", "description": "Tickets maximum par joueur (1 par défaut)", "required": False, "min_value": 1},
                 {"type": 7, "name": "salon", "description": "Salon de l'annonce (le salon actuel par défaut)", "required": False},
+                {"type": 8, "name": "role", "description": "Rôle Discord gagné par chaque gagnant", "required": False},
+                {"type": 3, "name": "role_duree", "description": "Durée du rôle : 7j, 12h, 1j12h (vide = rôle définitif)", "required": False},
                 {"type": 5, "name": "enregistrer", "description": "Enregistrer aussi comme modèle réutilisable", "required": False},
             ],
         }, {

@@ -307,23 +307,38 @@ class Economie:
             await self.donner_succes(joueur, r["succes"])
         return r.get("libelle") or r.get("recompense_role") or r.get("recompense_objet") or ""
 
-    async def donner_role(self, membre: discord.Member, joueur: dict | None, role_id: str | None, role_nom: str | None, jours: float) -> str | None:
-        """Donne le rôle ; renvoie None si c'est fait, sinon la raison de l'échec (rôle absent, permission manquante)."""
+    async def donner_role(self, membre: discord.Member, joueur: dict | None, role_id: str | None, role_nom: str | None, jours: float,
+                          origine: str = "") -> str | None:
+        """Donne le rôle ; renvoie None si c'est fait, sinon la raison de l'échec (rôle absent, permission manquante).
+        Rôle temporaire déjà en cours pour ce membre : l'échéance est prolongée (pas de doublon). Rôle déjà détenu
+        sans échéance : il reste définitif (on ne le rendra pas temporaire)."""
         role = self._role_discord(membre.guild, role_id, role_nom)
         if not role:
             log.warning("Rôle introuvable sur le serveur : %s", role_nom or role_id)
             return f"le rôle « {role_nom or role_id} » n'existe pas sur ce serveur"
-        try:
-            await membre.add_roles(role, reason="Économie CDT")
-        except discord.HTTPException as exc:
-            log.warning("Impossible de donner le rôle %s : %s", role.name, exc)
-            return f"je n'ai pas la permission de donner le rôle « {role.name} » (mon rôle doit être au-dessus, avec « Gérer les rôles »)"
+        deja = role in membre.roles
+        en_cours = None
         if jours:
-            expire = datetime.now(timezone.utc) + timedelta(days=jours)
-            await self.pb.creer("eco_roles_temporaires", {
-                "joueur": joueur["id"] if joueur else "", "discord_user_id": str(membre.id), "guild_id": str(membre.guild.id),
-                "role_id": str(role.id), "role_nom": role.name, "expire_le": _pb_date(expire),
-            })
+            en_cours = await self.pb.premier("eco_roles_temporaires", f'discord_user_id="{membre.id}" && role_id="{role.id}"')
+            if deja and not en_cours:
+                return None
+        if not deja:
+            try:
+                await membre.add_roles(role, reason=f"Économie CDT{' — ' + origine if origine else ''}")
+            except discord.HTTPException as exc:
+                log.warning("Impossible de donner le rôle %s : %s", role.name, exc)
+                return f"je n'ai pas la permission de donner le rôle « {role.name} » (mon rôle doit être au-dessus, avec « Gérer les rôles »)"
+        if jours:
+            maintenant = datetime.now(timezone.utc)
+            if en_cours:
+                fin = _date(en_cours.get("expire_le")) or maintenant
+                await self.pb.maj("eco_roles_temporaires", en_cours["id"], {"expire_le": _pb_date(max(fin, maintenant) + timedelta(days=jours)), "erreur": ""})
+            else:
+                await self.pb.creer("eco_roles_temporaires", {
+                    "joueur": joueur["id"] if joueur else "", "discord_user_id": str(membre.id), "guild_id": str(membre.guild.id),
+                    "role_id": str(role.id), "role_nom": role.name, "expire_le": _pb_date(maintenant + timedelta(days=jours)),
+                    "origine": origine,
+                })
 
     async def donner_succes(self, joueur: dict, succes_id: str | None):
         """Ajoute le membre du site (joueurs.joueur) aux détenteurs du succès."""
@@ -363,21 +378,47 @@ class Economie:
             except Exception:
                 log.exception("Mouvement refusé même avec le motif %s", repli)
 
+    async def retirer_role_expire(self, t: dict) -> bool:
+        """Retire un rôle temporaire échu ; True si la fiche peut être supprimée. Membre parti ou rôle supprimé : rien
+        à retirer. Permission manquante : la fiche reste (nouvel essai au tour suivant) avec la raison pour le site."""
+        guild = self.client.get_guild(int(t["guild_id"])) if t.get("guild_id") else None
+        role = guild.get_role(int(t["role_id"])) if guild and str(t.get("role_id") or "").isdigit() else None
+        if not guild or not role:
+            return True
+        membre = guild.get_member(int(t["discord_user_id"]))
+        if membre is None:
+            try:
+                membre = await guild.fetch_member(int(t["discord_user_id"]))
+            except discord.NotFound:
+                return True
+        if role not in membre.roles:
+            return True
+        try:
+            await membre.remove_roles(role, reason="Fin du rôle temporaire (économie CDT)")
+            return True
+        except discord.HTTPException as exc:
+            erreur = f"retrait impossible : mon rôle doit être au-dessus de « {role.name} », avec « Gérer les rôles » ({exc.status})"
+            if t.get("erreur") != erreur:
+                log.warning("Rôle temporaire %s de %s : %s", role.name, t["discord_user_id"], erreur)
+                await self.pb.maj("eco_roles_temporaires", t["id"], {"erreur": erreur})
+            return False
+
     async def boucle_roles_temporaires(self):
-        """Retire les rôles temporaires arrivés à échéance (toutes les 10 minutes)."""
+        """Retire les rôles temporaires arrivés à échéance (toutes les minutes). Les échéances sont en base : celles
+        passées pendant un arrêt du bot sont rattrapées au premier tour. « Retirer maintenant » sur le site = échéance
+        avancée à maintenant."""
         await self.client.wait_until_ready()
         while not self.client.is_closed():
             try:
                 for t in await self.pb.lister("eco_roles_temporaires", f'expire_le<="{_pb_date(datetime.now(timezone.utc))}"'):
-                    guild = self.client.get_guild(int(t["guild_id"])) if t.get("guild_id") else None
-                    membre = guild.get_member(int(t["discord_user_id"])) if guild else None
-                    role = guild.get_role(int(t["role_id"])) if guild and t.get("role_id") else None
-                    if membre and role:
-                        await membre.remove_roles(role, reason="Fin du rôle temporaire (économie CDT)")
-                    await self.pb.supprimer("eco_roles_temporaires", t["id"])
+                    try:
+                        if await self.retirer_role_expire(t):
+                            await self.pb.supprimer("eco_roles_temporaires", t["id"])
+                    except Exception:
+                        log.exception("Rôle temporaire %s : retrait impossible", t.get("id"))
             except Exception:
                 log.exception("Erreur dans la boucle des rôles temporaires")
-            await asyncio.sleep(600)
+            await asyncio.sleep(60)
 
     # ------------------------------------------------------------ commandes ??
 

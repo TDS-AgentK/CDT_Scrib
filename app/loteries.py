@@ -7,7 +7,12 @@ Données : eco_loteries (lot, fin, salon, statut, gagnants), eco_loterie_tickets
 Une loterie peut être planifiée (« debut » futur : annonce publiée à cette heure) ; si le site change sa fin, il coche
 « a_rafraichir » et le bot met l'annonce à jour. Modèles réutilisables : eco_loterie_modeles (durée en minutes),
 relancés depuis le site ou par /loterie relancer ; /loterie creer enregistrer:Oui en crée un.
+Lot possible : un rôle Discord (role_id, role_nom), définitif (role_heures = 0) ou temporaire (role_heures > 0). Il est
+donné par Economie.donner_role ; un rôle temporaire est noté dans eco_roles_temporaires et retiré à l'échéance par
+Economie.boucle_roles_temporaires (rattrapage après redémarrage). Un rôle impossible à donner (rôle supprimé, rôle
+au-dessus de celui du bot) ne bloque pas le tirage : la raison est annoncée et notée dans « erreurs_lot ».
 """
+import re
 import asyncio
 import logging
 import random
@@ -65,15 +70,59 @@ def lire_fin(texte: str) -> datetime | None:
     return None
 
 
+def lire_duree_role(texte) -> float | None:
+    """Durée d'un rôle gagné : « » ou « 0 » = définitif (0), « 7j », « 12h », « 1j12h », « 3 » (jours). None si illisible."""
+    t = str(texte or "").strip().lower().replace(" ", "").replace("d", "j")
+    if t in ("", "0", "definitif", "définitif"):
+        return 0
+    if t.isdigit():
+        return int(t) * 24
+    g = re.fullmatch(r"(?:(\d+)j)?(?:(\d+)h)?", t)
+    if not g or not (g.group(1) or g.group(2)):
+        return None
+    return int(g.group(1) or 0) * 24 + int(g.group(2) or 0)
+
+
+def duree_role_txt(heures) -> str:
+    heures = int(heures or 0)
+    if not heures:
+        return "définitif"
+    j, h = divmod(heures, 24)
+    return " ".join(x for x in (f"{j} j" if j else "", f"{h} h" if h else "") if x)
+
+
+def _role_txt(l: dict) -> str:
+    if not (l.get("role_id") or l.get("role_nom")):
+        return ""
+    nom = f"<@&{l['role_id']}>" if str(l.get("role_id") or "").isdigit() else f"« {l.get('role_nom')} »"
+    return f"le rôle {nom} ({duree_role_txt(l.get('role_heures'))})"
+
+
 def _lot_txt(l: dict, objet: dict | None, cfg: dict) -> str:
     morceaux = []
     if l.get("or_lot"):
         morceaux.append(f"**{_n(l['or_lot'])}** {eco_vues.or_txt(cfg)}")
     if objet:
         morceaux.append(f"**{l.get('quantite_objet') or 1} × {objet.get('emoji') or ''} {objet['nom']}**".replace("  ", " "))
+    if _role_txt(l):
+        morceaux.append(_role_txt(l))
     if l.get("succes"):
         morceaux.append("un succès")
     return " + ".join(morceaux) or "—"
+
+
+def role_donnable(guild: discord.Guild, role: discord.Role | None) -> str | None:
+    """None si le bot peut donner ce rôle, sinon la raison (à corriger dans les réglages du serveur)."""
+    if role is None:
+        return "rôle introuvable sur le serveur"
+    if role.is_default() or role.managed:
+        return f"le rôle « {role.name} » ne peut pas être donné (rôle @everyone ou géré par une intégration)"
+    moi = guild.me
+    if not moi.guild_permissions.manage_roles:
+        return "il me manque la permission « Gérer les rôles »"
+    if role >= moi.top_role:
+        return f"mon rôle doit être placé au-dessus de « {role.name} » dans les réglages du serveur"
+    return None
 
 
 async def _objet(eco, l: dict) -> dict | None:
@@ -119,14 +168,24 @@ async def creer(eco, membre: discord.Member, o: dict, salon_defaut: str | None) 
         objet = await objet_par_nom(eco, o["objet"])
         if not objet:
             return False, "Objet inconnu."
-    if not (o.get("or") or objet):
-        return False, "Indique un lot : de l'Or et/ou un objet."
+    role, heures = None, 0
+    if o.get("role"):
+        role = membre.guild.get_role(int(o["role"])) if str(o["role"]).isdigit() else None
+        raison = role_donnable(membre.guild, role)
+        if raison:
+            return False, f"Rôle impossible à donner : {raison}."
+        heures = lire_duree_role(o.get("role_duree"))
+        if heures is None:
+            return False, "Durée du rôle illisible : « 7j », « 12h », « 1j12h » ou vide pour un rôle définitif."
+    if not (o.get("or") or objet or role):
+        return False, "Indique un lot : de l'Or, un objet et/ou un rôle."
     salon_id = str(o.get("salon") or salon_defaut or "")
     l = await eco.pb.creer("eco_loteries", {
         "titre": o.get("titre") or "Loterie", "description": o.get("description") or "", "salon_id": salon_id, "objet": objet["id"] if objet else "",
         "quantite_objet": int(o.get("quantite") or 1) if objet else 0, "or_lot": int(o.get("or") or 0), "nombre_gagnants": int(o.get("gagnants") or 1),
         "prix_ticket": int(o.get("prix_ticket") or 0), "max_tickets": int(o.get("max_tickets") or 1), "fin": _pb_date(fin),
-        "statut": "ouverte", "message_id": "", "cree_par": str(membre.id)})
+        "statut": "ouverte", "message_id": "", "cree_par": str(membre.id),
+        "role_id": str(role.id) if role else "", "role_nom": role.name if role else "", "role_heures": heures})
     await publier(eco, l)
     txt = f"Loterie « {l['titre']} » créée, tirage le {fin.strftime('%d/%m/%Y à %H:%M')} (heure de Paris)."
     if o.get("enregistrer"):
@@ -137,7 +196,8 @@ async def creer(eco, membre: discord.Member, o: dict, salon_defaut: str | None) 
     return True, txt
 
 
-CHAMPS_MODELE = ("titre", "description", "salon_id", "objet", "quantite_objet", "or_lot", "nombre_gagnants", "prix_ticket", "max_tickets", "succes")
+CHAMPS_MODELE = ("titre", "description", "salon_id", "objet", "quantite_objet", "or_lot", "nombre_gagnants", "prix_ticket", "max_tickets", "succes",
+                 "role_id", "role_nom", "role_heures")
 
 
 def _copie(source: dict) -> dict:
@@ -230,7 +290,12 @@ async def tirer(eco, l: dict):
         gagnants.append(g)
         pool = [x for x in pool if x != g]
     cfg, objet = await eco.config(), await _objet(eco, l)
-    mentions = []
+    try:
+        salon = await _salon(eco, l)
+    except discord.HTTPException:
+        salon = None
+    guild = salon.guild if salon is not None and getattr(salon, "guild", None) else (eco.client.get_guild(eco.guild_id) if eco.guild_id else None)
+    mentions, erreurs = [], []
     for jid in gagnants:
         j = await eco.pb.requete("GET", f"/api/collections/joueurs/records/{jid}")
         if l.get("or_lot"):
@@ -240,14 +305,21 @@ async def tirer(eco, l: dict):
             await eco.ajouter_objet(jid, objet["id"], l.get("quantite_objet") or 1, "loterie", l.get("titre") or "")
         if l.get("succes"):
             await eco.donner_succes(j, l["succes"])
-        mentions.append(f"<@{j['discord_id']}>" if j.get("discord_id") else (j.get("pseudo") or "un joueur"))
+        mention = f"<@{j['discord_id']}>" if j.get("discord_id") else (j.get("pseudo") or "un joueur")
+        if l.get("role_id") or l.get("role_nom"):
+            raison = await _donner_role(eco, guild, j, l)
+            if raison:
+                erreurs.append(f"{mention} : {raison}")
+                log.warning("Loterie %s : rôle non donné à %s (%s)", l["id"], jid, raison)
+        mentions.append(mention)
     await eco.pb.maj("eco_loteries", l["id"], {"gagnants_ids": ",".join(gagnants), "date_tirage": _pb_date(datetime.now(timezone.utc)),
-                                              "nb_participants": len(tickets)})
-    salon = await _salon(eco, l)
+                                              "nb_participants": len(tickets), "erreurs_lot": "\n".join(erreurs)})
     if not salon:
         return
-    fin = discord.Embed(title=l.get("titre") or "Loterie", color=eco_vues.OR_DEFAUT,
-                        description=("Gagnant(s) : " + ", ".join(mentions) + f"\nLot : {_lot_txt(l, objet, cfg)}") if mentions else "Personne n'a participé.")
+    texte = ("Gagnant(s) : " + ", ".join(mentions) + f"\nLot : {_lot_txt(l, objet, cfg)}") if mentions else "Personne n'a participé."
+    if erreurs:
+        texte += "\n\n⚠️ Rôle non donné — un administrateur s'en chargera :\n" + "\n".join(erreurs)
+    fin = discord.Embed(title=l.get("titre") or "Loterie", color=eco_vues.OR_DEFAUT, description=texte)
     try:
         if l.get("message_id"):
             msg = await salon.fetch_message(int(l["message_id"]))
@@ -268,6 +340,29 @@ async def rafraichir(eco, l: dict):
         await msg.edit(embed=await _embed_ouverte(eco, l), view=_vue(l["id"]))
     except discord.HTTPException:
         log.warning("Annonce de la loterie %s non modifiable", l["id"])
+
+
+async def _donner_role(eco, guild, j: dict, l: dict) -> str | None:
+    """Rôle du lot pour un gagnant ; renvoie la raison d'un échec, sans jamais lever (le tirage continue)."""
+    try:
+        if guild is None:
+            return "serveur Discord introuvable"
+        if not j.get("discord_id"):
+            return "pas de compte Discord lié à sa fiche"
+        membre = guild.get_member(int(j["discord_id"]))
+        if membre is None:
+            try:
+                membre = await guild.fetch_member(int(j["discord_id"]))
+            except discord.NotFound:
+                return "n'est plus sur le serveur"
+        role = guild.get_role(int(l["role_id"])) if str(l.get("role_id") or "").isdigit() else eco._role_discord(guild, None, l.get("role_nom"))
+        raison = role_donnable(guild, role)
+        if raison:
+            return raison
+        return await eco.donner_role(membre, j, str(role.id), role.name, (l.get("role_heures") or 0) / 24, origine=f"loterie : {l.get('titre') or ''}")
+    except Exception as exc:
+        log.exception("Loterie %s : rôle du gagnant %s", l.get("id"), j.get("id"))
+        return f"erreur inattendue ({exc.__class__.__name__})"
 
 
 async def boucle(eco):
