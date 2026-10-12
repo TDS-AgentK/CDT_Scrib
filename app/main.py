@@ -104,6 +104,9 @@ async def startup():
     # Jets de dés lancés depuis les fiches de jeu du site : publiés dans le salon choisi (#random ou salon perso).
     from app import jets_site
     asyncio.create_task(jets_site.boucle(gateway, pocketbase))
+    # Messages demandés par le site (ex. « Nouvelle fiche sur le site … » après un gain de fiche).
+    from app import annonces_site
+    asyncio.create_task(annonces_site.boucle(gateway, pocketbase))
     # Combats (/attaque et bouton « Attaquer » du site) : défis lancés depuis le site, changements de statut, expirations.
     from app import combat
     # Tout passe par la base partagée (comme Rostheim) : aucune variable à poser.
