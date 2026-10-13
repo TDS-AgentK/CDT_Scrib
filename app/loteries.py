@@ -349,8 +349,9 @@ async def rafraichir(eco, l: dict):
         log.warning("Annonce de la loterie %s non modifiable", l["id"])
 
 
-async def _donner_role(eco, guild, j: dict, l: dict) -> str | None:
-    """Rôle du lot pour un gagnant ; renvoie la raison d'un échec, sans jamais lever (le tirage continue)."""
+async def _donner_role(eco, guild, j: dict, l: dict, origine: str | None = None) -> str | None:
+    """Rôle du lot pour un gagnant ; renvoie la raison d'un échec, sans jamais lever (le tirage continue).
+    Sert aussi aux rôles gagnés sur le site (app/roles_site.py), avec leur propre `origine`."""
     try:
         if guild is None:
             return "serveur Discord introuvable"
@@ -366,7 +367,7 @@ async def _donner_role(eco, guild, j: dict, l: dict) -> str | None:
         raison = role_donnable(guild, role)
         if raison:
             return raison
-        return await eco.donner_role(membre, j, str(role.id), role.name, (l.get("role_heures") or 0) / 24, origine=f"loterie : {l.get('titre') or ''}")
+        return await eco.donner_role(membre, j, str(role.id), role.name, (l.get("role_heures") or 0) / 24, origine=origine or f"loterie : {l.get('titre') or ''}")
     except Exception as exc:
         log.exception("Loterie %s : rôle du gagnant %s", l.get("id"), j.get("id"))
         return f"erreur inattendue ({exc.__class__.__name__})"

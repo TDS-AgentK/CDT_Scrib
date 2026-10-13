@@ -107,6 +107,9 @@ async def startup():
     # Messages demandés par le site (ex. « Nouvelle fiche sur le site … » après un gain de fiche).
     from app import annonces_site
     asyncio.create_task(annonces_site.boucle(gateway, pocketbase))
+    # Rôles gagnés sur le site (ex. récompense d'un record de quiz), donnés comme ceux des loteries.
+    from app import roles_site
+    asyncio.create_task(roles_site.boucle(economie))
     # Combats (/attaque et bouton « Attaquer » du site) : défis lancés depuis le site, changements de statut, expirations.
     from app import combat
     # Tout passe par la base partagée (comme Rostheim) : aucune variable à poser.
