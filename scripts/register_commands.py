@@ -160,6 +160,7 @@ COMMANDS = [
                 {"type": 3, "name": "fin", "description": "Fin du tirage : JJ/MM/AAAA HH:MM (heure de Paris)", "required": True},
                 {"type": 4, "name": "gagnants", "description": "Nombre de gagnants (1 par défaut)", "required": False, "min_value": 1},
                 {"type": 4, "name": "or", "description": "Or gagné par chaque gagnant", "required": False, "min_value": 1},
+                {"type": 4, "name": "xp", "description": "XP gagnée par chaque gagnant (compte pour le niveau)", "required": False, "min_value": 1},
                 {"type": 3, "name": "objet", "description": "Objet gagné par chaque gagnant", "required": False, "autocomplete": True},
                 {"type": 4, "name": "quantite", "description": "Quantité de l'objet (1 par défaut)", "required": False, "min_value": 1},
                 {"type": 4, "name": "prix_ticket", "description": "Prix d'un ticket en Or (0 = gratuit)", "required": False, "min_value": 0},

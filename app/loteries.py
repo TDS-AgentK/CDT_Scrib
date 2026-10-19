@@ -13,6 +13,8 @@ Economie.boucle_roles_temporaires (rattrapage après redémarrage). Un rôle imp
 au-dessus de celui du bot) ne bloque pas le tirage : la raison est annoncée et notée dans « erreurs_lot ».
 Gain personnalisé (« gain_perso », texte libre) : affiché dans l'annonce et le tirage, rien n'est distribué sur Discord ;
 un administrateur le remet et le coche sur le site (« gains_remis »).
+XP par gagnant (« xp_lot ») : créditée au tirage comme l'XP des messages (joueurs.eco_xp + ligne eco_gains « XP ») ;
+une montée de niveau est annoncée dans le salon de la loterie, avec ses récompenses (Economie.monter_niveau).
 """
 import re
 import asyncio
@@ -104,6 +106,8 @@ def _lot_txt(l: dict, objet: dict | None, cfg: dict) -> str:
     morceaux = []
     if l.get("or_lot"):
         morceaux.append(f"**{_n(l['or_lot'])}** {eco_vues.or_txt(cfg)}")
+    if l.get("xp_lot"):
+        morceaux.append(f"**{_n(l['xp_lot'])}** {eco_vues.xp_txt(cfg)}")
     if objet:
         morceaux.append(f"**{l.get('quantite_objet') or 1} × {objet.get('emoji') or ''} {objet['nom']}**".replace("  ", " "))
     if _role_txt(l):
@@ -182,15 +186,16 @@ async def creer(eco, membre: discord.Member, o: dict, salon_defaut: str | None) 
         if heures is None:
             return False, "Durée du rôle illisible : « 7j », « 12h », « 1j12h » ou vide pour un rôle définitif."
     gain = (o.get("gain") or "").strip()[:500]
-    if not (o.get("or") or objet or role or gain):
-        return False, "Indique un lot : de l'Or, un objet, un rôle et/ou un gain personnalisé."
+    if not (o.get("or") or o.get("xp") or objet or role or gain):
+        return False, "Indique un lot : de l'Or, de l'XP, un objet, un rôle et/ou un gain personnalisé."
     salon_id = str(o.get("salon") or salon_defaut or "")
     l = await eco.pb.creer("eco_loteries", {
         "titre": o.get("titre") or "Loterie", "description": o.get("description") or "", "salon_id": salon_id, "objet": objet["id"] if objet else "",
         "quantite_objet": int(o.get("quantite") or 1) if objet else 0, "or_lot": int(o.get("or") or 0), "nombre_gagnants": int(o.get("gagnants") or 1),
         "prix_ticket": int(o.get("prix_ticket") or 0), "max_tickets": int(o.get("max_tickets") or 1), "fin": _pb_date(fin),
         "statut": "ouverte", "message_id": "", "cree_par": str(membre.id),
-        "role_id": str(role.id) if role else "", "role_nom": role.name if role else "", "role_heures": heures, "gain_perso": gain})
+        "role_id": str(role.id) if role else "", "role_nom": role.name if role else "", "role_heures": heures, "gain_perso": gain,
+        "xp_lot": int(o.get("xp") or 0)})
     await publier(eco, l)
     txt = f"Loterie « {l['titre']} » créée, tirage le {fin.strftime('%d/%m/%Y à %H:%M')} (heure de Paris)."
     if o.get("enregistrer"):
@@ -202,7 +207,7 @@ async def creer(eco, membre: discord.Member, o: dict, salon_defaut: str | None) 
 
 
 CHAMPS_MODELE = ("titre", "description", "salon_id", "objet", "quantite_objet", "or_lot", "nombre_gagnants", "prix_ticket", "max_tickets", "succes",
-                 "role_id", "role_nom", "role_heures", "gain_perso")
+                 "role_id", "role_nom", "role_heures", "gain_perso", "xp_lot")
 
 
 def _copie(source: dict) -> dict:
@@ -306,6 +311,8 @@ async def tirer(eco, l: dict):
         if l.get("or_lot"):
             await changer_or(eco, jid, l["or_lot"])
             await _gain(eco, jid, f"loterie : {l.get('titre')}", "Or", l["or_lot"], "")
+        if l.get("xp_lot"):
+            await _crediter_xp(eco, guild, salon, j, l["xp_lot"], l.get("titre") or "")
         if objet:
             await eco.ajouter_objet(jid, objet["id"], l.get("quantite_objet") or 1, "loterie", l.get("titre") or "")
         if l.get("succes"):
@@ -334,6 +341,24 @@ async def tirer(eco, l: dict):
         await salon.send(embed=fin, allowed_mentions=discord.AllowedMentions(users=True))
     except discord.HTTPException:
         log.warning("Annonce du tirage de la loterie %s impossible", l["id"])
+
+
+async def _crediter_xp(eco, guild, salon, j: dict, xp: int, titre: str):
+    """XP gagnée à une loterie : même traitement que l'XP des messages (niveau recalculé, montée annoncée et récompensée)."""
+    from app.economie import niveau_de
+    frais = await eco.pb.requete("GET", f"/api/collections/joueurs/records/{j['id']}")
+    ancien = frais.get("eco_xp") or 0
+    maj = await eco.pb.maj("joueurs", j["id"], {"eco_xp": ancien + int(xp)})
+    await _gain(eco, j["id"], f"loterie : {titre}", "XP", int(xp), "")
+    courbe = (await eco.config()).get("courbe") or {}
+    n0, n1 = niveau_de(courbe, ancien)[0], niveau_de(courbe, (maj or {}).get("eco_xp", ancien + int(xp)))[0]
+    if n1 <= n0 or salon is None or guild is None or not str(j.get("discord_id") or "").isdigit():
+        return
+    try:
+        membre = guild.get_member(int(j["discord_id"])) or await guild.fetch_member(int(j["discord_id"]))
+        await eco.monter_niveau(salon, membre, maj, n0, n1)
+    except discord.HTTPException:
+        log.warning("Loterie : montée de niveau de %s non annoncée", j["id"])
 
 
 async def rafraichir(eco, l: dict):
