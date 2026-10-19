@@ -7,6 +7,7 @@ Commandes (préfixe ECO_PREFIX, « ?? » par défaut, comme sur Draftbot) :
   + commandes Rostheim et RP lues dans la base (voir app/rostheim.py).
 """
 import asyncio
+import re
 import logging
 import random
 import time
@@ -142,12 +143,14 @@ class Economie:
         return None
 
     async def joueur_de(self, user: discord.abc.User) -> dict | None:
-        """Fiche « joueurs » du membre : par ID Discord, sinon par pseudo Discord (l'ID est alors enregistré)."""
+        """Fiche « joueurs » du membre : par ID Discord, sinon par pseudo Discord (l'ID est alors enregistré).
+        Un ID vide ou invalide (ex. « 1 » laissé par l'import, qui donnait la mention <@1> et un rôle de loterie non
+        donné à Ràlas le 17/10/2026) est remplacé par le vrai ; un vrai ID déjà noté n'est jamais écrasé."""
         j = await self.pb.premier("joueurs", f'discord_id="{echapper(user.id)}"')
         if j:
             return j
         j = await self.pb.premier("joueurs", f'pseudo_discord="{echapper(user.name)}"')
-        if j and not j.get("discord_id"):
+        if j and not re.fullmatch(r"\d{15,21}", str(j.get("discord_id") or "")):
             j = await self.pb.maj("joueurs", j["id"], {"discord_id": str(user.id)})
         return j
 
