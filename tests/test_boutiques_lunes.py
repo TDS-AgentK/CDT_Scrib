@@ -152,3 +152,38 @@ class _Verrou:
 
     async def __aexit__(self, *a):
         return False
+
+
+class BoutiqueNormale(unittest.TestCase):
+    ARTICLES = [{"id": "a1", "nom": "Bonbon", "prix": 2, "stock_illimite": True, "boutique": "b1", "actif": True, "disponibilite": ""},
+                {"id": "a2", "nom": "Lanterne rouge", "prix": 5, "stock_illimite": True, "boutique": "b1", "actif": True, "disponibilite": "pleine_lune_davos"},
+                {"id": "a3", "nom": "Voile d'argent", "prix": 5, "stock_illimite": True, "boutique": "b1", "actif": True, "disponibilite": "pleine_lune_amarante"}]
+
+    def vue(self, jour):
+        cfg = {"boutiques": [{"id": "b1", "nom": "Boutique du serveur"}], "articles": self.ARTICLES, "reglages": {}}
+        eco = SimpleNamespace(config=mock.AsyncMock(return_value=cfg), _boutiques_accessibles=lambda c, m: cfg["boutiques"],
+                              joueur_de=mock.AsyncMock(return_value=None))
+        with mock.patch.object(lunes, "_jour_utc", lambda q: jour), mock.patch.object(eco_vues, "options_boutiques", mock.AsyncMock(return_value=[])):
+            return json.dumps(asyncio.run(eco_vues.vue_boutique(eco, None, "b1")), ensure_ascii=False)
+
+    def test_masque_hors_pleine_lune_et_mention(self):
+        v = self.vue(date(2026, 10, 21))
+        self.assertIn("Bonbon", v)
+        self.assertNotIn("Lanterne rouge", v)
+        self.assertNotIn("Voile d'argent", v)
+        v = self.vue(date(2026, 10, 29))
+        self.assertIn("Lanterne rouge", v)
+        self.assertIn("🌕 Pleine lune de Davos", v)
+        self.assertNotIn("Voile d'argent", v)
+        self.assertIn("🌕 Pleine lune d'Amarante", self.vue(date(2026, 10, 25)))
+
+    def test_achat_refuse_hors_pleine_lune(self):
+        from app.economie import Economie
+        eco = SimpleNamespace(config=mock.AsyncMock(return_value={"boutiques": []}), _boutiques_accessibles=lambda c, m: [{"id": "b1"}],
+                              _verrou=lambda i: _Verrou(), joueur_de=mock.AsyncMock(return_value={"id": "j1", "eco_or": 100}),
+                              pb=SimpleNamespace(requete=mock.AsyncMock(return_value=dict(self.ARTICLES[2])), maj=mock.AsyncMock()))
+        with mock.patch.object(lunes, "_jour_utc", lambda q: date(2026, 10, 21)):
+            ok, txt = asyncio.run(Economie.acheter(eco, SimpleNamespace(id=1), {"id": "b1"}, {"id": "a3"}, "", 1))
+        self.assertFalse(ok)
+        self.assertEqual(txt, "Cet article ne s'achète que pendant la pleine lune d'Amarante.")
+        eco.pb.maj.assert_not_awaited()

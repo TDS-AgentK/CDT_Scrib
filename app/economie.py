@@ -550,6 +550,9 @@ class Economie:
             prix = prix_unitaire * quantite
             if not article.get("actif"):
                 return False, "Cet article n'est plus en vente."
+            from app import lunes
+            if not lunes.disponible(article):
+                return False, f"Cet article ne s'achète que pendant la p{lunes.pleine_lune_de(lunes.DISPONIBILITES[article['disponibilite']])[1:]}."
             if not article.get("stock_illimite") and (article.get("stock") or 0) < quantite:
                 return False, "Cet article est épuisé." if (article.get("stock") or 0) <= 0 else f'Il n\'en reste que {article.get("stock")}.'
             if (joueur.get("eco_or") or 0) < prix:

@@ -126,7 +126,9 @@ async def vue_boutique(eco, membre, boutique_id: str, page: int = 0, tri: str | 
     if not b:
         return {"flags": V2 | PRIVE, "components": [{"type": 17, "accent_color": ROUGE, "components": [_texte("Cette boutique ne vous est pas accessible.")]}]}
     tri = tri or (b.get("tri") if b.get("tri") in dict(TRIS) else "ordre")
-    articles = _trier([a for a in cfg["articles"] if a.get("boutique") == b["id"]], tri)
+    from app import lunes
+    # Articles de pleine lune (disponibilite) : masqués hors de la pleine lune de leur lune.
+    articles = _trier([a for a in cfg["articles"] if a.get("boutique") == b["id"] and lunes.disponible(a)], tri)
     pages = max(1, -(-len(articles) // PAR_PAGE_BOUTIQUE))
     page = max(0, min(page, pages - 1))
     joueur = await eco.joueur_de(membre)
@@ -139,6 +141,8 @@ async def vue_boutique(eco, membre, boutique_id: str, page: int = 0, tri: str | 
     for a in articles[page * PAR_PAGE_BOUTIQUE:(page + 1) * PAR_PAGE_BOUTIQUE]:
         epuise = not a.get("stock_illimite") and (a.get("stock") or 0) <= 0
         lignes = [f'### {a["nom"]} {a.get("emoji") or ""}'.rstrip()]
+        if lunes.mention(a):
+            lignes.append(f"-# {lunes.mention(a)}")
         if not a.get("stock_illimite"):
             lignes.append("-# ❌ Quantité épuisée" if epuise else f"-# Quantité restante : {a.get('stock')}")
         if a.get("type") == "role_temporaire" and a.get("duree_jours"):
