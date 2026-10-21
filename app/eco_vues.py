@@ -171,14 +171,24 @@ def boutique_fermee() -> dict:
     return {"flags": V2 | PRIVE, "components": [{"type": 17, "accent_color": GRIS, "components": [_texte("Boutique fermée.")]}]}
 
 
+def quantite_max(boutique: dict, article: dict) -> int:
+    """Quantité achetable en une fois : 25 au plus, le stock restant, et la limite de la boutique (quantite_max, 0 = sans)."""
+    maxi = 25 if article.get("stock_illimite") else max(1, min(25, article.get("stock") or 1))
+    limite = int(boutique.get("quantite_max") or 0)
+    return min(maxi, limite) if limite > 0 else maxi
+
+
 async def fenetre_quantite(eco, membre, boutique_id: str, article_id: str) -> dict | None:
     """Fenêtre (modal) « Acheter un article » : quantité souhaitée, coût unitaire et solde rappelés."""
     cfg = await eco.config()
     a = next((x for x in cfg["articles"] if x["id"] == article_id), None)
     if not a:
         return None
+    b = next((x for x in cfg["boutiques"] if x["id"] == boutique_id), {})
+    maxi = quantite_max(b, a)
+    if maxi <= 1:
+        return None  # un seul objet par achat : pas de fenêtre, l'achat se fait directement
     joueur = await eco.joueur_de(membre)
-    maxi = 25 if a.get("stock_illimite") else max(1, min(25, a.get("stock") or 1))
     infos = f'Coût unitaire : {_n(a.get("prix"))} Or • Votre solde : {abrege((joueur or {}).get("eco_or"))} Or'
     return {"title": "Acheter un article", "custom_id": f"eco:buyq:{boutique_id}:{article_id}", "components": [
         {"type": 1, "components": [{"type": 4, "custom_id": "quantite", "style": 1, "label": f"Quantité souhaitée (entre 1 et {maxi})",

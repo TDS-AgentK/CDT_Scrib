@@ -543,6 +543,9 @@ class Economie:
                 if role and role in membre.roles:
                     return False, f"❌ Vous possédez déjà le rôle {role.mention}."
             quantite = max(1, int(quantite or 1))
+            limite = int(boutique.get("quantite_max") or 0)
+            if limite > 0 and quantite > limite:
+                return False, f"Cette boutique ne permet d'acheter que {limite} objet{'s' if limite > 1 else ''} à la fois."
             prix_unitaire = article.get("prix") or 0
             prix = prix_unitaire * quantite
             if not article.get("actif"):

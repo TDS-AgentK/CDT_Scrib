@@ -1,7 +1,9 @@
 """Boutiques de Rostheim dans /boutique : une boutique par domaine (récompenses ros_recompenses payées dans la monnaie du
 domaine). Les effets simples s'appliquent tout seuls (Or, XP, rôle, objet, multiplicateur temporaire) ; les récompenses
 « spéciales » (coche sur le site) et celles que le bot ne sait pas appliquer deviennent une demande (ros_demandes) postée
-dans le salon du staff, après une fenêtre où le joueur précise ce qu'il veut. Chaque achat est tracé dans eco_gains."""
+dans le salon du staff, après une fenêtre où le joueur précise ce qu'il veut. Chaque achat est tracé dans eco_gains.
+Une récompense « pleine lune » (champ disponibilite) n'est visible et achetable que pendant la pleine lune de Davos ou
+d'Amarante (calcul du site, app/lunes.py)."""
 import logging
 import os
 import re
@@ -9,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 import discord
 
-from app import eco_vues
+from app import eco_vues, lunes
 from app.eco_cartes import abrege
 from app.economie import COULEUR_DEFAUT, meme_nom, normaliser
 from app.pocketbase import echapper
@@ -60,7 +62,9 @@ async def domaines(eco) -> list[dict]:
 
 
 async def articles(eco, domaine: dict) -> list[dict]:
-    return await eco.pb.lister("ros_recompenses", f'actif=true && (domaine="{echapper(domaine["id"])}" || toute_monnaie=true)', tri="ordre")
+    """Récompenses en vente maintenant dans ce domaine (celles d'une pleine lune absente sont masquées)."""
+    liste = await eco.pb.lister("ros_recompenses", f'actif=true && (domaine="{echapper(domaine["id"])}" || toute_monnaie=true)', tri="ordre")
+    return [r for r in liste if lunes.disponible(r)]
 
 
 async def solde(eco, joueur: dict | None, domaine: dict) -> dict | None:
@@ -90,7 +94,7 @@ async def vue(eco, membre, boutique_id: str, page: int = 0) -> dict:
     blocs = [eco_vues._texte(f'## {d.get("nom")} · {monnaie}\nBoutique de Rostheim.'), {"type": 14, "divider": True, "spacing": 1}]
     for a in liste[page * eco_vues.PAR_PAGE_BOUTIQUE:(page + 1) * eco_vues.PAR_PAGE_BOUTIQUE]:
         lignes = [f'### {a["libelle"]}']
-        notes = []
+        notes = [lunes.mention(a)] if lunes.mention(a) else []
         if a.get("speciale"):
             notes.append("✨ Récompense spéciale : le staff la réalise après votre demande")
         notes.append("Communautaire" if a.get("portee") == "communautaire" else "Individuelle")
@@ -135,6 +139,8 @@ async def acheter(eco, membre: discord.Member, domaine_id: str, rec_id: str, pre
     r = await eco.pb.premier("ros_recompenses", f'id="{echapper(rec_id)}" && actif=true')
     if not r or not (r.get("domaine") == d["id"] or r.get("toute_monnaie")):
         return False, "Cette récompense n'est plus disponible."
+    if not lunes.disponible(r):
+        return False, f"Cette récompense ne s'achète que pendant la p{lunes.pleine_lune_de(lunes.DISPONIBILITES[r['disponibilite']])[1:]}."
     joueur = await eco.joueur_de(membre)
     if not joueur:
         return False, "Aucune fiche joueur liée à ce compte Discord."
@@ -246,7 +252,7 @@ async def offres_roles(eco, membre: discord.Member) -> list[tuple[dict, dict]]:
     for d in await domaines(eco):
         for r in await eco.pb.lister("ros_recompenses", f'actif=true && domaine="{echapper(d["id"])}"', tri="ordre"):
             effet = analyser(r)
-            if effet["type"] == "role" and not eco._a_le_role(membre, None, effet["nom"]):
+            if effet["type"] == "role" and lunes.disponible(r) and not eco._a_le_role(membre, None, effet["nom"]):
                 offres.append((d, r))
     return offres
 
