@@ -10,7 +10,7 @@ import logging
 import discord
 import httpx
 
-from app import combat, drop, eco_actions, eco_vues, jets_site, loteries, receleur, ros_boutique, sessions_jeu
+from app import combat, drop, eco_actions, eco_vues, emblemes, jets_site, loteries, receleur, ros_boutique, sessions_jeu
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
@@ -216,6 +216,10 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
                                   {"content": f"{membre.mention} {txt}", "allowed_mentions": {"parse": ["users"]}})
         if nom == "utiliser":
             o = await eco_actions.objet_par_nom(eco, opt.get("objet") or "")
+            if emblemes.type_de(o):
+                # Tirage d'emblèmes (app/emblemes.py) : choix de la collection, puis 5 emblèmes par tirage.
+                embed, comp = await emblemes.menu(eco, membre, o, int(opt.get("quantite") or 1))
+                return await _modifier(app_id, jeton, [embed], comp)
             if ros_boutique.est_boite_a_role(o):
                 joueur = await eco.joueur_de(membre)
                 if not joueur or (await eco_actions.quantite(eco, joueur["id"], o["id"]))[1] < 1:
@@ -339,6 +343,17 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
             ok, txt = await ros_boutique.ouvrir_boite(eco, membre, valeurs[0], payload.get("channel_id"))
             await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)], [])
         _en_fond(taches, choix_role)
+        return {"type": DIFFERE_MAJ}
+    if morceaux[1] == "emb":
+        # Tirage d'emblèmes : bouton « Collection 1256 / 1257 » (seul le joueur qui a lancé /utiliser peut choisir).
+        if str(membre.id) != morceaux[2]:
+            return {"type": MESSAGE, "data": {"embeds": [eco_vues.erreur("Ce tirage appartient à un autre joueur.")], "flags": PRIVE}}
+
+        async def tirage_emblemes():
+            embeds = await emblemes.clic(eco, membre, payload, morceaux)
+            if embeds:
+                await _modifier(app_id, jeton, embeds, [])
+        _en_fond(taches, tirage_emblemes)
         return {"type": DIFFERE_MAJ}
     if morceaux[1] == "top":
         async def page_top():

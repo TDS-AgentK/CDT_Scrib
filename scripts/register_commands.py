@@ -207,7 +207,8 @@ COMMANDS = [
     },
     {
         "name": "utiliser", "description": "Utiliser un objet de votre inventaire",
-        "options": [{"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True}],
+        "options": [{"type": 3, "name": "objet", "description": "Objet de votre inventaire", "required": True, "autocomplete": True},
+                    {"type": 4, "name": "quantite", "description": "Tirages d'emblèmes : nombre à ouvrir d'un coup (1 par défaut)", "required": False, "min_value": 1, "max_value": 100}],
     },
     {
         "name": "echanger", "description": "Proposer un échange (objets, Or et/ou monnaies Rostheim) à un membre",
