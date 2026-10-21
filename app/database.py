@@ -25,6 +25,12 @@ CREATE TABLE IF NOT EXISTS fiches (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS messages_a_supprimer (
+    channel_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    expire_at INTEGER NOT NULL,
+    PRIMARY KEY (channel_id, message_id)
+);
 """
 
 
@@ -71,7 +77,7 @@ class Database:
             os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
             self._conn = await aiosqlite.connect(self.path)
             self._conn.row_factory = aiosqlite.Row
-            await self._conn.execute(SCHEMA)
+            await self._conn.executescript(SCHEMA)
             await self._conn.commit()
         return self._conn
 
@@ -130,3 +136,28 @@ class Database:
         )
         await conn.commit()
         return cursor.rowcount > 0
+
+    # Messages publiés par /fiche voir, supprimés à expiration (app/fiche_ephemere.py).
+    async def programmer_suppression(self, channel_id: str, message_id: str, expire_at: int) -> None:
+        conn = await self._get_conn()
+        await conn.execute(
+            "INSERT OR REPLACE INTO messages_a_supprimer (channel_id, message_id, expire_at) VALUES (?, ?, ?)",
+            (str(channel_id), str(message_id), int(expire_at)),
+        )
+        await conn.commit()
+
+    async def suppressions_dues(self, maintenant: int) -> list[tuple[str, str]]:
+        conn = await self._get_conn()
+        async with conn.execute(
+            "SELECT channel_id, message_id FROM messages_a_supprimer WHERE expire_at <= ? ORDER BY expire_at",
+            (int(maintenant),),
+        ) as cursor:
+            return [(row["channel_id"], row["message_id"]) for row in await cursor.fetchall()]
+
+    async def oublier_suppression(self, channel_id: str, message_id: str) -> None:
+        conn = await self._get_conn()
+        await conn.execute(
+            "DELETE FROM messages_a_supprimer WHERE channel_id = ? AND message_id = ?",
+            (str(channel_id), str(message_id)),
+        )
+        await conn.commit()
