@@ -50,6 +50,10 @@ limites ; conversions `??gold-<monnaie>` / `??xp-<monnaie>` ; boutiques de domai
 est posté quand K clique « Envoyer dans le salon » dans l'éditeur du site : demande dans `ros_envois`, traitée par le bot,
 sous le nom et l'avatar des réglages Rostheim, renvoyable à volonté) ;
 `??rp @partenaires…` (Or, XP et rôle, message dans le salon configuré). Chaque gain est tracé dans `eco_gains`.
+
+Messages demandés par le site (`app/annonces_site.py`, collection `discord_annonces`) : annonce des fiches rédigées et
+missives de la boîte aux lettres, postées dans #textes-libres (une missive longue = plusieurs messages) ; une missive
+dont le joueur a coché « Supprimer le message au bout de trois jours » est effacée par le bot à `supprimer_le`.
 Règle des boosters : entre plusieurs rôles, seul le plus fort compte ; il se multiplie avec le booster du salon
 et les multiplicateurs temporaires.
 
