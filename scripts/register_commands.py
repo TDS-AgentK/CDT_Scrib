@@ -126,6 +126,7 @@ COMMANDS = [
             {"type": 3, "name": "type", "description": "Action réalisée dans cette zone", "required": True, "autocomplete": True},
         ],
     },
+    {"name": "boite-a-role", "description": "Consommer une boîte à rôle (monnaie de Rostheim, Or ou inventaire) pour obtenir un rôle", "options": []},
     {"name": "receleur", "description": "Voir ce que le Receleur reprend et vend, et vos ventes de la semaine", "options": []},
     {
         "name": "racheter", "description": "Acheter un objet au Receleur",

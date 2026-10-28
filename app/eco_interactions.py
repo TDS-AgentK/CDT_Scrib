@@ -16,7 +16,7 @@ log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
              "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
-             "session", "recompense", "attaque"}
+             "session", "recompense", "attaque", "boite-a-role"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -214,6 +214,13 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             await _modifier(app_id, jeton, [eco_vues.resultat(True, "C'est enregistré.")])
             return await _webhook("POST", f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}",
                                   {"content": f"{membre.mention} {txt}", "allowed_mentions": {"parse": ["users"]}})
+        if nom == "boite-a-role":
+            # Les deux menus de l'ancien ??boîte-à-rôle : le second part en message de suivi (5 menus par message).
+            (embed, comp), *suite = await ros_boutique.menus_boite(eco, membre)
+            await _modifier(app_id, jeton, [embed], comp)
+            for embed, comp in suite:
+                await _webhook("POST", f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}", {"embeds": [embed], "components": comp})
+            return
         if nom == "utiliser":
             o = await eco_actions.objet_par_nom(eco, opt.get("objet") or "")
             if emblemes.type_de(o):
@@ -340,7 +347,10 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
             return {"type": MESSAGE, "data": {"embeds": [eco_vues.erreur("Ce choix appartient à un autre joueur.")], "flags": PRIVE}}
 
         async def choix_role():
-            ok, txt = await ros_boutique.ouvrir_boite(eco, membre, valeurs[0], payload.get("channel_id"))
+            paiement = morceaux[3] if len(morceaux) > 3 else ros_boutique.PAIEMENT_INVENTAIRE
+            ok, txt = await ros_boutique.ouvrir_boite(eco, membre, valeurs[0], payload.get("channel_id"), paiement)
+            if not ok:
+                return await _suivi_prive(app_id, jeton, eco_vues.erreur(txt))
             await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)], [])
         _en_fond(taches, choix_role)
         return {"type": DIFFERE_MAJ}
