@@ -67,6 +67,9 @@ async def startup():
     # Salons et rôles du serveur copiés dans la base, pour les listes déroulantes de la page Économie du site.
     from app import discord_listes
     synchro_listes = discord_listes.brancher(gateway, pocketbase, economie.guild_id)
+    # Journal des rôles ajoutés / retirés (bot, staff, boosts), arrivées et départs : onglet Journal de la page Économie.
+    from app import journal
+    journal.brancher(gateway, economie)
 
     @gateway.event
     async def on_ready():
