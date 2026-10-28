@@ -25,6 +25,8 @@ ou à défaut par leur pseudo Discord (l'ID est alors enregistré automatiquemen
 Commandes (préfixe `ECO_PREFIX`, `??` par défaut) : `??niveau [@membre]`, `??classement`, `??inventaire`,
 `??boutique`, `??acheter <numéro ou nom>`.
 
+`/info` résume toutes les commandes (liste construite depuis `scripts/register_commands.py`).
+
 Commandes slash de l'économie (à enregistrer avec `python -m scripts.register_commands`), dans l'esprit de Draftbot :
 `/boutique` (Components V2 : choix de la boutique, articles paginés avec bouton « prix - Acheter », tri, fenêtre de
 quantité), `/argent` et `/niveau` (cartes image), `/topargent`, `/topniveau` (paginés), `/inventaire` (grille),

@@ -21,6 +21,7 @@ SECTION_CHOICES = [
 ]
 
 COMMANDS = [
+    {"name": "info", "description": "Résumé de toutes les commandes du bot", "options": []},
     {
         "name": "fiche",
         "description": "Gérer les fiches de personnage",
