@@ -241,12 +241,13 @@ async def _prevenir_staff(eco, membre: discord.Member, d: dict, r: dict, precisi
 
 
 # ---------------------------------------------------------------- boîte à rôle (/boite-a-role, /utiliser)
-# Comme l'ancien ??boîte-à-rôle : une boîte se consomme contre 30 d'une monnaie de domaine (prix de la récompense
-# « Boîte à rôle x1 », toutes monnaies), contre de l'Or, ou depuis l'inventaire ; le rôle choisi coûte en plus son prix
-# dans la monnaie de son domaine (10). Si le rôle n'est pas obtenu, la boîte (ou ce qu'elle a coûté) est rendue.
+# Reprise de l'ancien ??boîte-à-rôle, en un seul message : 1. le rôle (menu des « Obtenir le rôle … » des boutiques de
+# domaine), 2. le paiement de la boîte : 30 d'une monnaie de domaine (prix de la récompense « Boîte à rôle x1 »), de l'Or,
+# ou une boîte de l'inventaire. Le rôle coûte en plus 10 dans la monnaie de son domaine (coût de la commande
+# ??boîte-à-rôle dans ros_commandes). Rien n'est prélevé si le rôle ne peut pas être donné.
 
 BOITE_OR = int(os.environ.get("BOITE_A_ROLE_OR", "200"))
-BOITE_MONNAIE = 30  # si la récompense « Boîte à rôle x1 » n'est pas dans la base
+BOITE_MONNAIE, COUT_ROLE = 30, 10  # si la base ne les donne pas
 AVERTISSEMENT = "Chaque rôle coûte 10 monnaies du salon d'où il provient (aspirant érudit requiert 10 fragments de savoir)."
 PAIEMENT_OR, PAIEMENT_INVENTAIRE = "or", "inv"
 
@@ -255,19 +256,19 @@ def est_boite_a_role(objet: dict | None) -> bool:
     return bool(objet) and normaliser(objet.get("nom")).startswith("boitearole")
 
 
-def _pluriel(monnaie: str) -> str:
-    """« Faveur » → « faveurs », « Fragments de savoir » reste tel quel."""
-    premier, _, reste = (monnaie or "monnaie").lower().partition(" ")
-    if not premier.endswith(("s", "x")):
-        premier += "s"
-    return f"{premier} {reste}".strip()
-
-
 async def prix_boite(eco) -> int:
     for r in await eco.pb.lister("ros_recompenses", "actif=true && toute_monnaie=true"):
         if normaliser(r.get("libelle")).startswith("boitearole"):
             return r.get("prix") or 0
     return BOITE_MONNAIE
+
+
+async def _commande_boite(eco) -> dict:
+    return await eco.pb.premier("ros_commandes", 'type="boite_a_role" && actif=true') or {}
+
+
+def cout_role(cmd: dict) -> int:
+    return cmd.get("cout_monnaie") or COUT_ROLE
 
 
 async def offres_roles(eco, membre: discord.Member) -> list[tuple[dict, dict]]:
@@ -281,44 +282,59 @@ async def offres_roles(eco, membre: discord.Member) -> list[tuple[dict, dict]]:
     return offres
 
 
-def _select(membre: discord.Member, paiement: str, texte: str, offres: list[tuple[dict, dict]]) -> dict:
-    options = [{"label": analyser(r)["nom"][:100], "value": r["id"],
-                "description": f'{r.get("prix") or 0} {d.get("monnaie_nom")} ({d.get("nom")})'[:100]} for d, r in offres[:25]]
-    return {"type": 1, "components": [{"type": 3, "custom_id": f"eco:bar:{membre.id}:{paiement}", "placeholder": texte[:150], "options": options}]}
+async def _boites(eco, joueur: dict | None) -> list[tuple[dict, int]]:
+    """Boîtes à rôle de l'inventaire du joueur : (objet, quantité)."""
+    from app.eco_actions import quantite
+    if not joueur:
+        return []
+    res = []
+    for o in await eco.pb.lister("eco_objets", "actif=true"):
+        if est_boite_a_role(o):
+            n = (await quantite(eco, joueur["id"], o["id"]))[1]
+            if n > 0:
+                res.append((o, n))
+    return res
 
 
-async def menus_boite(eco, membre: discord.Member) -> list[tuple[dict, list]]:
-    """Les deux menus de l'ancien bot : boîte contre une monnaie de domaine, puis contre de l'Or ou depuis l'inventaire.
-    Chaque menu déroulant liste les rôles ; choisir un rôle consomme la boîte de cette façon."""
+async def vue_boite(eco, membre: discord.Member, rec_id: str | None = None) -> dict:
+    """Conseiller des Rôles (Components V2) : choix du rôle, puis du paiement de la boîte (débloqué une fois le rôle choisi)."""
     offres = await offres_roles(eco, membre)
     if not offres:
-        return [(eco_vues.erreur("Aucun rôle à choisir : vous les avez déjà tous, ou l'événement Rostheim n'est pas actif."), [])]
+        return eco_vues.erreur_v2("Aucun rôle à choisir : vous les avez déjà tous, ou l'événement Rostheim n'est pas actif.")
     cfg = await eco.config()
-    prix = await prix_boite(eco)
-    cmd = await eco.pb.premier("ros_commandes", 'type="boite_a_role" && actif=true')
-    avertissement = ((cmd or {}).get("commentaires") or "").strip() or AVERTISSEMENT
-    auteur = {"name": "Conseiller des Rôles"}
-    lignes, menus = [], []
-    for d in (await domaines(eco))[:5]:
-        texte = f'Consommer une boîte à rôle contre des {_pluriel(d.get("monnaie_nom"))}. ({prix})'
-        lignes.append(f"- {texte}")
-        menus.append(_select(membre, d["id"], texte, offres))
-    premier = {"author": auteur, "title": "Que préférez-vous ?", "color": eco_vues.OR_DEFAUT,
-               "description": "\n".join(lignes), "fields": [{"name": "AVERTISSEMENT", "value": avertissement[:1024]}]}
-    textes = [f"Consommer une boîte à rôle contre du gold. ({BOITE_OR} gold)", "Consommer une boîte à rôle possédée en inventaire."]
-    second = {"author": auteur, "title": "Que préférez-vous ?", "color": eco_vues.OR_DEFAUT, "description": "\n".join(f"- {t}" for t in textes)}
-    autres = [_select(membre, PAIEMENT_OR, textes[0], offres), _select(membre, PAIEMENT_INVENTAIRE, textes[1], offres)]
-    return [(premier, menus), (second, autres)]
+    cmd = await _commande_boite(eco)
+    prix, cout = await prix_boite(eco), cout_role(cmd)
+    joueur = await eco.joueur_de(membre)
+    soldes = {}
+    for d in await domaines(eco):
+        s = await solde(eco, joueur, d)
+        soldes[d["id"]] = (s or {}).get("monnaie") or 0
+    or_ = (joueur or {}).get("eco_or") or 0
+    nb_boites = sum(n for _o, n in await _boites(eco, joueur))
+    choisi = next(((d, r) for d, r in offres if r["id"] == rec_id), None)
+    avertissement = (cmd.get("commentaires") or "").strip() or AVERTISSEMENT
 
+    paiements = [f'**{prix}** {d.get("monnaie_nom")}' for d in await domaines(eco)]
+    entete = ("-# Conseiller des Rôles\n## Que préférez-vous ?\n"
+              f"Une boîte à rôle se paie au choix : {' · '.join(paiements)} · **{BOITE_OR}** {eco_vues.or_txt(cfg)} · "
+              f"ou une boîte de votre inventaire.\n-# ⚠️ {avertissement}")
+    blocs = [eco_vues._texte(entete), {"type": 14, "divider": True, "spacing": 1}]
 
-async def menu_boite(eco, membre: discord.Member) -> tuple[dict, list]:
-    """/utiliser sur une Boîte à rôle : choix du rôle, la boîte de l'inventaire est consommée."""
-    offres = await offres_roles(eco, membre)
-    if not offres:
-        return eco_vues.erreur("Aucun rôle à choisir : vous les avez déjà tous, ou l'événement Rostheim n'est pas actif."), []
-    embed = {"title": "Boîte à rôle", "color": eco_vues.OR_DEFAUT,
-             "description": "Choisissez votre rôle. Il est définitif et se paie dans la monnaie de sa zone ; la boîte est utilisée seulement si le rôle est obtenu."}
-    return embed, [_select(membre, PAIEMENT_INVENTAIRE, "Choisissez votre rôle…", offres)]
+    roles = [{"label": analyser(r)["nom"][:100], "value": r["id"], "default": bool(choisi) and r["id"] == choisi[1]["id"],
+              "description": f'+{cout} {d.get("monnaie_nom")} ({d.get("nom")}) · vous en avez {soldes.get(d["id"], 0)}'[:100]}
+             for d, r in offres[:25]]
+    blocs.append(eco_vues._texte("**1. Votre rôle**"))
+    blocs.append({"type": 1, "components": [{"type": 3, "custom_id": f"eco:bxr:{membre.id}", "placeholder": "Choisissez votre rôle…", "options": roles}]})
+
+    options = [{"label": f'{prix} {d.get("monnaie_nom")}'[:100], "value": d["id"], "description": f'{d.get("nom")} · vous en avez {soldes.get(d["id"], 0)}'[:100]}
+               for d in await domaines(eco)]
+    options.append({"label": f"{BOITE_OR} Or", "value": PAIEMENT_OR, "description": f"vous en avez {or_}"})
+    options.append({"label": "Boîte de l'inventaire", "value": PAIEMENT_INVENTAIRE, "description": f"vous en avez {nb_boites}"})
+    blocs.append(eco_vues._texte("**2. Payer la boîte avec…**"))
+    blocs.append({"type": 1, "components": [{
+        "type": 3, "custom_id": f'eco:bxp:{membre.id}:{choisi[1]["id"] if choisi else "-"}', "options": options[:25], "disabled": not choisi,
+        "placeholder": (f'Payer la boîte pour « {analyser(choisi[1])["nom"]} »…' if choisi else "Choisissez d'abord votre rôle")[:150]}]})
+    return {"flags": eco_vues.V2 | eco_vues.PRIVE, "components": [{"type": 17, "accent_color": eco_vues.OR_DEFAUT, "components": blocs}]}
 
 
 async def _gain(eco, joueur: dict, monnaie: str, montant: int, note: str):
@@ -326,64 +342,61 @@ async def _gain(eco, joueur: dict, monnaie: str, montant: int, note: str):
                                      "points_jauge": 0, "date": _pb_date(datetime.now(timezone.utc)), "origine": ""})
 
 
-async def ouvrir_boite(eco, membre: discord.Member, rec_id: str, channel_id: str | None, paiement: str = PAIEMENT_INVENTAIRE) -> tuple[bool, str]:
-    """La boîte est payée (inventaire, Or ou monnaie d'un domaine), puis le rôle acheté dans sa monnaie ;
-    en cas d'échec ce qui a été pris est rendu."""
-    from app.eco_actions import changer_or, quantite, retirer_objet
+async def ouvrir_boite(eco, membre: discord.Member, rec_id: str, paiement: str = PAIEMENT_INVENTAIRE) -> tuple[bool, str]:
+    """Vérifie le paiement de la boîte et le coût du rôle, donne le rôle, puis seulement prélève."""
+    from app.eco_actions import changer_or, retirer_objet
     joueur = await eco.joueur_de(membre)
     if not joueur:
         return False, "Aucune fiche joueur liée à ce compte Discord."
-    r = await eco.pb.premier("ros_recompenses", f'id="{echapper(rec_id)}"')
-    if not r or analyser(r)["type"] != "role":
+    tous = await domaines(eco)
+    r = await eco.pb.premier("ros_recompenses", f'id="{echapper(rec_id)}" && actif=true')
+    dr = next((x for x in tous if r and x["id"] == r.get("domaine")), None)
+    if not r or not dr or analyser(r)["type"] != "role":
         return False, "Ce rôle n'est plus proposé."
+    nom = analyser(r)["nom"]
+    if eco._a_le_role(membre, None, nom):
+        return False, f"Vous avez déjà le rôle « {nom} » : rien n'a été prélevé."
     cfg = await eco.config()
-    note = r["libelle"]
+    prix, cout = await prix_boite(eco), cout_role(await _commande_boite(eco))
+    m_role = dr.get("monnaie_nom") or "monnaie"
     async with eco._verrou(membre.id):
+        sd_role = await solde(eco, joueur, dr)
+        boite = None
         if paiement == PAIEMENT_INVENTAIRE:
-            boite = None
-            for o in [o for o in await eco.pb.lister("eco_objets", "actif=true") if est_boite_a_role(o)]:
-                if (await quantite(eco, joueur["id"], o["id"]))[1] >= 1:
-                    boite = o
-                    break
+            boite = next(iter(await _boites(eco, joueur)), (None, 0))[0]
             if not boite:
                 return False, "Vous n'avez pas de Boîte à rôle dans votre inventaire."
-            await retirer_objet(eco, joueur["id"], boite["id"], 1, "utilisation", f"boîte à rôle : {note}")
-            cout = "une boîte de l'inventaire"
-
-            async def rendre():
-                await eco.ajouter_objet(joueur["id"], boite["id"], 1, "boite_a_role_rendue", "rôle non obtenu")
+            payee = "une boîte de l'inventaire"
         elif paiement == PAIEMENT_OR:
             frais = await eco.pb.requete("GET", f'/api/collections/joueurs/records/{joueur["id"]}')
             if (frais.get("eco_or") or 0) < BOITE_OR:
                 return False, f'Il faut {BOITE_OR} {eco_vues.or_txt(cfg)} pour la boîte (vous en avez {frais.get("eco_or") or 0}).'
-            await changer_or(eco, joueur["id"], -BOITE_OR)
-            await _gain(eco, joueur, "Or", -BOITE_OR, note)
-            cout = f"{BOITE_OR} {eco_vues.or_txt(cfg)}"
-
-            async def rendre():
-                await changer_or(eco, joueur["id"], BOITE_OR)
-                await _gain(eco, joueur, "Or", BOITE_OR, f"{note} (rendu)")
+            payee = f"{BOITE_OR} {eco_vues.or_txt(cfg)}"
         else:
-            d = next((x for x in await domaines(eco) if x["id"] == paiement), None)
-            if not d:
+            dp = next((x for x in tous if x["id"] == paiement), None)
+            if not dp:
                 return False, "Cette monnaie n'est pas ouverte."
-            prix, monnaie = await prix_boite(eco), d.get("monnaie_nom") or "monnaie"
-            sd = await solde(eco, joueur, d)
-            if not sd or (sd.get("monnaie") or 0) < prix:
-                return False, f'Il faut {prix} {monnaie} pour la boîte (vous en avez {(sd or {}).get("monnaie") or 0}).'
+            sd = await solde(eco, joueur, dp)
+            besoin = prix + (cout if dp["id"] == dr["id"] else 0)
+            if (sd or {}).get("monnaie", 0) < besoin:
+                detail = f" ({prix} pour la boîte + {cout} pour le rôle)" if dp["id"] == dr["id"] else " pour la boîte"
+                return False, f'Il faut {besoin} {dp.get("monnaie_nom")}{detail} : vous en avez {(sd or {}).get("monnaie") or 0}.'
+            payee = f'{prix} {dp.get("monnaie_nom")}'
+        if (sd_role or {}).get("monnaie", 0) < cout:
+            return False, f'Le rôle « {nom} » coûte {cout} {m_role} : vous en avez {(sd_role or {}).get("monnaie") or 0}. Rien n\'a été prélevé.'
+        echec = await eco.donner_role(membre, joueur, None, nom, 0)
+        if echec:
+            return False, f"Rôle non obtenu, rien n'a été prélevé : {echec}."
+        if boite:
+            await retirer_objet(eco, joueur["id"], boite["id"], 1, "utilisation", f"boîte à rôle : {r['libelle']}")
+        elif paiement == PAIEMENT_OR:
+            await changer_or(eco, joueur["id"], -BOITE_OR)
+            await _gain(eco, joueur, "Or", -BOITE_OR, r["libelle"])
+        else:
+            sd = await solde(eco, joueur, dp)
             await eco.pb.maj("ros_soldes", sd["id"], {"monnaie": sd["monnaie"] - prix})
-            await _gain(eco, joueur, monnaie, -prix, note)
-            cout = f"{prix} {monnaie}"
-
-            async def rendre():
-                frais = await solde(eco, joueur, d)
-                await eco.pb.maj("ros_soldes", frais["id"], {"monnaie": (frais.get("monnaie") or 0) + prix})
-                await _gain(eco, joueur, monnaie, prix, f"{note} (rendu)")
-    ok, texte = await acheter(eco, membre, r.get("domaine"), rec_id, "", channel_id)
-    if not ok:
-        async with eco._verrou(membre.id):
-            await rendre()
-        return False, texte + (" La boîte vous est rendue." if paiement == PAIEMENT_INVENTAIRE else f" La boîte n'est pas consommée : {cout} rendus.")
-    d = next((x for x in await domaines(eco) if x["id"] == r.get("domaine")), {})
-    return True, (f'{membre.mention} consomme une **Boîte à rôle** ({cout}) : rôle **{analyser(r)["nom"]}** obtenu '
-                  f'pour {r.get("prix") or 0} {d.get("monnaie_nom") or ""}.')
+            await _gain(eco, joueur, dp.get("monnaie_nom") or "", -prix, r["libelle"])
+        sd_role = await solde(eco, joueur, dr)
+        await eco.pb.maj("ros_soldes", sd_role["id"], {"monnaie": sd_role["monnaie"] - cout})
+        await _gain(eco, joueur, m_role, -cout, r["libelle"])
+    return True, f"{membre.mention} consomme une **Boîte à rôle** ({payee}) : rôle **{nom}** obtenu pour {cout} {m_role}."

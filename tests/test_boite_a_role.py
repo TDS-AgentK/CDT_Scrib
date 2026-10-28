@@ -1,5 +1,5 @@
 """Tests de /boite-a-role : la boîte se paie en monnaie de domaine (30), en Or (200) ou depuis l'inventaire,
-puis le rôle se paie dans la monnaie de son domaine (10) ; si le rôle n'est pas obtenu, le paiement est rendu.
+puis le rôle se paie 10 dans la monnaie de son domaine (et non son prix en boutique) ; rien n'est prélevé en cas d'échec.
 Lancer : python -m unittest discover -s tests
 """
 import asyncio
@@ -11,8 +11,8 @@ from app import ros_boutique
 
 ACAD = {"id": "dacad", "nom": "Académie", "ordre": 1, "monnaie_nom": "Fragments de savoir"}
 MAIRIE = {"id": "dmairie", "nom": "Mairie", "ordre": 4, "monnaie_nom": "Influence"}
-PRINCE = {"id": "rprince", "libelle": "Obtenir le rôle Prince", "domaine": "dmairie", "prix": 10, "actif": True}
-ERUDIT = {"id": "rerudit", "libelle": "Obtenir le rôle Aspirant Erudit", "domaine": "dacad", "prix": 10, "actif": True}
+PRINCE = {"id": "rprince", "libelle": "Obtenir le rôle Prince", "domaine": "dmairie", "prix": 40, "actif": True}
+ERUDIT = {"id": "rerudit", "libelle": "Obtenir le rôle Aspirant Erudit", "domaine": "dacad", "prix": 40, "actif": True}
 BOITE = {"id": "rboite", "libelle": "Boîte à rôle x1", "domaine": "", "toute_monnaie": True, "prix": 30, "actif": True}
 OBJET_BOITE = {"id": "oboite", "nom": "Boîte à rôle", "actif": True}
 
@@ -94,7 +94,7 @@ class FauxEco:
 def base(or_=0, savoir=0, influence=0, boites=0):
     return FauxPb({
         "ros_domaines": [ACAD, MAIRIE], "ros_recompenses": [PRINCE, ERUDIT, BOITE],
-        "ros_commandes": [{"id": "cbar", "type": "boite_a_role", "actif": True, "commentaires": ""}],
+        "ros_commandes": [{"id": "cbar", "type": "boite_a_role", "actif": True, "commentaires": "", "cout_monnaie": 10}],
         "joueurs": [{"id": "j1", "eco_or": or_}],
         "ros_soldes": [{"id": "s1", "joueur": "j1", "domaine": "dacad", "monnaie": savoir},
                        {"id": "s2", "joueur": "j1", "domaine": "dmairie", "monnaie": influence}],
@@ -119,70 +119,82 @@ class BoiteARole(unittest.TestCase):
     def test_contre_une_monnaie(self):
         pb = base(savoir=30, influence=10)
         eco = FauxEco(pb)
-        ok, txt = lancer(ros_boutique.ouvrir_boite(eco, membre(), "rprince", None, "dacad"))
+        ok, txt = lancer(ros_boutique.ouvrir_boite(eco, membre(), "rprince", "dacad"))
         self.assertTrue(ok, txt)
         self.assertEqual(eco.roles_donnes, ["Prince"])
         self.assertEqual(soldes(pb), {"dacad": 0, "dmairie": 0})
 
     def test_meme_monnaie_que_le_role(self):
         pb = base(savoir=40)
-        ok, _ = lancer(ros_boutique.ouvrir_boite(FauxEco(pb), membre(), "rerudit", None, "dacad"))
+        ok, _ = lancer(ros_boutique.ouvrir_boite(FauxEco(pb), membre(), "rerudit", "dacad"))
         self.assertTrue(ok)
         self.assertEqual(soldes(pb)["dacad"], 0)
 
-    def test_monnaie_du_role_insuffisante_rend_la_boite(self):
+    def test_meme_monnaie_insuffisante_rien_preleve(self):
         pb = base(savoir=35)
         eco = FauxEco(pb)
-        ok, txt = lancer(ros_boutique.ouvrir_boite(eco, membre(), "rerudit", None, "dacad"))
+        ok, txt = lancer(ros_boutique.ouvrir_boite(eco, membre(), "rerudit", "dacad"))
         self.assertFalse(ok)
-        self.assertIn("rendus", txt)
+        self.assertIn("Il faut 40", txt)
         self.assertEqual(soldes(pb)["dacad"], 35)
         self.assertEqual(eco.roles_donnes, [])
 
     def test_monnaie_insuffisante_pour_la_boite(self):
         pb = base(savoir=29, influence=10)
-        ok, txt = lancer(ros_boutique.ouvrir_boite(FauxEco(pb), membre(), "rprince", None, "dacad"))
+        ok, txt = lancer(ros_boutique.ouvrir_boite(FauxEco(pb), membre(), "rprince", "dacad"))
         self.assertFalse(ok)
         self.assertIn("Il faut 30", txt)
         self.assertEqual(soldes(pb), {"dacad": 29, "dmairie": 10})
 
     def test_contre_de_l_or(self):
         pb = base(or_=250, influence=10)
-        ok, txt = lancer(ros_boutique.ouvrir_boite(FauxEco(pb), membre(), "rprince", None, "or"))
+        ok, txt = lancer(ros_boutique.ouvrir_boite(FauxEco(pb), membre(), "rprince", "or"))
         self.assertTrue(ok, txt)
         self.assertEqual(pb.d["joueurs"][0]["eco_or"], 50)
         self.assertEqual(soldes(pb)["dmairie"], 0)
 
     def test_or_rendu_si_role_deja_possede(self):
         pb = base(or_=250, influence=10)
-        ok, _ = lancer(ros_boutique.ouvrir_boite(FauxEco(pb), membre("Prince"), "rprince", None, "or"))
+        ok, _ = lancer(ros_boutique.ouvrir_boite(FauxEco(pb), membre("Prince"), "rprince", "or"))
         self.assertFalse(ok)
         self.assertEqual(pb.d["joueurs"][0]["eco_or"], 250)
         self.assertEqual(soldes(pb)["dmairie"], 10)
 
     def test_depuis_l_inventaire(self):
         pb = base(influence=10, boites=1)
-        ok, txt = lancer(ros_boutique.ouvrir_boite(FauxEco(pb), membre(), "rprince", None, "inv"))
+        ok, txt = lancer(ros_boutique.ouvrir_boite(FauxEco(pb), membre(), "rprince", "inv"))
         self.assertTrue(ok, txt)
         self.assertEqual(pb.d["eco_inventaire"], [])
 
     def test_inventaire_vide(self):
-        ok, txt = lancer(ros_boutique.ouvrir_boite(FauxEco(base(influence=10)), membre(), "rprince", None, "inv"))
+        ok, txt = lancer(ros_boutique.ouvrir_boite(FauxEco(base(influence=10)), membre(), "rprince", "inv"))
         self.assertFalse(ok)
         self.assertIn("pas de Boîte", txt)
 
-    def test_menus(self):
-        menus = lancer(ros_boutique.menus_boite(FauxEco(base()), membre("Prince")))
-        self.assertEqual(len(menus), 2)
-        (premier, selects), (second, autres) = menus
-        self.assertIn("contre des fragments de savoir. (30)", premier["description"])
-        self.assertIn("contre des influences. (30)", premier["description"])
-        self.assertIn("aspirant érudit", premier["fields"][0]["value"])
-        self.assertEqual([s["components"][0]["custom_id"] for s in selects + autres],
-                         ["eco:bar:42:dacad", "eco:bar:42:dmairie", "eco:bar:42:or", "eco:bar:42:inv"])
-        # Rôle déjà possédé : seul Aspirant Erudit reste proposé.
-        self.assertEqual([o["label"] for o in autres[0]["components"][0]["options"]], ["Aspirant Erudit"])
+    def test_role_deja_possede(self):
+        pb = base(savoir=30, influence=10)
+        ok, txt = lancer(ros_boutique.ouvrir_boite(FauxEco(pb), membre("Prince"), "rprince", "dacad"))
+        self.assertFalse(ok)
+        self.assertEqual(soldes(pb), {"dacad": 30, "dmairie": 10})
 
+    def test_vue_avant_et_apres_le_choix_du_role(self):
+        eco = FauxEco(base(savoir=12, boites=2))
+        vue = lancer(ros_boutique.vue_boite(eco, membre("Prince")))
+        blocs = vue["components"][0]["components"]
+        menus = [b["components"][0] for b in blocs if b["type"] == 1]
+        self.assertEqual([o["label"] for o in menus[0]["options"]], ["Aspirant Erudit"])  # Prince déjà possédé
+        self.assertIn("+10 Fragments de savoir", menus[0]["options"][0]["description"])
+        self.assertIn("vous en avez 12", menus[0]["options"][0]["description"])
+        self.assertTrue(menus[1]["disabled"])
+        self.assertEqual([o["value"] for o in menus[1]["options"]], ["dacad", "dmairie", "or", "inv"])
+        self.assertEqual(menus[1]["options"][3]["description"], "vous en avez 2")
+        self.assertIn("aspirant érudit", blocs[0]["content"])
+
+        vue = lancer(ros_boutique.vue_boite(eco, membre("Prince"), "rerudit"))
+        menus = [b["components"][0] for b in vue["components"][0]["components"] if b["type"] == 1]
+        self.assertTrue(menus[0]["options"][0]["default"])
+        self.assertFalse(menus[1]["disabled"])
+        self.assertEqual(menus[1]["custom_id"], "eco:bxp:42:rerudit")
 
 if __name__ == "__main__":
     unittest.main()

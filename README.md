@@ -29,9 +29,9 @@ Commandes slash de l'économie (à enregistrer avec `python -m scripts.register_
 `/boutique` (Components V2 : choix de la boutique, articles paginés avec bouton « prix - Acheter », tri, fenêtre de
 quantité), `/argent` et `/niveau` (cartes image), `/topargent`, `/topniveau` (paginés), `/inventaire` (grille),
 `/payer` (Or, ou monnaie Rostheim si les échanges sont activés), `/donner`, `/vendre` (prix de revente de l'objet),
-`/utiliser` (objets utilisables), `/echanger` (proposition acceptée ou refusée par bouton), `/boite-a-role` (les deux menus du Conseiller des Rôles : une boîte
-consommée contre 30 d'une monnaie de Rostheim, contre 200 Or ou depuis l'inventaire, puis le rôle payé 10 dans la monnaie de son
-domaine ; tout est rendu si le rôle n'est pas obtenu). Menus, boutons et
+`/utiliser` (objets utilisables), `/echanger` (proposition acceptée ou refusée par bouton), `/boite-a-role` (Conseiller des Rôles, en un seul message : choix du rôle, puis paiement
+de la boîte avec 30 d'une monnaie de Rostheim, 200 Or ou une boîte de l'inventaire ; le rôle coûte en plus 10 dans la monnaie de son
+domaine ; rien n'est prélevé si le rôle ne peut pas être donné). Menus, boutons et
 fenêtres (custom_id `eco:…`) arrivent par `/interactions` (`app/eco_interactions.py`).
 
 Sessions de jeu des fiches du site (`app/sessions_jeu.py`, collection `sessions_jeu`), pour tout le monde :
