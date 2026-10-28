@@ -10,13 +10,13 @@ import logging
 import discord
 import httpx
 
-from app import combat, drop, eco_actions, eco_vues, emblemes, jets_site, loteries, receleur, ros_boutique, sessions_jeu
+from app import combat, drop, eco_actions, eco_vues, emblemes, info, jets_site, loteries, receleur, ros_boutique, sessions_jeu
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
              "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
-             "session", "recompense", "attaque", "boite-a-role"}
+             "session", "recompense", "attaque", "boite-a-role", "info"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -122,6 +122,8 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
     nom, opt = data["name"], _options(data)
     if nom == "boutique":
         return {"type": MESSAGE, "data": await eco_vues.vue_choix_boutique(eco, membre)}
+    if nom == "info":
+        return {"type": MESSAGE, "data": {"embeds": [info.vue_info(eco.prefixe)], "flags": PRIVE}}
     if nom == "boite-a-role":
         # Conseiller des Rôles (app/ros_boutique.py) : choix du rôle puis du paiement de la boîte, dans un seul message.
         return {"type": MESSAGE, "data": await ros_boutique.vue_boite(eco, membre)}
