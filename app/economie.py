@@ -290,6 +290,8 @@ class Economie:
             for p in [p for p in cfg["paliers"] if p.get("declencheur") == "niveau" and p.get("seuil") == niveau]:
                 await self.donner_succes(joueur, p.get("succes"))
         xp_nom = f'{cfg["reglages"].get("xp_emoji") or ""} {cfg["reglages"].get("xp_nom") or "XP"}'.strip()
+        from app import journal
+        await journal.noter(self.pb, "niveau", f"niveau {apres}", joueur.get("id") or "", motif=xp_nom, **journal._membre(membre))
         embed = discord.Embed(description=f"{membre.mention} atteint le niveau **{apres}** ({xp_nom}).", color=COULEUR_DEFAUT)
         if [l for l in lignes if l]:
             embed.add_field(name="Récompenses", value="\n".join(l for l in lignes if l)[:1024], inline=False)
@@ -351,6 +353,8 @@ class Economie:
         membres = s.get("members") or []
         if joueur["joueur"] not in membres:
             await self.pb.maj("succes", succes_id, {"members": membres + [joueur["joueur"]]})
+            from app import journal
+            await journal.noter(self.pb, "succes", s.get("title") or "succès", joueur.get("id") or "", succes=succes_id)
 
     async def ajouter_objet(self, joueur_id: str, objet_id: str, quantite: int, motif: str, note: str = ""):
         ligne = await self.pb.premier("eco_inventaire", f'joueur="{echapper(joueur_id)}" && objet="{echapper(objet_id)}"')
