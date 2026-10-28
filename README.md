@@ -29,7 +29,9 @@ Commandes slash de l'économie (à enregistrer avec `python -m scripts.register_
 `/boutique` (Components V2 : choix de la boutique, articles paginés avec bouton « prix - Acheter », tri, fenêtre de
 quantité), `/argent` et `/niveau` (cartes image), `/topargent`, `/topniveau` (paginés), `/inventaire` (grille),
 `/payer` (Or, ou monnaie Rostheim si les échanges sont activés), `/donner`, `/vendre` (prix de revente de l'objet),
-`/utiliser` (objets utilisables), `/echanger` (proposition acceptée ou refusée par bouton). Menus, boutons et
+`/utiliser` (objets utilisables), `/echanger` (proposition acceptée ou refusée par bouton), `/boite-a-role` (les deux menus du Conseiller des Rôles : une boîte
+consommée contre 30 d'une monnaie de Rostheim, contre 200 Or ou depuis l'inventaire, puis le rôle payé 10 dans la monnaie de son
+domaine ; tout est rendu si le rôle n'est pas obtenu). Menus, boutons et
 fenêtres (custom_id `eco:…`) arrivent par `/interactions` (`app/eco_interactions.py`).
 
 Sessions de jeu des fiches du site (`app/sessions_jeu.py`, collection `sessions_jeu`), pour tout le monde :
@@ -46,7 +48,7 @@ affiche le défi et met à jour le même message à chaque étape, y compris pou
 Événement Rostheim et commande RP (définis dans la base : `ros_commandes`, `ros_domaines`, `ros_paliers`,
 `ros_recompenses`, `eco_commande_rp`) : commandes de gain (`??texte`, `??lore`…) avec rôle requis, salon autorisé et
 limites ; conversions `??gold-<monnaie>` / `??xp-<monnaie>` ; boutiques de domaine `??dépenser-<monnaie> [numéro]` ;
-`??boîte-à-rôle [numéro]` ; jauges collective et individuelle, paliers (palier marqué atteint au passage ; l'embed complet du palier — titre, citation, champs, image, auteur du domaine —
+`??boîte-à-rôle` (renvoie vers `/boite-a-role`) ; jauges collective et individuelle, paliers (palier marqué atteint au passage ; l'embed complet du palier — titre, citation, champs, image, auteur du domaine —
 est posté quand K clique « Envoyer dans le salon » dans l'éditeur du site : demande dans `ros_envois`, traitée par le bot,
 sous le nom et l'avatar des réglages Rostheim, renvoyable à volonté) ;
 `??rp @partenaires…` (Or, XP et rôle, message dans le salon configuré). Chaque gain est tracé dans `eco_gains`.

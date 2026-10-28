@@ -118,7 +118,10 @@ class Rostheim:
             await message.reply(f"Cette commande se lance maintenant avec **/recompense**{zone}.", mention_author=False)
             return True
         type_ = cmd.get("type")
-        if type_ in ("boutique", "boite_a_role"):
+        if type_ == "boite_a_role":
+            await message.reply("Les boîtes à rôle s'ouvrent avec la commande **/boite-a-role**.", mention_author=False)
+            return True
+        if type_ == "boutique":
             await message.reply("Les boutiques de Rostheim s'ouvrent avec la commande **/boutique**.", mention_author=False)
             return True
         if type_ in TYPES_GAIN:
