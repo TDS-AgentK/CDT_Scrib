@@ -10,6 +10,10 @@ Missives de la boîte aux lettres du site (lib/boiteAuxLettres.ts) : une longue 
 (2000 caractères au plus chacune). Si le joueur a coché « Supprimer le message au bout de trois jours », chaque demande
 porte `supprimer_le` : le bot note `message_id` à l'envoi, puis efface le message une fois la date passée et marque la
 demande `statut="supprime"` (message déjà effacé à la main : marqué pareil).
+
+Missive modifiée sur le site : chaque demande déjà postée reçoit son nouveau `texte` et `statut="a_modifier"` ; le bot
+modifie le message Discord (ID tiré de `message_id` ou du `lien`) puis remet `statut="envoye"`. Une missive raccourcie
+marque les messages en trop `statut="a_supprimer"` : le bot les efface et note `statut="supprime"`.
 """
 
 import asyncio
@@ -30,10 +34,20 @@ FRAICHEUR = timedelta(hours=24)
 Envoyer = Callable[[str, str], Awaitable[str]]
 # (salon_id, message_id) -> efface le message (sans erreur s'il n'existe plus)
 Supprimer = Callable[[str, str], Awaitable[None]]
+# (salon_id, message_id, texte) -> remplace le texte du message ; False s'il n'existe plus
+Modifier = Callable[[str, str, str], Awaitable[bool]]
 
 
 def _pb_date(d: datetime) -> str:
     return d.strftime("%Y-%m-%d %H:%M:%S.000Z")
+
+
+def _message_id(annonce: dict) -> str:
+    """ID du message posté : noté à l'envoi, sinon fin du lien https://discord.com/channels/<serveur>/<salon>/<message>."""
+    if str(annonce.get("message_id") or "").isdigit():
+        return str(annonce["message_id"])
+    fin = str(annonce.get("lien") or "").rstrip("/").split("/")[-1]
+    return fin if fin.isdigit() else ""
 
 
 def _age(annonce: dict, maintenant: datetime) -> timedelta:
@@ -86,6 +100,40 @@ async def tour_suppressions(supprimer: Supprimer, pb: PocketBase, maintenant: da
     return len(annonces)
 
 
+async def tour_modifications(modifier: Modifier, supprimer: Supprimer, pb: PocketBase) -> int:
+    """Applique sur Discord les missives modifiées sur le site ; renvoie le nombre de demandes traitées."""
+    annonces = await pb.lister("discord_annonces", 'statut="a_modifier" || statut="a_supprimer"', tri="created")
+    for annonce in annonces:
+        salon, message = str(annonce.get("salon_id") or ""), _message_id(annonce)
+        try:
+            if annonce.get("statut") == "a_supprimer":
+                if message:
+                    await supprimer(salon, message)
+                maj = {"statut": "supprime", "erreur": ""}
+            elif not message:
+                maj = {"statut": "erreur", "erreur": "message Discord introuvable : modification non appliquée"}
+            elif await modifier(salon, message, str(annonce.get("texte") or "")[:2000]):
+                maj = {"statut": "envoye", "erreur": "", "message_id": message}
+            else:  # effacé à la main entre-temps
+                maj = {"statut": "supprime", "erreur": ""}
+        except Exception as e:  # noqa: BLE001 — réessayé au tour suivant, l'erreur reste visible dans la base
+            log.exception("Annonce %s non modifiée", annonce.get("id"))
+            maj = {"erreur": f"modification : {type(e).__name__} : {e}"[:300]}
+        await pb.maj("discord_annonces", annonce["id"], maj)
+    return len(annonces)
+
+
+def modificateur(client: discord.Client) -> Modifier:
+    async def modifier(salon_id: str, message_id: str, texte: str) -> bool:
+        salon = client.get_channel(int(salon_id)) or await client.fetch_channel(int(salon_id))
+        try:
+            await salon.get_partial_message(int(message_id)).edit(content=texte, allowed_mentions=discord.AllowedMentions.none())
+        except discord.NotFound:
+            return False
+        return True
+    return modifier
+
+
 def effaceur(client: discord.Client) -> Supprimer:
     async def supprimer(salon_id: str, message_id: str) -> None:
         salon = client.get_channel(int(salon_id)) or await client.fetch_channel(int(salon_id))
@@ -108,7 +156,7 @@ def envoyeur(client: discord.Client) -> Envoyer:
 
 async def boucle(client: discord.Client, pb: PocketBase):
     await client.wait_until_ready()
-    envoyer, supprimer = envoyeur(client), effaceur(client)
+    envoyer, supprimer, modifier = envoyeur(client), effaceur(client), modificateur(client)
     while not client.is_closed():
         try:
             await tour(envoyer, pb)
@@ -118,4 +166,8 @@ async def boucle(client: discord.Client, pb: PocketBase):
             await tour_suppressions(supprimer, pb)
         except Exception:  # champ supprimer_le absent tant que scripts/setup-missives.mjs (site) n'a pas tourné
             log.debug("Effacement programmé des annonces indisponible", exc_info=True)
+        try:
+            await tour_modifications(modifier, supprimer, pb)
+        except Exception:
+            log.exception("Erreur dans la modification des missives")
         await asyncio.sleep(ANNONCES_S)
