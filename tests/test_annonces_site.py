@@ -19,6 +19,8 @@ class FauxPb:
         assert collection == "discord_annonces"
         if filtre == 'statut="en_attente"':
             return [dict(a) for a in self.annonces.values() if a.get("statut") == "en_attente"]
+        if filtre == 'statut="a_modifier" || statut="a_supprimer"':
+            return [dict(a) for a in self.annonces.values() if a.get("statut") in ("a_modifier", "a_supprimer")]
         # Effacement programmé : statut="envoye" && supprimer_le!="" && supprimer_le<="<date>"
         limite = filtre.split('supprimer_le<="')[1].rstrip('"')
         return [dict(a) for a in self.annonces.values()
@@ -120,6 +122,49 @@ class AnnoncesSiteTest(unittest.TestCase):
 
         asyncio.run(annonces_site.tour_suppressions(supprimer, pb, MAINTENANT))
         self.assertEqual(pb.annonces["m1"]["statut"], "envoye")
+        self.assertIn("Discord indisponible", pb.annonces["m1"]["erreur"])
+
+    def test_missive_modifiee(self):
+        a = _annonce("m1")
+        a.update(statut="a_modifier", texte="Nouveau texte", lien="https://discord.com/channels/1/2/111")
+        b = _annonce("m2")
+        b.update(statut="a_supprimer", message_id="222")
+        c = _annonce("m3")
+        c.update(statut="a_modifier", texte="x", message_id="333")
+        d = _annonce("m4")
+        d.update(statut="a_modifier", texte="y", lien="")
+        pb, modifies, effaces = FauxPb([a, b, c, d, _annonce("m5")]), [], []
+
+        async def modifier(salon, message, texte):
+            modifies.append((message, texte))
+            return message != "333"  # m3 effacé à la main entre-temps
+
+        async def supprimer(salon, message):
+            effaces.append(message)
+
+        self.assertEqual(asyncio.run(annonces_site.tour_modifications(modifier, supprimer, pb)), 4)
+        self.assertEqual(modifies, [("111", "Nouveau texte"), ("333", "x")])
+        self.assertEqual(effaces, ["222"])
+        self.assertEqual(pb.annonces["m1"]["statut"], "envoye")
+        self.assertEqual(pb.annonces["m1"]["message_id"], "111")
+        self.assertEqual(pb.annonces["m2"]["statut"], "supprime")
+        self.assertEqual(pb.annonces["m3"]["statut"], "supprime")
+        self.assertEqual(pb.annonces["m4"]["statut"], "erreur")
+        self.assertEqual(pb.annonces["m5"]["statut"], "en_attente")
+
+    def test_modification_ratee_reessayee(self):
+        a = _annonce("m1")
+        a.update(statut="a_modifier", message_id="5")
+        pb = FauxPb([a])
+
+        async def modifier(salon, message, texte):
+            raise RuntimeError("Discord indisponible")
+
+        async def supprimer(salon, message):
+            pass
+
+        asyncio.run(annonces_site.tour_modifications(modifier, supprimer, pb))
+        self.assertEqual(pb.annonces["m1"]["statut"], "a_modifier")
         self.assertIn("Discord indisponible", pb.annonces["m1"]["erreur"])
 
 
