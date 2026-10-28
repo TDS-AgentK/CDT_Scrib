@@ -122,6 +122,9 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
     nom, opt = data["name"], _options(data)
     if nom == "boutique":
         return {"type": MESSAGE, "data": await eco_vues.vue_choix_boutique(eco, membre)}
+    if nom == "boite-a-role":
+        # Conseiller des Rôles (app/ros_boutique.py) : choix du rôle puis du paiement de la boîte, dans un seul message.
+        return {"type": MESSAGE, "data": await ros_boutique.vue_boite(eco, membre)}
 
     async def cible():
         if opt.get("membre") and str(opt["membre"]) != str(membre.id):
@@ -214,13 +217,6 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             await _modifier(app_id, jeton, [eco_vues.resultat(True, "C'est enregistré.")])
             return await _webhook("POST", f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}",
                                   {"content": f"{membre.mention} {txt}", "allowed_mentions": {"parse": ["users"]}})
-        if nom == "boite-a-role":
-            # Les deux menus de l'ancien ??boîte-à-rôle : le second part en message de suivi (5 menus par message).
-            (embed, comp), *suite = await ros_boutique.menus_boite(eco, membre)
-            await _modifier(app_id, jeton, [embed], comp)
-            for embed, comp in suite:
-                await _webhook("POST", f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}", {"embeds": [embed], "components": comp})
-            return
         if nom == "utiliser":
             o = await eco_actions.objet_par_nom(eco, opt.get("objet") or "")
             if emblemes.type_de(o):
@@ -231,8 +227,7 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
                 joueur = await eco.joueur_de(membre)
                 if not joueur or (await eco_actions.quantite(eco, joueur["id"], o["id"]))[1] < 1:
                     return await _modifier(app_id, jeton, [eco_vues.erreur(f"Vous n'avez pas de {o['nom']}.")])
-                embed, comp = await ros_boutique.menu_boite(eco, membre)
-                return await _modifier(app_id, jeton, [embed], comp)
+                return await _modifier(app_id, jeton, [eco_vues.resultat(True, "Ouvrez votre boîte avec **/boite-a-role** : choisissez le rôle, puis « Boîte de l'inventaire ».")])
             salon = membre.guild.get_channel(int(payload["channel_id"])) if payload.get("channel_id") else None
             ok, txt = await eco_actions.utiliser(eco, membre, opt.get("objet"), salon)
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
@@ -342,17 +337,24 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
             return {"type": FENETRE, "data": modal}
         _en_fond(taches, _achat_ros, eco, payload, membre, app_id, morceaux[2], morceaux[3], "")
         return {"type": DIFFERE, "data": {"flags": PRIVE}}
-    if morceaux[1] == "bar":
+    if morceaux[1] in ("bxr", "bxp", "bar"):
+        # Boîte à rôle : bxr = choix du rôle (le message se met à jour), bxp = paiement de la boîte ; bar = ancien menu.
+        if morceaux[1] == "bar":
+            return {"type": MESSAGE, "data": {"embeds": [eco_vues.erreur("Ce menu a changé : relancez **/boite-a-role**.")], "flags": PRIVE}}
         if str(membre.id) != morceaux[2]:
             return {"type": MESSAGE, "data": {"embeds": [eco_vues.erreur("Ce choix appartient à un autre joueur.")], "flags": PRIVE}}
+        if morceaux[1] == "bxr":
+            return _maj_v2(await ros_boutique.vue_boite(eco, membre, valeurs[0]))
 
-        async def choix_role():
-            paiement = morceaux[3] if len(morceaux) > 3 else ros_boutique.PAIEMENT_INVENTAIRE
-            ok, txt = await ros_boutique.ouvrir_boite(eco, membre, valeurs[0], payload.get("channel_id"), paiement)
+        async def payer_boite():
+            ok, txt = await ros_boutique.ouvrir_boite(eco, membre, morceaux[3], valeurs[0])
             if not ok:
                 return await _suivi_prive(app_id, jeton, eco_vues.erreur(txt))
-            await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)], [])
-        _en_fond(taches, choix_role)
+            await _webhook("PATCH", f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}/messages/@original", {
+                "flags": eco_vues.V2, "components": [{"type": 17, "accent_color": eco_vues.VERT, "components": [eco_vues._texte(f"✅ {txt}")]}]})
+            await _webhook("POST", f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}",
+                           {"content": txt, "allowed_mentions": {"parse": ["users"]}})
+        _en_fond(taches, payer_boite)
         return {"type": DIFFERE_MAJ}
     if morceaux[1] == "emb":
         # Tirage d'emblèmes : bouton « Collection 1256 / 1257 » (seul le joueur qui a lancé /utiliser peut choisir).
