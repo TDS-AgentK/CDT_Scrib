@@ -1,6 +1,6 @@
 from app.database import SECTION_COLUMNS, Database
 from app.discord_types import EPHEMERAL_FLAG, SECTIONS, ResponseType, valid_name
-from app.embeds import build_character_embed, build_illustrations_embed, build_section_modal
+from app.embeds import build_character_embed, build_illustrations_embeds, build_section_modal
 from app.flavors import CREER, MODIFIER, SUPPRIMER, pick
 from app.uploads import ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES
 
@@ -32,13 +32,17 @@ def find_subcommand(options: list[dict]) -> tuple[str, dict]:
     return sub["name"], _extract_options(sub.get("options", []))
 
 
-async def handle_command(db: Database, data: dict, member_or_user: dict) -> tuple[dict, dict | None]:
+SITE_SEULEMENT = "La fiche `{nom}` a été créée sur le site : modifiez-la depuis la page du personnage (logo contrat)."
+
+
+async def handle_command(db: Database, data: dict, member_or_user: dict, site=None) -> tuple[dict, list[dict]]:
+    """Retourne (réponse, embeds du second message). `site` : app.fiches_site.FichesSite (fiches créées sur le site)."""
     sub_name, opts = find_subcommand(data.get("options", []))
     nom_id = (opts.get("nom") or "").strip().lower()
     user_id = int(member_or_user["id"])
 
     if sub_name == "liste":
-        names = await db.list_names()
+        names = sorted(set(await db.list_names()) | set(await site.noms() if site else []))
         if not names:
             return _message("Aucune fiche enregistrée.", ephemeral=True), None
         formatted = ", ".join(f"`{n}`" for n in names)
@@ -51,7 +55,7 @@ async def handle_command(db: Database, data: dict, member_or_user: dict) -> tupl
         ), None
 
     if sub_name == "creer":
-        existing = await db.get(nom_id)
+        existing = await db.get(nom_id) or (site and await site.get(nom_id))
         if existing:
             return _message(f"Une fiche `{nom_id}` existe déjà.", ephemeral=True), None
         await db.create(nom_id, user_id)
@@ -62,6 +66,9 @@ async def handle_command(db: Database, data: dict, member_or_user: dict) -> tupl
             "les animains, courage.",
             ephemeral=True,
         ), None
+
+    if sub_name in ("modifier", "supprimer") and site and not await db.get(nom_id) and await site.get(nom_id):
+        return _message(SITE_SEULEMENT.format(nom=nom_id), ephemeral=True), None
 
     if sub_name == "modifier":
         fiche = await db.get(nom_id)
@@ -88,9 +95,14 @@ async def handle_command(db: Database, data: dict, member_or_user: dict) -> tupl
 
     if sub_name == "voir":
         fiche = await db.get(nom_id)
-        if not fiche:
-            return _message(f"Aucune fiche `{nom_id}` trouvée.", ephemeral=True), None
-        return _message(embeds=[build_character_embed(fiche)]), build_illustrations_embed(fiche)
+        if fiche:
+            return _message(embeds=[build_character_embed(fiche)]), build_illustrations_embeds(fiche)
+        enregistree = site and await site.get(nom_id)
+        if enregistree:
+            from app.fiches_site import messages_de
+            principal, illustrations = messages_de(enregistree)
+            return _message(embeds=[principal]), illustrations
+        return _message(f"Aucune fiche `{nom_id}` trouvée.", ephemeral=True), None
 
     return _message("Commande inconnue.", ephemeral=True), None
 
@@ -134,12 +146,12 @@ async def validate_image_upload(db: Database, data: dict, member_or_user: dict):
     return None, nom_id, column, attachment
 
 
-async def handle_autocomplete(db: Database, data: dict, member_or_user: dict) -> dict:
+async def handle_autocomplete(db: Database, data: dict, member_or_user: dict, site=None) -> dict:
     sub_name, opts = find_subcommand(data.get("options", []))
     current = (opts.get("nom") or "").strip().lower()
 
     if sub_name == "voir":
-        names = await db.list_names(prefix=current)
+        names = sorted(set(await db.list_names(prefix=current)) | set(await site.noms(current) if site else []))
     else:
         user_id = int(member_or_user["id"])
         names = await db.list_names_by_owner(user_id, prefix=current)

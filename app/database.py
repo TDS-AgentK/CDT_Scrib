@@ -8,7 +8,7 @@ SECTION_COLUMNS = {
     "architecture": ["couleur", "image_personnage_url", "nom_skin", "lien_cdt", "equipement_image_url"],
     "identite": ["nom", "surnom", "genre", "race"],
     "physique": ["taille", "poids", "tranche_age", "morphologie", "couleur_yeux"],
-    "apparence": ["couleur_cheveux", "coiffure", "tenue", "armement_equipement"],
+    "apparence": ["couleur_cheveux", "coiffure", "tenue", "armement_equipement", "couleur_pelage"],
 }
 
 # "titre" n'est plus éditable via un formulaire (le titre affiché est désormais
@@ -59,6 +59,8 @@ class Fiche:
     armement_equipement: Optional[str]
     created_at: str
     updated_at: str
+    # Lycans, vulrek, shaamah : remplace cheveux et coiffure dans l'embed (colonne ajoutée après coup).
+    couleur_pelage: Optional[str] = None
 
 
 FICHE_FIELD_NAMES = {f.name for f in dataclass_fields(Fiche)}
@@ -78,6 +80,12 @@ class Database:
             self._conn = await aiosqlite.connect(self.path)
             self._conn.row_factory = aiosqlite.Row
             await self._conn.executescript(SCHEMA)
+            # Colonnes ajoutées après la création de la table : ajoutées aux bases existantes.
+            async with self._conn.execute("PRAGMA table_info(fiches)") as cursor:
+                existantes = {row["name"] for row in await cursor.fetchall()}
+            for colonne in TEXT_COLUMNS:
+                if colonne not in existantes:
+                    await self._conn.execute(f"ALTER TABLE fiches ADD COLUMN {colonne} TEXT")
             await self._conn.commit()
         return self._conn
 
@@ -92,7 +100,7 @@ class Database:
             "SELECT * FROM fiches WHERE name = ?", (name.lower(),)
         ) as cursor:
             row = await cursor.fetchone()
-            return Fiche(**{k: row[k] for k in FICHE_FIELD_NAMES}) if row else None
+            return Fiche(**{k: row[k] for k in FICHE_FIELD_NAMES if k in row.keys()}) if row else None
 
     async def list_names(self, prefix: str = "") -> list[str]:
         conn = await self._get_conn()
