@@ -81,8 +81,28 @@ class EmbedsTest(unittest.TestCase):
         noms = [c["name"] for c in principal["fields"]]
         self.assertEqual(noms[:3], ["Sexe", "Race", "Taille"])
         self.assertIn("Coiffure", noms)
-        self.assertEqual([e.get("title") for e in illustrations], ["Illustrations", "Dague"])
-        self.assertTrue(all(e["color"] == 0x3BA55C for e in illustrations))
+        # Mosaïque : un seul bloc (même url), titre et couleur sur le premier embed, titres des images en description.
+        self.assertEqual([e.get("title") for e in illustrations], ["Illustrations", None])
+        self.assertEqual(illustrations[0]["description"], "Dague")
+        self.assertEqual(illustrations[0]["color"], 0x3BA55C)
+        self.assertEqual(set(illustrations[1]), {"url", "image"})
+        self.assertEqual(len({e["url"] for e in illustrations}), 1)
+
+    def test_mosaique_par_groupes_de_quatre(self):
+        for n, groupes in ((1, [1]), (2, [2]), (4, [4]), (5, [4, 1]), (10, [4, 4, 2]), (12, [4, 4, 2])):
+            images = [{"titre": "", "url": f"https://x/{i}.png"} for i in range(n)]
+            embeds = fiches_site.messages_de(dict(FICHE, illustrations=images))[1]
+            with self.subTest(n=n):
+                self.assertEqual(len(embeds), min(n, 10))
+                urls = [e["url"] for e in embeds]
+                self.assertEqual([urls.count(u) for u in dict.fromkeys(urls)], groupes)
+                self.assertTrue(all(u.startswith("https://") and u.endswith(f"#illus-{k + 1}") for k, u in enumerate(dict.fromkeys(urls))))
+                self.assertEqual([e["image"]["url"] for e in embeds], [i["url"] for i in images[:10]])
+                premiers = [k for k, e in enumerate(embeds) if k == 0 or e["url"] != embeds[k - 1]["url"]]
+                self.assertEqual([embeds[k].get("color") for k in premiers], [0x3BA55C] * len(groupes))
+                self.assertEqual(embeds[0]["title"], "Illustrations")
+                self.assertTrue(all(set(e) == {"url", "image"} for k, e in enumerate(embeds) if k not in premiers))
+                self.assertNotIn("description", embeds[0])
 
     def test_pelage_remplace_cheveux_et_coiffure(self):
         principal, _ = fiches_site.messages_de(dict(FICHE, couleur_pelage="Noir de jais"))

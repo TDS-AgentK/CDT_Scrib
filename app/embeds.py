@@ -1,3 +1,5 @@
+import os
+
 from app.database import Fiche
 from app.discord_types import ComponentType, TextInputStyle
 
@@ -22,6 +24,8 @@ CHARACTER_FIELDS = [
 PELAGE_REMPLACE = {"couleur_cheveux", "coiffure"}
 PELAGE_CHAMP = ("couleur_pelage", "Couleur du pelage", False)
 MAX_ILLUSTRATIONS = 10  # embeds par message Discord
+PAR_MOSAIQUE = 4  # Discord fusionne en une grille 2×2 au plus 4 embeds de même url
+SITE_PAR_DEFAUT = "https://cdtsite-production.up.railway.app"
 
 
 def _champs_affiches(fiche) -> list[tuple[str, str, bool]]:
@@ -89,24 +93,40 @@ def build_illustrations_embed(fiche: Fiche) -> dict | None:
     return embed
 
 
+def _lien_mosaique(fiche) -> str:
+    lien = (getattr(fiche, "lien_cdt", None) or "").strip()
+    if lien.startswith(("http://", "https://")):
+        return lien.split("#")[0]
+    return (os.getenv("SITE_URL") or SITE_PAR_DEFAUT).rstrip("/") + "/fiche/" + str(getattr(fiche, "name", "") or "")
+
+
 def build_illustrations_embeds(fiche) -> list[dict]:
-    """Second message : une fiche du site porte une liste `illustrations` ({titre, url}), 10 au plus ;
-    une fiche du bot garde son unique image d'équipement."""
+    """Second message : une fiche du site porte une liste `illustrations` ({titre, url}), 10 au plus, montrées en
+    mosaïque : Discord réunit en un seul bloc (grille 2×2) jusqu'à 4 embeds qui ont la même `url`. Le premier embed
+    de chaque groupe de 4 porte la couleur, le titre « Illustrations » (premier groupe) et les titres des images
+    (description) ; les autres n'ont que `url` et `image`. Chaque groupe a sa propre url (#illus-1, #illus-2…).
+    Une fiche du bot garde son unique image d'équipement."""
     illustrations = getattr(fiche, "illustrations", None)
     if illustrations is None:
         seule = build_illustrations_embed(fiche)
         return [seule] if seule else []
+    images = [i for i in illustrations if i.get("url")][:MAX_ILLUSTRATIONS]
+    lien = _lien_mosaique(fiche)
     embeds = []
-    for i, illu in enumerate(illustrations[:MAX_ILLUSTRATIONS]):
-        if not illu.get("url"):
-            continue
-        embed = {"image": {"url": illu["url"]}}
-        titre = (illu.get("titre") or "").strip() or ("Illustrations" if not embeds else "")
-        if titre:
-            embed["title"] = titre[:256]
-        if fiche.couleur is not None:
-            embed["color"] = fiche.couleur
-        embeds.append(embed)
+    for g in range(0, len(images), PAR_MOSAIQUE):
+        groupe = images[g:g + PAR_MOSAIQUE]
+        url = f"{lien}#illus-{g // PAR_MOSAIQUE + 1}"
+        for k, illu in enumerate(groupe):
+            embed = {"url": url, "image": {"url": illu["url"]}}
+            if k == 0:
+                if g == 0:
+                    embed["title"] = "Illustrations"
+                titres = [(i.get("titre") or "").strip() for i in groupe]
+                if any(titres):
+                    embed["description"] = " · ".join(t for t in titres if t)[:4096]
+                if fiche.couleur is not None:
+                    embed["color"] = fiche.couleur
+            embeds.append(embed)
     return embeds
 
 
