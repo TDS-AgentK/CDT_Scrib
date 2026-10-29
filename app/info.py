@@ -11,6 +11,12 @@ RUBRIQUES = [
     ("🛡️ Administration", ["dropadmin", "loterie"]),
 ]
 
+# Ajoutée sous la rubrique des fiches : deux sortes de fiches cohabitent (app/fiches_site.py).
+NOTE_FICHES = ("*Les fiches créées ici (et celles qui existaient déjà) restent sur le bot : on les modifie avec /fiche modifier. "
+               "Celles créées sur le site (logo contrat de la page du personnage, une par apparence) se modifient sur le site "
+               "ou ici avec /fiche modifier, image et supprimer : la dernière version enregistrée compte. /fiche voir affiche "
+               "les deux, et le message s'efface au bout de 24 h.*")
+
 
 def _ligne(c: dict) -> str:
     sous = [o["name"] for o in c.get("options", []) if o.get("type") in (1, 2)]
@@ -37,7 +43,8 @@ def vue_info(prefixe: str = "??") -> dict:
     ranges = {n for _t, noms in RUBRIQUES for n in noms}
     champs = []
     for titre, noms in RUBRIQUES:
-        champs += _champs(titre, [_ligne(par_nom[n]) for n in noms if n in par_nom])
+        lignes = [_ligne(par_nom[n]) for n in noms if n in par_nom]
+        champs += _champs(titre, lignes + ([NOTE_FICHES] if "fiche" in noms else []))
     autres = [_ligne(c) for c in COMMANDS if c["name"] not in ranges and c["name"] != "info"]
     if autres:
         champs += _champs("✨ Autres", autres)

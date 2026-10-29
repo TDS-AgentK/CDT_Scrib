@@ -113,10 +113,21 @@ async def startup():
     # Rôles gagnés sur le site (ex. récompense d'un record de quiz), donnés comme ceux des loteries.
     from app import roles_site
     asyncio.create_task(roles_site.boucle(economie))
+    # Fiches de personnage créées sur le site : envoi, modification et effacement 24 h après (logo contrat du site).
+    from app import fiches_site
+    asyncio.create_task(fiches_site.boucle(gateway, pocketbase, db))
     # Combats (/attaque et bouton « Attaquer » du site) : défis lancés depuis le site, changements de statut, expirations.
     from app import combat
     # Tout passe par la base partagée (comme Rostheim) : aucune variable à poser.
     asyncio.create_task(combat.boucle(gateway, pocketbase))
+
+
+def fiches_site_lecture():
+    """Fiches créées sur le site (/fiche voir, liste, creer, modifier, image, supprimer) : si la base du site est configurée."""
+    if pocketbase is None:
+        return None
+    from app.fiches_site import FichesSite
+    return FichesSite(pocketbase)
 
 
 @app.on_event("shutdown")
@@ -142,12 +153,12 @@ async def get_image(filename: str):
     return FileResponse(path)
 
 
-async def _send_followup(interaction_token: str, embed: dict) -> dict | None:
+async def _send_followup(interaction_token: str, embeds: list[dict]) -> dict | None:
     """Renvoie le message publié (JSON Discord), ou None en cas d'échec."""
     url = f"https://discord.com/api/v10/webhooks/{DISCORD_APPLICATION_ID}/{interaction_token}"
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json={"embeds": [embed]}, timeout=10)
+            resp = await client.post(url, json={"embeds": embeds}, timeout=10)
             if resp.status_code >= 400:
                 log.error("Échec de l'envoi du message de suivi: %s %s", resp.status_code, resp.text)
                 return None
@@ -171,11 +182,11 @@ async def _get_original(interaction_token: str) -> dict | None:
         return None
 
 
-async def _fiche_voir_suite(interaction_token: str, followup_embed: dict | None):
+async def _fiche_voir_suite(interaction_token: str, followup_embeds: list[dict] | None):
     """/fiche voir : envoie les illustrations, puis programme la suppression des deux messages dans 24 h."""
     await fiche_ephemere.programmer(db, await _get_original(interaction_token))
-    if followup_embed:
-        await fiche_ephemere.programmer(db, await _send_followup(interaction_token, followup_embed))
+    if followup_embeds:
+        await fiche_ephemere.programmer(db, await _send_followup(interaction_token, followup_embeds))
 
 
 async def _edit_original(interaction_token: str, content: str):
@@ -200,7 +211,21 @@ async def _handle_image_upload(nom_id: str, column: str, attachment: dict, base_
         save_bytes(UPLOADS_DIR, filename, content)
         public_url = f"{base_url}/images/{filename}"
 
-        await db.update_section(nom_id, {column: public_url})
+        if await db.get(nom_id):
+            await db.update_section(nom_id, {column: public_url})
+        else:  # fiche créée sur le site : enregistrée dans la base du site (messages affichés mis à jour)
+            site = fiches_site_lecture()
+            enregistree = site and await site.get(nom_id)
+            if not enregistree:
+                await _edit_original(interaction_token, f"Aucune fiche `{nom_id}` trouvée.")
+                return
+            try:
+                await site.image(enregistree, column, public_url)
+            except Exception:
+                log.exception("Image non enregistrée sur la fiche du site %s", nom_id)
+                await _edit_original(interaction_token, f"La fiche `{nom_id}` n'a pas pu être enregistrée sur le site : "
+                                                        "la version du site est conservée. Réessaie.")
+                return
         await _edit_original(interaction_token, f"Image enregistrée sur `{nom_id}` : {public_url}")
     except httpx.HTTPError as exc:
         log.error("Erreur réseau lors de l'upload d'image: %s", exc)
@@ -243,7 +268,7 @@ async def interactions(request: Request, background_tasks: BackgroundTasks):
         sub_name, _ = find_subcommand(data.get("options", []))
 
         if sub_name == "image":
-            error_response, nom_id, column, attachment = await validate_image_upload(db, data, member_or_user)
+            error_response, nom_id, column, attachment = await validate_image_upload(db, data, member_or_user, fiches_site_lecture())
             if error_response:
                 return error_response
             base_url = f"https://{request.headers.get('host')}"
@@ -255,20 +280,20 @@ async def interactions(request: Request, background_tasks: BackgroundTasks):
                 "data": {"flags": EPHEMERAL_FLAG},
             }
 
-        response, followup_embed = await handle_command(db, data, member_or_user)
+        response, followup_embeds = await handle_command(db, data, member_or_user, fiches_site_lecture())
         if sub_name == "voir" and not response.get("data", {}).get("flags"):
-            background_tasks.add_task(_fiche_voir_suite, payload["token"], followup_embed)
-        elif followup_embed:
-            background_tasks.add_task(_send_followup, payload["token"], followup_embed)
+            background_tasks.add_task(_fiche_voir_suite, payload["token"], followup_embeds)
+        elif followup_embeds:
+            background_tasks.add_task(_send_followup, payload["token"], followup_embeds)
         return response
 
     if interaction_type == InteractionType.APPLICATION_COMMAND_AUTOCOMPLETE:
-        return await handle_autocomplete(db, payload["data"], member_or_user)
+        return await handle_autocomplete(db, payload["data"], member_or_user, fiches_site_lecture())
 
     if interaction_type == InteractionType.MODAL_SUBMIT:
-        response, followup_embed = await handle_modal_submit(db, payload["data"], member_or_user)
+        response, followup_embed = await handle_modal_submit(db, payload["data"], member_or_user, fiches_site_lecture())
         if followup_embed:
-            background_tasks.add_task(_send_followup, payload["token"], followup_embed)
+            background_tasks.add_task(_send_followup, payload["token"], [followup_embed])
         return response
 
     log.warning("Type d'interaction non géré: %s", interaction_type)

@@ -18,12 +18,30 @@ CHARACTER_FIELDS = [
     ("armement_equipement", "Armement & équipement", False),
 ]
 
+# Lycans, vulrek, shaamah : un pelage renseigné prend la place des cheveux et de la coiffure.
+PELAGE_REMPLACE = {"couleur_cheveux", "coiffure"}
+PELAGE_CHAMP = ("couleur_pelage", "Couleur du pelage", False)
+MAX_ILLUSTRATIONS = 10  # embeds par message Discord
+
+
+def _champs_affiches(fiche) -> list[tuple[str, str, bool]]:
+    if not getattr(fiche, "couleur_pelage", None):
+        return CHARACTER_FIELDS
+    champs = []
+    for champ in CHARACTER_FIELDS:
+        if champ[0] == "couleur_cheveux":
+            champs.append(PELAGE_CHAMP)
+        elif champ[0] not in PELAGE_REMPLACE:
+            champs.append(champ)
+    return champs
+
 
 def _skin_url(nom_skin: str | None) -> str | None:
     return f"{SKIN_BASE_URL}{nom_skin}" if nom_skin else None
 
 
 def build_character_embed(fiche: Fiche) -> dict:
+    """`fiche` : une fiche du bot (Fiche) ou une fiche du site (app/fiches_site.py), mêmes attributs."""
     embed: dict = {"description": fiche.surnom if fiche.surnom else "..."}
 
     if fiche.nom:
@@ -33,8 +51,8 @@ def build_character_embed(fiche: Fiche) -> dict:
 
     fields = [
         {"name": label, "value": getattr(fiche, column), "inline": inline}
-        for column, label, inline in CHARACTER_FIELDS
-        if getattr(fiche, column)
+        for column, label, inline in _champs_affiches(fiche)
+        if getattr(fiche, column, None)
     ]
     if fields:
         embed["fields"] = fields
@@ -69,6 +87,27 @@ def build_illustrations_embed(fiche: Fiche) -> dict | None:
     if fiche.couleur is not None:
         embed["color"] = fiche.couleur
     return embed
+
+
+def build_illustrations_embeds(fiche) -> list[dict]:
+    """Second message : une fiche du site porte une liste `illustrations` ({titre, url}), 10 au plus ;
+    une fiche du bot garde son unique image d'équipement."""
+    illustrations = getattr(fiche, "illustrations", None)
+    if illustrations is None:
+        seule = build_illustrations_embed(fiche)
+        return [seule] if seule else []
+    embeds = []
+    for i, illu in enumerate(illustrations[:MAX_ILLUSTRATIONS]):
+        if not illu.get("url"):
+            continue
+        embed = {"image": {"url": illu["url"]}}
+        titre = (illu.get("titre") or "").strip() or ("Illustrations" if not embeds else "")
+        if titre:
+            embed["title"] = titre[:256]
+        if fiche.couleur is not None:
+            embed["color"] = fiche.couleur
+        embeds.append(embed)
+    return embeds
 
 
 def text_input(custom_id: str, label: str, *, style=TextInputStyle.SHORT,
@@ -124,6 +163,7 @@ SECTION_MODAL_DEFS = {
             ("coiffure", "Coiffure", TextInputStyle.PARAGRAPH, 1024),
             ("tenue", "Tenue", TextInputStyle.PARAGRAPH, 1024),
             ("armement_equipement", "Armement & équipement", TextInputStyle.PARAGRAPH, 1024),
+            ("couleur_pelage", "Pelage (lycan, vulrek, shaamah)", TextInputStyle.SHORT, 256),
         ],
     },
 }
