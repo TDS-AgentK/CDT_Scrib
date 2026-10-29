@@ -4,7 +4,11 @@ Deux sortes de fiches cohabitent :
 - les fiches du bot (base SQLite, /fiche creer et /fiche modifier) : déjà créées ou créées sur Discord, jamais modifiables
   depuis le site ;
 - les fiches du site (collection `fiches_discord`) : une par apparence d'un personnage (la « Nature », puis
-  `<nom>-<annotation>` ou `<nom>-2`, `<nom>-3`…), modifiées seulement depuis le site.
+  `<nom>-<annotation>` ou `<nom>-2`, `<nom>-3`…), modifiables sur le site et sur Discord (/fiche modifier, image,
+  supprimer) par le joueur du personnage ou un admin du site. Règle en cas de conflit : la dernière version enregistrée
+  vaut (chaque enregistrement ne touche que ses champs) ; une valeur invalide venue de Discord (couleur illisible…) ou un
+  enregistrement qui échoue laisse la version du site intacte. Une modification faite sur Discord met aussi à jour les
+  messages encore affichés.
 `/fiche voir` lit les deux ; le site consulte `fiches_bot_noms` (copie des identifiants du bot) pour ne pas reprendre un
 nom déjà pris sur Discord.
 
@@ -65,7 +69,9 @@ def vers_fiche(r: dict) -> SimpleNamespace:
     illustrations = [i for i in (r.get("illustrations") or []) if isinstance(i, dict) and i.get("url")]
     return SimpleNamespace(
         name=r.get("nom_id", ""), couleur=int(couleur) if isinstance(couleur, (int, float)) and couleur >= 0 else None,
-        titre=None, equipement_image_url=None, illustrations=illustrations, **valeurs,
+        titre=None, illustrations=illustrations, **valeurs,
+        # Champ « image des équipements » des fenêtres Discord : la première illustration.
+        equipement_image_url=illustrations[0]["url"] if illustrations else None,
     )
 
 
@@ -96,6 +102,97 @@ class FichesSite:
             log.exception("Liste des fiches du site indisponible")
             return []
 
+    async def _comptes(self, discord_id: int) -> tuple[bool, set[str]]:
+        """(admin du site ?, noms des comptes du site) liés à ce membre Discord (users.joueur → joueurs.discord_id)."""
+        comptes = await self.pb.lister("users", f'joueur.discord_id="{echapper(discord_id)}"')
+        return any(c.get("role") == "super_admin" for c in comptes), {c.get("name") or c.get("email") for c in comptes}
+
+    async def peut_gerer(self, discord_id: int, r: dict) -> bool:
+        """Mêmes droits que sur le site : le joueur du personnage (personnages.joueur = nom du compte) ou un admin."""
+        try:
+            admin, noms = await self._comptes(discord_id)
+            if admin:
+                return True
+            perso = await self.pb.requete("GET", f"/api/collections/personnages/records/{r['personnage']}",
+                                          params={"fields": "joueur"})
+            return bool(perso.get("joueur")) and perso["joueur"] in noms
+        except Exception:
+            log.exception("Droits sur la fiche du site %s illisibles", r.get("nom_id"))
+            return False
+
+    async def noms_geres(self, discord_id: int, prefixe: str = "") -> list[str]:
+        """Identifiants des fiches du site que ce membre peut modifier (autocomplétion)."""
+        try:
+            admin, noms = await self._comptes(discord_id)
+            if not admin and not noms:
+                return []
+            filtres = [f'nom_id~"{echapper(prefixe.lower())}%"'] if prefixe else []
+            if not admin:
+                filtres.append("(" + " || ".join(f'personnage.joueur="{echapper(n)}"' for n in noms) + ")")
+            return sorted(r["nom_id"] for r in await self.pb.lister(COL_FICHES, " && ".join(filtres) or None))
+        except Exception:
+            log.exception("Fiches du site modifiables indisponibles")
+            return []
+
+    async def _rafraichir_envois(self, r: dict) -> None:
+        """Messages encore affichés de cette fiche : le bot les met à jour au prochain tour."""
+        for e in await self.pb.lister(COL_ENVOIS, f'fiche="{echapper(r["id"])}" && statut="envoye"'):
+            await self.pb.maj(COL_ENVOIS, e["id"], {"statut": "a_modifier"})
+
+    async def enregistrer(self, r: dict, valeurs: dict) -> tuple[dict, list[str]]:
+        """Enregistre les champs d'une fenêtre Discord ; renvoie (fiche à jour, champs ignorés car invalides).
+        Seuls les champs de la fenêtre sont écrits ; une valeur illisible garde celle du site."""
+        maj, ignores = {}, []
+        for col, brut in valeurs.items():
+            brut = (brut or "").strip()
+            if col == "couleur":
+                if not brut:
+                    maj["couleur"] = -1
+                else:
+                    hexa = brut.lstrip("#")
+                    if len(hexa) == 6 and all(c in "0123456789abcdefABCDEF" for c in hexa):
+                        maj["couleur"] = int(hexa, 16)
+                    else:
+                        ignores.append("couleur")
+            elif col == "equipement_image_url":
+                maj["illustrations"] = _premiere_illustration(r, brut)
+            elif col in CHAMPS_TEXTE:
+                maj[col] = brut
+        nouvelle = await self.pb.maj(COL_FICHES, r["id"], maj) if maj else r
+        await self._rafraichir_envois(nouvelle)
+        return nouvelle, ignores
+
+    async def image(self, r: dict, colonne: str, url: str) -> dict:
+        """/fiche image : image du personnage, ou première illustration (cible « équipement »)."""
+        if colonne == "equipement_image_url":
+            return await self.enregistrer(r, {"equipement_image_url": url})
+        nouvelle = await self.pb.maj(COL_FICHES, r["id"], {"image_personnage_url": url})
+        await self._rafraichir_envois(nouvelle)
+        return nouvelle, []
+
+    async def supprimer(self, r: dict) -> None:
+        """Supprime une apparence (pas la Nature, comme sur le site) ; ses messages encore affichés sont effacés."""
+        if r.get("nature"):
+            raise ValueError("nature")
+        await marquer_effacement(self.pb, r["id"])
+        await self.pb.supprimer(COL_FICHES, r["id"])
+
+
+def _premiere_illustration(r: dict, url: str) -> list[dict]:
+    illustrations = [dict(i) for i in (r.get("illustrations") or []) if isinstance(i, dict) and i.get("url")]
+    if not url:
+        return illustrations[1:]
+    if illustrations:
+        illustrations[0]["url"] = url
+        return illustrations
+    return [{"titre": "", "url": url}]
+
+
+async def marquer_effacement(pb: PocketBase, fiche_id: str) -> None:
+    """Avant de supprimer une fiche : ses messages encore affichés passent en effacement (la demande survit à la fiche)."""
+    for e in await pb.lister(COL_ENVOIS, f'fiche="{echapper(fiche_id)}" && (statut="envoye" || statut="a_modifier" || statut="en_attente")'):
+        await pb.maj(COL_ENVOIS, e["id"], {"statut": "a_supprimer" if e.get("messages") else "supprime"})
+
 
 async def _poster_tout(poster: Poster, salon: str, fiche: dict) -> list[dict]:
     principal, illustrations = messages_de(fiche)
@@ -120,6 +217,9 @@ async def traiter(envoi: dict, pb: PocketBase, poster: Poster, editer: Editer, e
     try:
         if statut == "a_supprimer" or (statut in ("envoye", "a_modifier")
                                         and (_lire_date(envoi.get("expire_le")) or maintenant) <= maintenant):
+            await _effacer_tout(effacer, envoi)
+            maj = {"statut": "supprime", "erreur": ""}
+        elif not envoi.get("fiche"):  # fiche supprimée entre-temps
             await _effacer_tout(effacer, envoi)
             maj = {"statut": "supprime", "erreur": ""}
         else:

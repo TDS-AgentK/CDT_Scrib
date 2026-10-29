@@ -13,8 +13,9 @@ RUBRIQUES = [
 
 # Ajoutée sous la rubrique des fiches : deux sortes de fiches cohabitent (app/fiches_site.py).
 NOTE_FICHES = ("*Les fiches créées ici (et celles qui existaient déjà) restent sur le bot : on les modifie avec /fiche modifier. "
-               "Celles créées sur le site (logo contrat de la page du personnage, une par apparence) se modifient et s'envoient "
-               "depuis le site. /fiche voir affiche les deux, et le message s'efface au bout de 24 h.*")
+               "Celles créées sur le site (logo contrat de la page du personnage, une par apparence) se modifient sur le site "
+               "ou ici avec /fiche modifier, image et supprimer : la dernière version enregistrée compte. /fiche voir affiche "
+               "les deux, et le message s'efface au bout de 24 h.*")
 
 
 def _ligne(c: dict) -> str:

@@ -123,7 +123,7 @@ async def startup():
 
 
 def fiches_site_lecture():
-    """Fiches créées sur le site (lues par /fiche voir, liste, creer) : seulement si la base du site est configurée."""
+    """Fiches créées sur le site (/fiche voir, liste, creer, modifier, image, supprimer) : si la base du site est configurée."""
     if pocketbase is None:
         return None
     from app.fiches_site import FichesSite
@@ -211,7 +211,21 @@ async def _handle_image_upload(nom_id: str, column: str, attachment: dict, base_
         save_bytes(UPLOADS_DIR, filename, content)
         public_url = f"{base_url}/images/{filename}"
 
-        await db.update_section(nom_id, {column: public_url})
+        if await db.get(nom_id):
+            await db.update_section(nom_id, {column: public_url})
+        else:  # fiche créée sur le site : enregistrée dans la base du site (messages affichés mis à jour)
+            site = fiches_site_lecture()
+            enregistree = site and await site.get(nom_id)
+            if not enregistree:
+                await _edit_original(interaction_token, f"Aucune fiche `{nom_id}` trouvée.")
+                return
+            try:
+                await site.image(enregistree, column, public_url)
+            except Exception:
+                log.exception("Image non enregistrée sur la fiche du site %s", nom_id)
+                await _edit_original(interaction_token, f"La fiche `{nom_id}` n'a pas pu être enregistrée sur le site : "
+                                                        "la version du site est conservée. Réessaie.")
+                return
         await _edit_original(interaction_token, f"Image enregistrée sur `{nom_id}` : {public_url}")
     except httpx.HTTPError as exc:
         log.error("Erreur réseau lors de l'upload d'image: %s", exc)
@@ -254,7 +268,7 @@ async def interactions(request: Request, background_tasks: BackgroundTasks):
         sub_name, _ = find_subcommand(data.get("options", []))
 
         if sub_name == "image":
-            error_response, nom_id, column, attachment = await validate_image_upload(db, data, member_or_user)
+            error_response, nom_id, column, attachment = await validate_image_upload(db, data, member_or_user, fiches_site_lecture())
             if error_response:
                 return error_response
             base_url = f"https://{request.headers.get('host')}"
@@ -277,7 +291,7 @@ async def interactions(request: Request, background_tasks: BackgroundTasks):
         return await handle_autocomplete(db, payload["data"], member_or_user, fiches_site_lecture())
 
     if interaction_type == InteractionType.MODAL_SUBMIT:
-        response, followup_embed = await handle_modal_submit(db, payload["data"], member_or_user)
+        response, followup_embed = await handle_modal_submit(db, payload["data"], member_or_user, fiches_site_lecture())
         if followup_embed:
             background_tasks.add_task(_send_followup, payload["token"], [followup_embed])
         return response

@@ -32,7 +32,10 @@ def find_subcommand(options: list[dict]) -> tuple[str, dict]:
     return sub["name"], _extract_options(sub.get("options", []))
 
 
-SITE_SEULEMENT = "La fiche `{nom}` a été créée sur le site : modifiez-la depuis la page du personnage (logo contrat)."
+PAS_A_VOUS = "Cette fiche ne vous appartient pas."
+ECHEC_SITE = ("La fiche `{nom}` n'a pas pu être enregistrée sur le site : la version du site est conservée. "
+              "Réessayez, ou modifiez-la depuis la page du personnage (logo contrat).")
+NATURE = "La Nature de `{nom}` ne se supprime pas (comme sur le site) : seules les autres apparences peuvent l'être."
 
 
 async def handle_command(db: Database, data: dict, member_or_user: dict, site=None) -> tuple[dict, list[dict]]:
@@ -67,8 +70,10 @@ async def handle_command(db: Database, data: dict, member_or_user: dict, site=No
             ephemeral=True,
         ), None
 
-    if sub_name in ("modifier", "supprimer") and site and not await db.get(nom_id) and await site.get(nom_id):
-        return _message(SITE_SEULEMENT.format(nom=nom_id), ephemeral=True), None
+    if sub_name in ("modifier", "supprimer") and site and not await db.get(nom_id):
+        enregistree = await site.get(nom_id)
+        if enregistree:
+            return await _fiche_du_site(site, sub_name, nom_id, enregistree, opts, user_id), None
 
     if sub_name == "modifier":
         fiche = await db.get(nom_id)
@@ -107,7 +112,27 @@ async def handle_command(db: Database, data: dict, member_or_user: dict, site=No
     return _message("Commande inconnue.", ephemeral=True), None
 
 
-async def validate_image_upload(db: Database, data: dict, member_or_user: dict):
+async def _fiche_du_site(site, sub_name: str, nom_id: str, r: dict, opts: dict, user_id: int) -> dict:
+    """/fiche modifier et supprimer sur une fiche créée sur le site (mêmes droits que sur le site)."""
+    if not await site.peut_gerer(user_id, r):
+        return _message(PAS_A_VOUS, ephemeral=True)
+    if sub_name == "modifier":
+        section = opts.get("section")
+        if section not in SECTIONS:
+            return _message("Section invalide.", ephemeral=True)
+        from app.fiches_site import vers_fiche
+        return {"type": ResponseType.MODAL,
+                "data": build_section_modal(f"fiche_site:{nom_id}:{section}", section, vers_fiche(r))}
+    try:
+        await site.supprimer(r)
+    except ValueError:
+        return _message(NATURE.format(nom=nom_id), ephemeral=True)
+    except Exception:
+        return _message(ECHEC_SITE.format(nom=nom_id), ephemeral=True)
+    return _message(pick(SUPPRIMER, nom=nom_id), ephemeral=True)
+
+
+async def validate_image_upload(db: Database, data: dict, member_or_user: dict, site=None):
     """Vérifie la demande d'upload (fiche, propriétaire, cible, fichier).
     Retourne (réponse_erreur, None, None, None) si invalide, ou
     (None, nom_id, colonne, attachment) si tout est bon — à charge de
@@ -122,10 +147,14 @@ async def validate_image_upload(db: Database, data: dict, member_or_user: dict):
         return _message("Identifiant invalide.", ephemeral=True), None, None, None
 
     fiche = await db.get(nom_id)
+    if fiche and fiche.owner_id != user_id:
+        return _message(PAS_A_VOUS, ephemeral=True), None, None, None
     if not fiche:
-        return _message(f"Aucune fiche `{nom_id}` trouvée.", ephemeral=True), None, None, None
-    if fiche.owner_id != user_id:
-        return _message("Cette fiche ne vous appartient pas.", ephemeral=True), None, None, None
+        enregistree = site and await site.get(nom_id)
+        if not enregistree:
+            return _message(f"Aucune fiche `{nom_id}` trouvée.", ephemeral=True), None, None, None
+        if not await site.peut_gerer(user_id, enregistree):
+            return _message(PAS_A_VOUS, ephemeral=True), None, None, None
 
     column = IMAGE_TARGET_COLUMNS.get(cible)
     if not column:
@@ -154,10 +183,30 @@ async def handle_autocomplete(db: Database, data: dict, member_or_user: dict, si
         names = sorted(set(await db.list_names(prefix=current)) | set(await site.noms(current) if site else []))
     else:
         user_id = int(member_or_user["id"])
-        names = await db.list_names_by_owner(user_id, prefix=current)
+        names = sorted(set(await db.list_names_by_owner(user_id, prefix=current))
+                       | set(await site.noms_geres(user_id, current) if site else []))
 
     choices = [{"name": n, "value": n} for n in names[:AUTOCOMPLETE_LIMIT]]
     return {"type": ResponseType.APPLICATION_COMMAND_AUTOCOMPLETE_RESULT, "data": {"choices": choices}}
+
+
+async def _enregistrer_sur_le_site(site, nom_id: str, section: str, raw_values: dict, user_id: int) -> dict:
+    """Fenêtre /fiche modifier d'une fiche du site : écrit dans la base du site ; en cas d'échec, rien ne change."""
+    r = site and await site.get(nom_id)
+    if not r:
+        return _message(f"Aucune fiche `{nom_id}` trouvée.", ephemeral=True)
+    if not await site.peut_gerer(user_id, r):
+        return _message(PAS_A_VOUS, ephemeral=True)
+    valeurs = {c: raw_values.get(c, "") for c in SECTION_COLUMNS[section] if c in raw_values}
+    try:
+        nouvelle, ignores = await site.enregistrer(r, valeurs)
+    except Exception:
+        return _message(ECHEC_SITE.format(nom=nom_id), ephemeral=True)
+    from app.fiches_site import messages_de
+    texte = pick(MODIFIER, nom=nom_id, section=section)
+    if ignores:
+        texte += " (Couleur illisible : celle du site est gardée.)"
+    return _message(content=texte, embeds=[messages_de(nouvelle)[0]], ephemeral=True)
 
 
 def _modal_values(data: dict) -> dict:
@@ -175,11 +224,13 @@ def _parse_hex_color(raw: str) -> int | None:
     return None
 
 
-async def handle_modal_submit(db: Database, data: dict, member_or_user: dict):
+async def handle_modal_submit(db: Database, data: dict, member_or_user: dict, site=None):
     """Retourne (response, followup_embed_or_None)."""
     custom_id = data["custom_id"]
-    _, nom_id, section = custom_id.split(":", 2)
+    genre, nom_id, section = custom_id.split(":", 2)
     raw_values = _modal_values(data)
+    if genre == "fiche_site":
+        return await _enregistrer_sur_le_site(site, nom_id, section, raw_values, int(member_or_user["id"])), None
 
     columns = SECTION_COLUMNS[section]
     values = {}
