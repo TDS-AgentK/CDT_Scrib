@@ -75,10 +75,10 @@ async def startup():
     async def on_ready():
         log.info("Économie connectée à Discord en tant que %s", gateway.user)
         synchro_listes()
-        # /session, /attaque (fiches de jeu), /boite-a-role et /info : déclarées ici, sans toucher aux autres commandes ni relancer
+        # /session, /attaque (fiches de jeu), /boite-a-role, /info et Halloween (/halloween, /bonbons, /halloween-admin) : déclarées ici, sans toucher aux autres commandes ni relancer
         # scripts/register_commands.py à la main.
         from scripts.register_commands import COMMANDS
-        for nom in ("session", "attaque", "boite-a-role", "info"):
+        for nom in ("session", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin"):
             try:
                 commande = next(c for c in COMMANDS if c["name"] == nom)
                 if os.getenv("GUILD_ID"):
