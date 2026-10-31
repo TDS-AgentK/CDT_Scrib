@@ -39,10 +39,10 @@ fenêtres (custom_id `eco:…`) arrivent par `/interactions` (`app/eco_interacti
 Boutique d'Halloween (`app/halloween.py`, collections `hal_*` créées par `scripts/setup-halloween.mjs` du site) : une
 monnaie : l'objet **Bonbon** 🍬 des inventaires (réglable sur le site), distribué seulement par les gérants (site ou `/halloween-admin`). Tout se paramètre sur la page « Halloween » du site (K et les comptes
 cochés `gere_halloween`, c.-à-d. Kyanite) : ouverture, textes, emojis, articles (objet, rôle, rôle temporaire, Or, XP, demande
-remise à la main, objet mystère 👻 avec ses lots pondérés), prix, stocks, limites par joueur, soldes. Sur Discord :
+remise à la main, roues 👻 (Petite Roue, Roue moyenne, Grosse roue) avec leurs gains pondérés), prix, stocks, limites par joueur, soldes. Sur Discord :
 `/halloween` (boutique), `/bonbons` (solde et classement), `/halloween-admin donner|retirer|solde|vitrine` (gérants : admins
 du serveur, IDs de la page Halloween, admins de loterie). La vitrine est un message public à trois boutons 🎃 Boutique ·
-👻 Objets mystère · 🍬 Mes bonbons ; la boutique apparaît aussi dans le menu de `/boutique` quand elle est ouverte.
+👻 Roues · 🍬 Mes bonbons ; la boutique apparaît aussi dans le menu de `/boutique` quand elle est ouverte.
 
 Sessions de jeu des fiches du site (`app/sessions_jeu.py`, collection `sessions_jeu`), pour tout le monde :
 `/session ouvrir [mj] [event]` (vous êtes MJ par défaut ; refusé si une session est déjà ouverte),

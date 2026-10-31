@@ -5,15 +5,15 @@ se règle sur la page « Halloween » du site (Kyanite et K).
 Collections (créées par scripts/setup-halloween.mjs du site) :
 - hal_reglages (cle « general ») : ouverte, objet_bonbon, titre, description, couleur, monnaie_nom, emojis (citrouille, fantôme,
   bonbon : emoji Unicode ou emoji du serveur « <:nom:id> »), admin_discord_ids (gérants côté Discord),
-  annonce_hasard (résultat d'un objet mystère montré dans le salon)
+  annonce_hasard (résultat d'un tour de roue montré dans le salon)
 - hal_articles : nom, emoji, description, prix (bonbons), type (objet, role, role_temporaire, hasard, or, xp, demande),
   objet, quantite, role_nom, role_id, duree_jours, stock, stock_illimite, limite_par_joueur, actif, ordre
-- hal_lots : lots d'un article « hasard » (objet mystère) : libelle, type (objet, role, role_temporaire, or, xp,
+- hal_lots : gains d'une roue (article « hasard » : Petite Roue, Roue moyenne, Grosse roue…) : libelle, type (objet, role, role_temporaire, or, xp,
   rien ; jamais de bonbons : ils ne s'obtiennent que par distribution), objet, quantite, role_nom, role_id, duree_jours, poids (chance relative), actif
 - hal_mouvements : historique (type achat, don, retrait ; montant signé ; article ; libelle ; resultat)
 
 Sur Discord : /halloween (boutique), /bonbons (solde et classement), /halloween-admin (donner, retirer, vitrine) et
-la vitrine, un message public à trois boutons 🎃 Boutique · 👻 Objets mystère · 🍬 Mes bonbons. La boutique apparaît
+la vitrine, un message public à trois boutons 🎃 Boutique · 👻 Roues · 🍬 Mes bonbons. La boutique apparaît
 aussi dans le menu de /boutique quand elle est ouverte. Les custom_id sont « eco:hal:… » (app/eco_interactions.py).
 Comme partout dans l'économie, un rôle est donné AVANT de débiter : s'il ne peut pas l'être, rien n'est prélevé.
 """
@@ -35,6 +35,8 @@ log = logging.getLogger("cdt_scrib.halloween")
 PREFIXE = "h_"  # valeur de la boutique d'Halloween dans le menu de /boutique
 VALEUR_MENU = PREFIXE + "halloween"
 PAR_PAGE = 5
+ROUE = "🎡"
+FILTRES_ROUES = ("roues", "mystere")  # « mystere » : boutons des vitrines postées avant les roues
 ORANGE = 0xE67E22
 RECHARGE_S = 60
 TYPES_ROLE = ("role", "role_temporaire")
@@ -165,7 +167,7 @@ async def changer_bonbons(eco, joueur_id: str, delta: int, type_: str, libelle: 
 
 async def articles(eco, filtre: str = "tout") -> list[dict]:
     liste = await eco.pb.lister("hal_articles", "actif=true", tri="ordre")
-    if filtre == "mystere":
+    if filtre in FILTRES_ROUES:
         liste = [a for a in liste if a.get("type") == "hasard"]
     return liste
 
@@ -283,7 +285,7 @@ async def acheter(eco, membre: discord.Member, article_id: str, origine: str = "
             possibles = [l for l in await lots(eco, a["id"]) if not _a_le_role(eco, membre, l)]
             lot = tirer(possibles, rng)
             if not lot:
-                return False, f"{fantome(r)} Cet objet mystère est vide pour l'instant : rien n'a été prélevé.", ""
+                return False, f"{fantome(r)} Cette roue n'a aucun gain pour l'instant : rien n'a été prélevé.", ""
             effet = lot
         objets = {}
         if effet.get("type") == "objet" and effet.get("objet"):
@@ -302,8 +304,8 @@ async def acheter(eco, membre: discord.Member, article_id: str, origine: str = "
             await eco.pb.maj("hal_articles", a["id"], {"stock": max(0, (frais.get("stock") or 0) - 1)})
     titre = f'{a.get("emoji") or ""} **{a["nom"]}**'.strip()
     if lot:
-        texte = f"{fantome(r)} Tu ouvres {titre} pour {monnaie(r, prix)}… et tu obtiens **{gain}** !"
-        annonce = f"{fantome(r)} {membre.mention} ouvre {titre} et obtient **{gain}** !" if r.get("annonce_hasard") else ""
+        texte = f"{ROUE} Tu fais tourner {titre} pour {monnaie(r, prix)}… elle s'arrête sur **{gain}** !"
+        annonce = f"{ROUE} {membre.mention} fait tourner {titre} et gagne **{gain}** !" if r.get("annonce_hasard") else ""
     else:
         texte = f"{citrouille(r)} {titre} pour {monnaie(r, prix)} : {gain}."
         annonce = ""
@@ -368,20 +370,22 @@ async def vue(eco, membre, page: int = 0, filtre: str = "tout") -> dict:
     objets = {o["id"]: o for o in await eco.pb.lister("eco_objets")} if liste else {}
     titre = r.get("titre") or DEFAUTS["titre"]
     entete = f"## {citrouille(r)} {titre} {fantome(r)}"
-    if filtre == "mystere":
-        entete += f"\n{fantome(r)} **Objets mystère** : on ne sait jamais ce qu'il y a dedans…"
+    if filtre in FILTRES_ROUES:
+        entete += f"\n{ROUE} **Les roues** : fais tourner et croise les doigts…"
     if r.get("description"):
         entete += f"\n{r['description']}"
     blocs = [eco_vues._texte(entete[:1800]), {"type": 14, "divider": True, "spacing": 1}]
     emoji_b = emoji_composant(bonbon(r))
     for a in liste[page * PAR_PAGE:(page + 1) * PAR_PAGE]:
         epuise = not a.get("stock_illimite") and (a.get("stock") or 0) <= 0
-        mystere = a.get("type") == "hasard"
-        lignes = [f'### {a.get("emoji") or (fantome(r) if mystere else citrouille(r))} {a["nom"]}']
+        roue = a.get("type") == "hasard"
+        lignes = [f'### {a.get("emoji") or (ROUE if roue else citrouille(r))} {a["nom"]}']
         notes = []
-        if mystere:
+        if roue:
             contenu = await lots(eco, a["id"])
-            notes.append(f"{fantome(r)} Objet mystère : {len(contenu)} surprise{'s' if len(contenu) > 1 else ''} possible{'s' if len(contenu) > 1 else ''}")
+            notes.append(f"{ROUE} Roue : {len(contenu)} gain{'s' if len(contenu) > 1 else ''} possible{'s' if len(contenu) > 1 else ''}")
+            if contenu:
+                notes.append(("à gagner : " + ", ".join(dict.fromkeys(l.get("libelle") or l.get("type") or "?" for l in contenu)))[:300])
         else:
             notes.append(description_effet(a, r, objets))
         if not a.get("stock_illimite"):
@@ -392,10 +396,10 @@ async def vue(eco, membre, page: int = 0, filtre: str = "tout") -> dict:
         if a.get("description"):
             lignes.append(a["description"])
         blocs.append({"type": 9, "components": [eco_vues._texte("\n".join(lignes)[:1500])],
-                      "accessory": eco_vues._bouton(f'{eco_vues._n(a.get("prix"))} - Acheter', f'eco:hal:buy:{a["id"]}', style=1,
+                      "accessory": eco_vues._bouton(f'{eco_vues._n(a.get("prix"))} - {"Tourner" if roue else "Acheter"}', f'eco:hal:buy:{a["id"]}', style=1,
                                                     disabled=epuise, emoji=emoji_b)})
     if not liste:
-        blocs.append(eco_vues._texte("*Aucun objet mystère pour le moment.*" if filtre == "mystere" else "*Rien en vitrine pour le moment.*"))
+        blocs.append(eco_vues._texte("*Aucune roue pour le moment.*" if filtre in FILTRES_ROUES else "*Rien en vitrine pour le moment.*"))
     blocs.append({"type": 14, "divider": True, "spacing": 1})
     blocs.append(eco_vues._texte(f"-# Tu as {abrege(await bonbons_de(eco, joueur))} {bonbon(r)} {r.get('monnaie_nom') or 'Bonbons'}"
                                  if joueur else "-# Aucune fiche joueur liée à ton compte Discord."))
@@ -405,7 +409,7 @@ async def vue(eco, membre, page: int = 0, filtre: str = "tout") -> dict:
         eco_vues._bouton("Suivant", f"eco:hal:pg:{page + 1}:{filtre}", style=1, disabled=page >= pages - 1),
         eco_vues._bouton("Fermer", "eco:fermer"),
     ]})
-    autre = ("tout", "Toute la boutique", citrouille(r)) if filtre == "mystere" else ("mystere", "Objets mystère", fantome(r))
+    autre = ("tout", "Toute la boutique", citrouille(r)) if filtre in FILTRES_ROUES else ("roues", "Roues", fantome(r))
     blocs.append({"type": 1, "components": [
         eco_vues._bouton(autre[1], f"eco:hal:pg:0:{autre[0]}", emoji=emoji_composant(autre[2])),
         eco_vues._bouton("Mes bonbons", "eco:hal:sol", emoji=emoji_b),
@@ -457,7 +461,7 @@ async def vitrine(eco) -> dict:
              + f"Ici, tout se paie en **{bonbon(r)} {r.get('monnaie_nom') or 'Bonbons'}**.")
     return _cadre(r, [eco_vues._texte(texte[:3800]), {"type": 1, "components": [
         eco_vues._bouton("Boutique", "eco:hal:v:tout", style=1, emoji=emoji_composant(citrouille(r))),
-        eco_vues._bouton("Objets mystère", "eco:hal:v:mystere", style=2, emoji=emoji_composant(fantome(r))),
+        eco_vues._bouton("Roues", "eco:hal:v:roues", style=2, emoji=emoji_composant(fantome(r))),
         eco_vues._bouton("Mes bonbons", "eco:hal:v:sol", style=2, emoji=emoji_composant(bonbon(r))),
     ]}], prive=False)
 

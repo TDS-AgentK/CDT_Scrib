@@ -1,4 +1,4 @@
-"""Tests de la boutique d'Halloween (app/halloween.py) : achat en bonbons, objets mystère, rôles (rien n'est prélevé
+"""Tests de la boutique d'Halloween (app/halloween.py) : achat en bonbons, roues, rôles (rien n'est prélevé
 si le rôle ne peut pas être donné), limites, gérants et vues Discord.
 Lancer : python -m unittest discover -s tests
 """
@@ -119,7 +119,7 @@ def membre(roles=(), uid=7, admin=False):
 
 ROLE = {"id": "a_role", "nom": "Rôle Citrouille", "type": "role", "role_nom": "Citrouille", "prix": 20, "actif": True, "stock_illimite": True}
 OBJET = {"id": "a_obj", "nom": "Masque", "type": "objet", "objet": "o1", "quantite": 2, "prix": 10, "actif": True, "stock": 1}
-MYSTERE = {"id": "a_mys", "nom": "Citrouille mystère", "type": "hasard", "prix": 5, "actif": True, "stock_illimite": True}
+MYSTERE = {"id": "a_mys", "nom": "Petite Roue", "type": "hasard", "prix": 5, "actif": True, "stock_illimite": True}
 
 
 def run(coro):
@@ -224,6 +224,7 @@ class Mystere(unittest.TestCase):
         self.assertEqual(pb.d["joueurs"][0]["eco_or"], 12)
         self.assertIn("<@7>", annonce)
         self.assertIn("12 Or", annonce)
+        self.assertIn("fait tourner", annonce)
 
     def test_aucun_lot_de_bonbons(self):
         pb = FauxPb(base(10, [MYSTERE], [{**self.LOTS[0], "type": "bonbons"}]))
@@ -284,12 +285,16 @@ class Vues(unittest.TestCase):
         textes = str(v)
         self.assertIn("Rôle Citrouille", textes)
         self.assertIn("eco:hal:buy:a_mys", textes)
-        self.assertIn("Objet mystère : 2 surprises", textes)
+        self.assertIn("Roue : 2 gains possibles", textes)
+        self.assertIn("Tourner", textes)
         for c in v["components"][0]["components"]:
             for b in c.get("components", []) if c.get("type") == 1 else []:
                 self.assertLessEqual(len(b["custom_id"]), 100)
-        filtre = run(halloween.vue(FauxEco(pb), membre(), 0, "mystere"))
+        filtre = run(halloween.vue(FauxEco(pb), membre(), 0, "roues"))
         self.assertNotIn("Rôle Citrouille", str(filtre))
+        self.assertIn("Petite Roue", str(filtre))
+        ancien = run(halloween.vue(FauxEco(pb), membre(), 0, "mystere"))  # vitrines déjà postées
+        self.assertNotIn("Rôle Citrouille", str(ancien))
 
     def test_vue_fermee_et_menu(self):
         pb = FauxPb(base(5))
