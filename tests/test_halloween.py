@@ -171,7 +171,7 @@ class Achat(unittest.TestCase):
 
 class Mystere(unittest.TestCase):
     LOTS = [
-        {"id": "l1", "article": "a_mys", "libelle": "Bonbons", "type": "bonbons", "quantite": 12, "poids": 1, "actif": True},
+        {"id": "l1", "article": "a_mys", "libelle": "Or", "type": "or", "quantite": 12, "poids": 1, "actif": True},
         {"id": "l2", "article": "a_mys", "libelle": "Rôle Fantôme", "type": "role", "role_nom": "Fantôme", "poids": 1, "actif": True},
         {"id": "l3", "article": "a_mys", "libelle": "Rien", "type": "rien", "poids": 0, "actif": True},
     ]
@@ -182,13 +182,20 @@ class Mystere(unittest.TestCase):
         self.assertEqual(tirages, {"l1", "l2"})  # poids 0 : jamais tiré
         self.assertIsNone(halloween.tirer([], rng))
 
-    def test_lot_bonbons_et_annonce(self):
+    def test_lot_or_et_annonce(self):
         pb = FauxPb(base(10, [MYSTERE], [self.LOTS[0]]))
         ok, txt, annonce = run(halloween.acheter(FauxEco(pb), membre(), "a_mys"))
         self.assertTrue(ok, txt)
-        self.assertEqual(pb.d["hal_soldes"][0]["bonbons"], 10 + 12 - 5)
+        self.assertEqual(pb.d["hal_soldes"][0]["bonbons"], 10 - 5)
+        self.assertEqual(pb.d["joueurs"][0]["eco_or"], 12)
         self.assertIn("<@7>", annonce)
-        self.assertIn("12 🍬 Bonbons", annonce)
+        self.assertIn("12 Or", annonce)
+
+    def test_aucun_lot_de_bonbons(self):
+        pb = FauxPb(base(10, [MYSTERE], [{**self.LOTS[0], "type": "bonbons"}]))
+        ok, _, _ = run(halloween.acheter(FauxEco(pb), membre(), "a_mys"))
+        self.assertFalse(ok)
+        self.assertEqual(pb.d["hal_soldes"][0]["bonbons"], 10)
 
     def test_role_deja_detenu_jamais_tire(self):
         pb = FauxPb(base(10, [MYSTERE], self.LOTS[:2]))

@@ -7,9 +7,9 @@ Collections (créées par scripts/setup-halloween.mjs du site) :
 - hal_articles : nom, emoji, description, prix (bonbons), type (objet, role, role_temporaire, hasard, or, xp, demande),
   objet, quantite, role_nom, role_id, duree_jours, stock, stock_illimite, limite_par_joueur, actif, ordre
 - hal_lots : lots d'un article « hasard » (objet mystère) : libelle, type (objet, role, role_temporaire, or, xp,
-  bonbons, rien), objet, quantite, role_nom, role_id, duree_jours, poids (chance relative), actif
+  rien ; jamais de bonbons : ils ne s'obtiennent que par distribution), objet, quantite, role_nom, role_id, duree_jours, poids (chance relative), actif
 - hal_soldes : bonbons de chaque joueur (joueur, bonbons, total_gagne)
-- hal_mouvements : historique (type achat, don, retrait, lot ; montant signé ; article ; libelle ; resultat)
+- hal_mouvements : historique (type achat, don, retrait ; montant signé ; article ; libelle ; resultat)
 
 Sur Discord : /halloween (boutique), /bonbons (solde et classement), /halloween-admin (donner, retirer, vitrine) et
 la vitrine, un message public à trois boutons 🎃 Boutique · 👻 Objets mystère · 🍬 Mes bonbons. La boutique apparaît
@@ -134,7 +134,7 @@ async def changer_bonbons(eco, joueur_id: str, delta: int, type_: str, libelle: 
     avant = (s or {}).get("bonbons") or 0
     apres = max(0, avant + delta)
     gagne = (s or {}).get("total_gagne") or 0
-    if delta > 0 and type_ in ("gain", "don", "lot"):
+    if delta > 0 and type_ == "don":
         gagne += delta
     if s:
         await eco.pb.maj("hal_soldes", s["id"], {"bonbons": apres, "total_gagne": gagne})
@@ -161,7 +161,9 @@ async def articles(eco, filtre: str = "tout") -> list[dict]:
 
 
 async def lots(eco, article_id: str) -> list[dict]:
-    return [l for l in await eco.pb.lister("hal_lots", f'article="{echapper(article_id)}" && actif=true') if (l.get("poids") or 0) > 0]
+    # Un lot « bonbons » (ancien type) n'est jamais tiré : les bonbons ne s'obtiennent que par distribution.
+    return [l for l in await eco.pb.lister("hal_lots", f'article="{echapper(article_id)}" && actif=true')
+            if (l.get("poids") or 0) > 0 and l.get("type") != "bonbons"]
 
 
 def tirer(liste: list[dict], rng: random.Random | None = None) -> dict | None:
@@ -194,8 +196,6 @@ def description_effet(e: dict, r: dict, objets: dict | None = None) -> str:
         return f"{eco_vues._n(q)} Or"
     if t == "xp":
         return f"{eco_vues._n(q)} XP"
-    if t == "bonbons":
-        return monnaie(r, q)
     if t == "rien":
         return "rien du tout… " + fantome(r)
     if t == "demande":
@@ -220,8 +220,6 @@ async def appliquer(eco, membre: discord.Member, joueur: dict, e: dict, libelle:
         await _gain(eco, joueur["id"], f"halloween : {libelle}", "Or", q, "")
     elif t == "xp":
         await _xp(eco, membre, joueur["id"], q, f"Halloween : {libelle}", salon)
-    elif t == "bonbons":
-        await changer_bonbons(eco, joueur["id"], q, "lot", libelle)
     elif t == "demande":
         await _prevenir_gerants(eco, membre, libelle)
     return None
