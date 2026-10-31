@@ -1,17 +1,15 @@
-"""Boutique d'Halloween : une monnaie à part, les bonbons, gagnés en écrivant sur le serveur (au hasard) ou donnés
-par les gérants, et dépensés dans une boutique dont tout se règle sur la page « Halloween » du site (Kyanite et K).
+"""Boutique d'Halloween : une monnaie à part, les bonbons, donnés par les gérants (site ou /halloween-admin), et dépensés dans une boutique dont tout se règle sur la page « Halloween » du site (Kyanite et K).
 
 Collections (créées par scripts/setup-halloween.mjs du site) :
 - hal_reglages (cle « general ») : ouverte, titre, description, couleur, monnaie_nom, emojis (citrouille, fantôme,
-  bonbon : emoji Unicode ou emoji du serveur « <:nom:id> »), gains par message (gains_actifs, gain_chance_pct,
-  gain_min, gain_max, gain_cooldown_s, gain_salons, reaction_gain), admin_discord_ids (gérants côté Discord),
+  bonbon : emoji Unicode ou emoji du serveur « <:nom:id> »), admin_discord_ids (gérants côté Discord),
   annonce_hasard (résultat d'un objet mystère montré dans le salon)
 - hal_articles : nom, emoji, description, prix (bonbons), type (objet, role, role_temporaire, hasard, or, xp, demande),
   objet, quantite, role_nom, role_id, duree_jours, stock, stock_illimite, limite_par_joueur, actif, ordre
 - hal_lots : lots d'un article « hasard » (objet mystère) : libelle, type (objet, role, role_temporaire, or, xp,
   bonbons, rien), objet, quantite, role_nom, role_id, duree_jours, poids (chance relative), actif
 - hal_soldes : bonbons de chaque joueur (joueur, bonbons, total_gagne)
-- hal_mouvements : historique (type gain, achat, don, retrait ; montant signé ; article ; libelle ; resultat)
+- hal_mouvements : historique (type achat, don, retrait, lot ; montant signé ; article ; libelle ; resultat)
 
 Sur Discord : /halloween (boutique), /bonbons (solde et classement), /halloween-admin (donner, retirer, vitrine) et
 la vitrine, un message public à trois boutons 🎃 Boutique · 👻 Objets mystère · 🍬 Mes bonbons. La boutique apparaît
@@ -28,7 +26,6 @@ import discord
 
 from app import eco_vues
 from app.eco_cartes import abrege
-from app.economie import meme_nom
 from app.pocketbase import echapper
 
 log = logging.getLogger("cdt_scrib.halloween")
@@ -42,12 +39,10 @@ TYPES_ROLE = ("role", "role_temporaire")
 DEFAUTS = {
     "ouverte": False, "titre": "Boutique d'Halloween", "description": "", "couleur": "#e67e22", "monnaie_nom": "Bonbons",
     "emoji_citrouille": "🎃", "emoji_fantome": "👻", "emoji_bonbon": "🍬",
-    "gains_actifs": False, "gain_chance_pct": 20, "gain_min": 1, "gain_max": 3, "gain_cooldown_s": 60, "gain_salons": "",
-    "reaction_gain": True, "admin_discord_ids": "", "annonce_hasard": True,
+    "admin_discord_ids": "", "annonce_hasard": True,
 }
 
 _cache: dict = {"a": 0.0, "r": None}
-_derniers_gains: dict[int, float] = {}
 
 
 def _pb_date() -> str:
@@ -154,50 +149,6 @@ async def changer_bonbons(eco, joueur_id: str, delta: int, type_: str, libelle: 
     except Exception:  # la trace ne doit jamais bloquer
         log.exception("Trace d'un mouvement de bonbons impossible")
     return apres
-
-
-# ---------------------------------------------------------------- gains par message
-
-def _salon_eligible(eco, cfg: dict, r: dict, channel) -> bool:
-    """Salons de la page Halloween (noms ou IDs) ; à défaut, les salons éligibles de l'économie."""
-    liste = [x.strip().lstrip("#") for x in re.split(r"[,;\n]", r.get("gain_salons") or "") if x.strip()]
-    if not liste:
-        return eco._salon(cfg, channel) is not None
-    salons = [channel] + ([channel.parent] if isinstance(channel, discord.Thread) and channel.parent else [])
-    return any(str(s.id) == x or meme_nom(getattr(s, "name", ""), x) for s in salons for x in liste)
-
-
-async def gain_message(eco, message: discord.Message, rng: random.Random | None = None) -> int:
-    """Un message peut rapporter des bonbons (chance réglée sur le site) ; renvoie le nombre gagné."""
-    r = await reglages(eco)
-    if not r.get("gains_actifs"):
-        return 0
-    membre = message.author
-    maintenant = time.time()
-    if maintenant - _derniers_gains.get(membre.id, 0) < (r.get("gain_cooldown_s") or 0):
-        return 0
-    cfg = await eco.config()
-    if not _salon_eligible(eco, cfg, r, message.channel):
-        return 0
-    rng = rng or random
-    if rng.random() * 100 >= (r.get("gain_chance_pct") or 0):
-        return 0
-    mini = max(0, int(r.get("gain_min") or 0))
-    n = rng.randint(mini, max(mini, int(r.get("gain_max") or 0)))
-    if n <= 0:
-        return 0
-    joueur = await eco.joueur_de(membre)
-    if not joueur:
-        return 0
-    _derniers_gains[membre.id] = maintenant
-    async with eco._verrou(membre.id):
-        await changer_bonbons(eco, joueur["id"], n, "gain", f'message #{getattr(message.channel, "name", "?")}', message.jump_url)
-    if r.get("reaction_gain"):
-        try:
-            await message.add_reaction(bonbon(r))
-        except (discord.HTTPException, TypeError, ValueError):
-            pass
-    return n
 
 
 # ---------------------------------------------------------------- catalogue
@@ -468,8 +419,6 @@ async def vue_solde(eco, membre, maj: bool = False) -> dict:
             j = (s.get("expand") or {}).get("joueur") or {}
             qui = f'<@{j["discord_id"]}>' if str(j.get("discord_id") or "").isdigit() else (j.get("pseudo") or "?")
             lignes.append(f"{i}. {qui} : {eco_vues._n(s.get('bonbons'))} {bonbon(r)}")
-    if r.get("gains_actifs"):
-        lignes.append(f"\n-# Chaque message dans les salons ouverts peut rapporter des {bonbon(r)}.")
     blocs = [eco_vues._texte("\n".join(lignes)[:3800])]
     if r.get("ouverte"):
         blocs.append({"type": 1, "components": [eco_vues._bouton("Boutique", "eco:hal:pg:0:tout", style=1, emoji=emoji_composant(citrouille(r)))]})
@@ -492,8 +441,7 @@ async def vitrine(eco) -> dict:
     titre = r.get("titre") or DEFAUTS["titre"]
     texte = (f"# {citrouille(r)} {titre} {fantome(r)}\n"
              + (f"{r['description']}\n" if r.get("description") else "")
-             + f"Ici, tout se paie en **{bonbon(r)} {r.get('monnaie_nom') or 'Bonbons'}**."
-             + (f"\n-# Écrivez sur le serveur : vos messages peuvent rapporter des {bonbon(r)} !" if r.get("gains_actifs") else ""))
+             + f"Ici, tout se paie en **{bonbon(r)} {r.get('monnaie_nom') or 'Bonbons'}**.")
     return _cadre(r, [eco_vues._texte(texte[:3800]), {"type": 1, "components": [
         eco_vues._bouton("Boutique", "eco:hal:v:tout", style=1, emoji=emoji_composant(citrouille(r))),
         eco_vues._bouton("Objets mystère", "eco:hal:v:mystere", style=2, emoji=emoji_composant(fantome(r))),

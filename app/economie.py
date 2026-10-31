@@ -170,12 +170,6 @@ class Economie:
                 await self.gain(message)
         except Exception:  # un incident ne doit jamais couper le bot
             log.exception("Erreur économie sur le message %s", message.id)
-        if not (message.content.startswith(self.prefixe) or message.content.startswith("--")):
-            try:  # bonbons d'Halloween (app/halloween.py), indépendants de l'XP et de l'Or
-                from app import halloween
-                await halloween.gain_message(self, message)
-            except Exception:
-                log.exception("Erreur des bonbons d'Halloween sur le message %s", message.id)
 
     def _salon(self, cfg: dict, channel) -> dict | None:
         """Salon éligible correspondant au message (fils et posts de forum selon les réglages)."""

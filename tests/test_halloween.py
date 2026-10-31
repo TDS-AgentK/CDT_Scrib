@@ -1,5 +1,5 @@
 """Tests de la boutique d'Halloween (app/halloween.py) : achat en bonbons, objets mystère, rôles (rien n'est prélevé
-si le rôle ne peut pas être donné), limites, gains par message, gérants et vues Discord.
+si le rôle ne peut pas être donné), limites, gérants et vues Discord.
 Lancer : python -m unittest discover -s tests
 """
 import asyncio
@@ -11,8 +11,7 @@ from types import SimpleNamespace
 from app import halloween
 
 REGLAGES = {"id": "reg", "cle": "general", "ouverte": True, "titre": "Boutique d'Halloween", "monnaie_nom": "Bonbons",
-            "emoji_citrouille": "🎃", "emoji_fantome": "👻", "emoji_bonbon": "🍬", "gains_actifs": True, "gain_chance_pct": 100,
-            "gain_min": 2, "gain_max": 2, "gain_cooldown_s": 0, "gain_salons": "", "reaction_gain": True,
+            "emoji_citrouille": "🎃", "emoji_fantome": "👻", "emoji_bonbon": "🍬",
             "admin_discord_ids": "42", "annonce_hasard": True}
 
 
@@ -205,33 +204,6 @@ class Mystere(unittest.TestCase):
         ok, txt, _ = run(halloween.acheter(FauxEco(pb), membre(), "a_mys"))
         self.assertFalse(ok)
         self.assertEqual(pb.d["hal_soldes"][0]["bonbons"], 10)
-
-
-class Gains(unittest.TestCase):
-    def message(self, salon="rp"):
-        reactions = []
-
-        async def ajouter(e):
-            reactions.append(e)
-        return SimpleNamespace(author=membre(), channel=SimpleNamespace(name=salon, id=1), jump_url="url", add_reaction=ajouter), reactions
-
-    def test_gain_et_reaction(self):
-        pb = FauxPb(base(0))
-        m, reactions = self.message()
-        n = run(halloween.gain_message(FauxEco(pb), m, random.Random(0)))
-        self.assertEqual(n, 2)
-        self.assertEqual(pb.d["hal_soldes"][0]["bonbons"], 2)
-        self.assertEqual(reactions, ["🍬"])
-        self.assertEqual(pb.d["eco_gains"][-1]["monnaie"], "Bonbons")
-
-    def test_salon_non_eligible_ou_gains_coupes(self):
-        pb = FauxPb(base(0))
-        m, _ = self.message("hors-rp")
-        self.assertEqual(run(halloween.gain_message(FauxEco(pb), m)), 0)
-        pb.d["hal_reglages"][0]["gain_salons"] = "hors-rp"
-        self.assertEqual(run(halloween.gain_message(FauxEco(pb), m, random.Random(0))), 2)
-        pb.d["hal_reglages"][0]["gains_actifs"] = False
-        self.assertEqual(run(halloween.gain_message(FauxEco(pb), m)), 0)
 
 
 class Gerants(unittest.TestCase):
