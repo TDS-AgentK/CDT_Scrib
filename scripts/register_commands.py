@@ -129,6 +129,28 @@ COMMANDS = [
     },
     {"name": "boite-a-role", "description": "Consommer une boîte à rôle (monnaie de Rostheim, Or ou inventaire) pour obtenir un rôle", "options": []},
     {"name": "receleur", "description": "Voir ce que le Receleur reprend et vend, et vos ventes de la semaine", "options": []},
+    # Boutique d'Halloween (app/halloween.py) : monnaie « bonbons », tout se règle sur la page Halloween du site.
+    {"name": "halloween", "description": "🎃 Ouvrir la boutique d'Halloween (rôles, objets, objets mystère 👻) payée en bonbons 🍬", "options": []},
+    {"name": "bonbons", "description": "🍬 Voir vos bonbons d'Halloween et les plus gros sacs du serveur", "options": []},
+    {
+        "name": "halloween-admin", "description": "🎃 Gérer la boutique d'Halloween (gérants : Kyanite, admins)",
+        "options": [
+            {"type": 1, "name": "donner", "description": "Donner des bonbons à un membre", "options": [
+                {"type": 6, "name": "membre", "description": "Membre qui reçoit les bonbons", "required": True},
+                {"type": 4, "name": "nombre", "description": "Nombre de bonbons", "required": True, "min_value": 1},
+                {"type": 3, "name": "motif", "description": "Raison (concours, event…)", "required": False, "max_length": 200},
+            ]},
+            {"type": 1, "name": "retirer", "description": "Retirer des bonbons à un membre", "options": [
+                {"type": 6, "name": "membre", "description": "Membre qui perd les bonbons", "required": True},
+                {"type": 4, "name": "nombre", "description": "Nombre de bonbons", "required": True, "min_value": 1},
+                {"type": 3, "name": "motif", "description": "Raison", "required": False, "max_length": 200},
+            ]},
+            {"type": 1, "name": "solde", "description": "Voir les bonbons d'un membre", "options": [
+                {"type": 6, "name": "membre", "description": "Membre", "required": True},
+            ]},
+            {"type": 1, "name": "vitrine", "description": "Poster ici la vitrine publique (boutons 🎃 Boutique · 👻 Objets mystère · 🍬 Mes bonbons)"},
+        ],
+    },
     {
         "name": "racheter", "description": "Acheter un objet au Receleur",
         "options": [

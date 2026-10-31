@@ -6,17 +6,18 @@ les autres répondent « en cours » puis remplacent le message via le webhook d
 """
 import json
 import logging
+import os
 
 import discord
 import httpx
 
-from app import combat, drop, eco_actions, eco_vues, emblemes, info, jets_site, loteries, receleur, ros_boutique, sessions_jeu
+from app import combat, drop, eco_actions, eco_vues, emblemes, halloween, info, jets_site, loteries, receleur, ros_boutique, sessions_jeu
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
              "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
-             "session", "recompense", "attaque", "boite-a-role", "info"}
+             "session", "recompense", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -124,6 +125,11 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
         return {"type": MESSAGE, "data": await eco_vues.vue_choix_boutique(eco, membre)}
     if nom == "info":
         return {"type": MESSAGE, "data": {"embeds": [info.vue_info(eco.prefixe)], "flags": PRIVE}}
+    if nom == "halloween":
+        # Boutique d'Halloween (app/halloween.py), payée en bonbons.
+        return {"type": MESSAGE, "data": await halloween.vue(eco, membre)}
+    if nom == "bonbons":
+        return {"type": MESSAGE, "data": await halloween.vue_solde(eco, membre)}
     if nom == "boite-a-role":
         # Conseiller des Rôles (app/ros_boutique.py) : choix du rôle puis du paiement de la boîte, dans un seul message.
         return {"type": MESSAGE, "data": await ros_boutique.vue_boite(eco, membre)}
@@ -211,6 +217,23 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             else:
                 ok, txt = await loteries.creer(eco, membre, _options(sous), payload.get("channel_id"))
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+        if nom == "halloween-admin":
+            sous = data["options"][0]
+            o = _options(sous)
+            if not await halloween.est_admin(eco, membre):
+                return await _modifier(app_id, jeton, [eco_vues.erreur("Réservé aux gérants de la boutique d'Halloween.")])
+            if sous["name"] == "vitrine":
+                ok = await _poster_salon(payload.get("channel_id"), await halloween.vitrine(eco))
+                return await _modifier(app_id, jeton, [eco_vues.resultat(ok, "Vitrine postée dans ce salon." if ok else
+                                                                         "Impossible de poster la vitrine ici (permissions du bot ?).")])
+            cible = await _membre(eco, payload, o.get("membre"))
+            if not cible:
+                return await _modifier(app_id, jeton, [eco_vues.erreur("Membre introuvable.")])
+            if sous["name"] == "solde":
+                return await _modifier(app_id, jeton, [eco_vues.resultat(True, await halloween.solde_de(eco, cible))])
+            n = int(o.get("nombre") or 0) * (-1 if sous["name"] == "retirer" else 1)
+            ok, txt = await halloween.donner(eco, membre, cible, n, (o.get("motif") or "").strip())
+            return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
         if nom == "recompense":
             types = eco.rostheim_types(nom)
             ok, txt = await eco.rostheim.slash(membre, opt.get("type"), types, payload.get("channel_id"), _origine(payload))
@@ -254,7 +277,7 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             await _modifier(app_id, jeton, [eco_vues.erreur("Une erreur est survenue : préviens un admin avec l'heure de ta commande.")])
 
     _en_fond(taches, travail_sur)
-    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie", "recompense") else {}}
+    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie", "recompense", "halloween-admin") else {}}
 
 
 async def _vue_echange(eco, e: dict, de, vers, statut: str | None = None) -> tuple[dict, list]:
@@ -309,6 +332,8 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
         return _maj_v2(eco_vues.boutique_fermee())
     if cid == "eco:shop":
         return _maj_v2(await eco_vues.vue_boutique(eco, membre, valeurs[0]))
+    if morceaux[1] == "hal":
+        return await _halloween_clic(eco, payload, membre, taches, app_id, morceaux)
     if morceaux[1] == "cbt":
         # Combat : accepter / refuser (défenseur, éventuellement avec un objet du menu), voter en cas d'égalité,
         # Try again / Échec critique après les jets.
@@ -401,6 +426,45 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
             await _modifier(app_id, jeton, [embed], comp)
         _en_fond(taches, reponse_echange)
         return {"type": DIFFERE_MAJ}
+    return {"type": DIFFERE_MAJ}
+
+
+async def _poster_salon(channel_id, corps: dict) -> bool:
+    """Message public posté par le bot lui-même (vitrine d'Halloween), sans la mention « a utilisé /… »."""
+    if not channel_id:
+        return False
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(f"https://discord.com/api/v10/channels/{channel_id}/messages", json=corps, timeout=10,
+                                  headers={"Authorization": f'Bot {os.environ.get("DISCORD_TOKEN", "")}'})
+            if r.status_code >= 400:
+                log.error("Vitrine d'Halloween refusée : %s %s", r.status_code, r.text)
+            return r.status_code < 400
+    except httpx.HTTPError as exc:
+        log.error("Erreur réseau vers Discord : %s", exc)
+        return False
+
+
+async def _halloween_clic(eco, payload, membre, taches, app_id, morceaux) -> dict:
+    """Boutons d'Halloween : v = vitrine publique (ouvre un message privé), pg = pages et filtre, sol = solde, buy = achat."""
+    action = morceaux[2]
+    if action == "v":
+        vue = await (halloween.vue_solde(eco, membre) if morceaux[3] == "sol" else halloween.vue(eco, membre, 0, morceaux[3]))
+        return {"type": MESSAGE, "data": vue}
+    if action == "pg":
+        return _maj_v2(await halloween.vue(eco, membre, int(morceaux[3]), morceaux[4] if len(morceaux) > 4 else "tout"))
+    if action == "sol":
+        return _maj_v2(await halloween.vue_solde(eco, membre))
+    if action == "buy":
+        async def achat():
+            salon = membre.guild.get_channel(int(payload["channel_id"])) if payload.get("channel_id") else None
+            ok, txt, annonce = await halloween.acheter(eco, membre, morceaux[3], _origine(payload), salon)
+            await _modifier(app_id, payload["token"], [eco_vues.resultat_achat(ok, txt) if ok else eco_vues.erreur(txt)])
+            if annonce:
+                await _webhook("POST", f"https://discord.com/api/v10/webhooks/{app_id}/{payload['token']}",
+                               {"content": annonce, "allowed_mentions": {"parse": []}})
+        _en_fond(taches, achat)
+        return {"type": DIFFERE, "data": {"flags": PRIVE}}
     return {"type": DIFFERE_MAJ}
 
 

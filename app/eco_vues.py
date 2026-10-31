@@ -82,7 +82,8 @@ def erreur_v2(texte: str) -> dict:
 
 
 async def options_boutiques(eco, cfg: dict, membre, exclu: str | None = None) -> list[dict]:
-    """Boutiques du serveur accessibles au membre, puis boutiques de Rostheim ouvertes (identifiants « r_<domaine> »)."""
+    """Boutiques du serveur accessibles au membre, puis boutiques de Rostheim ouvertes (identifiants « r_<domaine> »),
+    puis la boutique d'Halloween quand elle est ouverte (« h_halloween », app/halloween.py)."""
     from app import ros_boutique
     options = []
     for b in eco._boutiques_accessibles(cfg, membre):
@@ -93,6 +94,9 @@ async def options_boutiques(eco, cfg: dict, membre, exclu: str | None = None) ->
             o["description"] = _acces_txt(b)[:100]
         options.append(o)
     options += [ros_boutique.option(d) for d in await ros_boutique.domaines(eco)]
+    from app import halloween
+    if (h := await halloween.option_menu(eco)):
+        options.append(h)
     return [o for o in options if o["value"] != exclu][:25]
 
 
@@ -120,6 +124,9 @@ async def vue_boutique(eco, membre, boutique_id: str, page: int = 0, tri: str | 
     from app import ros_boutique
     if boutique_id.startswith(ros_boutique.PREFIXE):
         return await ros_boutique.vue(eco, membre, boutique_id, page)
+    from app import halloween
+    if boutique_id.startswith(halloween.PREFIXE):
+        return await halloween.vue(eco, membre, page)
     cfg = await eco.config()
     accessibles = eco._boutiques_accessibles(cfg, membre)
     b = next((x for x in accessibles if x["id"] == boutique_id), None)

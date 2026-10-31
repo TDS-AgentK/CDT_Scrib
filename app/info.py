@@ -7,6 +7,7 @@ RUBRIQUES = [
     ("💰 Économie", ["argent", "niveau", "inventaire", "topargent", "topniveau", "boutique", "payer", "donner", "utiliser", "echanger"]),
     ("🕯️ Receleur et drops", ["receleur", "vendre", "racheter", "drop"]),
     ("🏰 Rostheim", ["recompense", "boite-a-role"]),
+    ("🎃 Halloween", ["halloween", "bonbons", "halloween-admin"]),
     ("⚔️ Jeu de rôle (fiches du site)", ["session", "attaque"]),
     ("🛡️ Administration", ["dropadmin", "loterie"]),
 ]
