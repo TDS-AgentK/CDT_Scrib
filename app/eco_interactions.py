@@ -226,13 +226,13 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
                 ok = await _poster_salon(payload.get("channel_id"), await halloween.vitrine(eco))
                 return await _modifier(app_id, jeton, [eco_vues.resultat(ok, "Vitrine postée dans ce salon." if ok else
                                                                          "Impossible de poster la vitrine ici (permissions du bot ?).")])
-            cible = await _membre(eco, payload, o.get("membre"))
-            if not cible:
+            qui = await _membre(eco, payload, o.get("membre"))
+            if not qui:
                 return await _modifier(app_id, jeton, [eco_vues.erreur("Membre introuvable.")])
             if sous["name"] == "solde":
-                return await _modifier(app_id, jeton, [eco_vues.resultat(True, await halloween.solde_de(eco, cible))])
+                return await _modifier(app_id, jeton, [eco_vues.resultat(True, await halloween.solde_de(eco, qui))])
             n = int(o.get("nombre") or 0) * (-1 if sous["name"] == "retirer" else 1)
-            ok, txt = await halloween.donner(eco, membre, cible, n, (o.get("motif") or "").strip())
+            ok, txt = await halloween.donner(eco, membre, qui, n, (o.get("motif") or "").strip())
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
         if nom == "recompense":
             types = eco.rostheim_types(nom)

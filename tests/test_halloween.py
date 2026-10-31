@@ -307,3 +307,12 @@ class Vues(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Regression(unittest.TestCase):
+    def test_cible_pas_masquee(self):
+        # Une variable locale « cible » dans travail() masquait la fonction cible() : /inventaire, /argent… plantaient.
+        from app import eco_interactions
+        travail = next(c for c in eco_interactions._commande.__code__.co_consts if getattr(c, "co_name", "") == "travail")
+        self.assertIn("cible", travail.co_freevars)
+        self.assertNotIn("cible", travail.co_varnames)
