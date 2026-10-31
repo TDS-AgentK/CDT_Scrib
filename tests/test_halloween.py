@@ -49,6 +49,9 @@ class FauxPb:
         self.d.setdefault(collection, []).append(rec)
         return rec
 
+    async def supprimer(self, collection, rid):
+        self.d[collection] = [r for r in self.d[collection] if r["id"] != rid]
+
     async def requete(self, methode, chemin):
         parties = chemin.strip("/").split("/")
         collection, rid = parties[2], parties[-1]
@@ -83,16 +86,28 @@ class FauxEco:
 
     async def ajouter_objet(self, joueur_id, objet_id, q, motif, note=""):
         self.objets_donnes.append((objet_id, q))
+        ligne = await self.pb.premier("eco_inventaire", f'joueur="{joueur_id}" && objet="{objet_id}"')
+        if ligne:
+            ligne["quantite"] += q
+        else:
+            await self.pb.creer("eco_inventaire", {"joueur": joueur_id, "objet": objet_id, "quantite": q})
+
+    async def tracer_mouvement(self, *args):
+        pass
 
 
 def base(bonbons=50, articles=(), lots=()):
     return {
         "hal_reglages": [dict(REGLAGES)],
         "joueurs": [{"id": "j1", "pseudo": "Ràlas", "discord_id": "7", "eco_or": 0}],
-        "hal_soldes": [{"id": "s1", "joueur": "j1", "bonbons": bonbons, "total_gagne": bonbons}],
+        "eco_inventaire": [{"id": "i1", "joueur": "j1", "objet": "ob", "quantite": bonbons}] if bonbons else [],
         "hal_articles": [dict(a) for a in articles], "hal_lots": [dict(l) for l in lots], "hal_mouvements": [],
-        "eco_objets": [{"id": "o1", "nom": "Masque", "emoji": "🎭"}], "eco_gains": [],
+        "eco_objets": [{"id": "o1", "nom": "Masque", "emoji": "🎭"}, {"id": "ob", "nom": "Bonbon", "emoji": "🍬"}], "eco_gains": [],
     }
+
+
+def bonbons(pb):
+    return sum(l["quantite"] for l in pb.d["eco_inventaire"] if l["objet"] == "ob" and l["joueur"] == "j1")
 
 
 def membre(roles=(), uid=7, admin=False):
@@ -119,7 +134,7 @@ class Achat(unittest.TestCase):
         ok, txt, annonce = run(halloween.acheter(eco, membre(), "a_role"))
         self.assertTrue(ok, txt)
         self.assertEqual(eco.roles_donnes, [("Citrouille", 0)])
-        self.assertEqual(pb.d["hal_soldes"][0]["bonbons"], 30)
+        self.assertEqual(bonbons(pb), 30)
         self.assertEqual(pb.d["hal_mouvements"][-1]["type"], "achat")
         self.assertEqual(annonce, "")
 
@@ -128,13 +143,13 @@ class Achat(unittest.TestCase):
         ok, txt, _ = run(halloween.acheter(FauxEco(pb), membre(), "a_role"))
         self.assertFalse(ok)
         self.assertIn("rien n'a été prélevé", txt)
-        self.assertEqual(pb.d["hal_soldes"][0]["bonbons"], 50)
+        self.assertEqual(bonbons(pb), 50)
 
     def test_role_deja_detenu(self):
         pb = FauxPb(base(50, [ROLE]))
         ok, txt, _ = run(halloween.acheter(FauxEco(pb), membre(roles=["Citrouille"]), "a_role"))
         self.assertFalse(ok)
-        self.assertEqual(pb.d["hal_soldes"][0]["bonbons"], 50)
+        self.assertEqual(bonbons(pb), 50)
 
     def test_pas_assez_de_bonbons(self):
         pb = FauxPb(base(5, [ROLE]))
@@ -154,7 +169,7 @@ class Achat(unittest.TestCase):
         eco = FauxEco(pb)
         ok, txt, _ = run(halloween.acheter(eco, membre(), "a_obj"))
         self.assertTrue(ok, txt)
-        self.assertEqual(eco.objets_donnes, [("o1", 2)])
+        self.assertIn(("o1", 2), eco.objets_donnes)
         self.assertEqual(pb.d["hal_articles"][0]["stock"], 0)
         ok, txt, _ = run(halloween.acheter(eco, membre(), "a_obj"))
         self.assertFalse(ok)
@@ -167,6 +182,25 @@ class Achat(unittest.TestCase):
         ok, txt, _ = run(halloween.acheter(eco, membre(), "a_obj"))
         self.assertFalse(ok)
         self.assertIn("nombre de fois permis", txt)
+
+
+class Monnaie(unittest.TestCase):
+    def test_monnaie_objet_bonbon_de_l_inventaire(self):
+        pb = FauxPb(base(20, [ROLE]))
+        ok, _, _ = run(halloween.acheter(FauxEco(pb), membre(), "a_role"))
+        self.assertTrue(ok)
+        self.assertEqual(pb.d["eco_inventaire"], [])  # 20 - 20 : la ligne d'inventaire disparaît
+
+    def test_objet_choisi_sur_le_site(self):
+        pb = FauxPb(base(0))
+        pb.d["eco_objets"].append({"id": "autre", "nom": "Sucre d'orge"})
+        pb.d["hal_reglages"][0]["objet_bonbon"] = "autre"
+        run(halloween.donner(FauxEco(pb), membre(uid=42), membre(), 3))
+        self.assertEqual(pb.d["eco_inventaire"][0]["objet"], "autre")
+
+    def test_classement(self):
+        pb = FauxPb(base(7))
+        self.assertIn("7 🍬 Bonbons", str(run(halloween.vue_solde(FauxEco(pb), membre()))))
 
 
 class Mystere(unittest.TestCase):
@@ -186,7 +220,7 @@ class Mystere(unittest.TestCase):
         pb = FauxPb(base(10, [MYSTERE], [self.LOTS[0]]))
         ok, txt, annonce = run(halloween.acheter(FauxEco(pb), membre(), "a_mys"))
         self.assertTrue(ok, txt)
-        self.assertEqual(pb.d["hal_soldes"][0]["bonbons"], 10 - 5)
+        self.assertEqual(bonbons(pb), 10 - 5)
         self.assertEqual(pb.d["joueurs"][0]["eco_or"], 12)
         self.assertIn("<@7>", annonce)
         self.assertIn("12 Or", annonce)
@@ -195,7 +229,7 @@ class Mystere(unittest.TestCase):
         pb = FauxPb(base(10, [MYSTERE], [{**self.LOTS[0], "type": "bonbons"}]))
         ok, _, _ = run(halloween.acheter(FauxEco(pb), membre(), "a_mys"))
         self.assertFalse(ok)
-        self.assertEqual(pb.d["hal_soldes"][0]["bonbons"], 10)
+        self.assertEqual(bonbons(pb), 10)
 
     def test_role_deja_detenu_jamais_tire(self):
         pb = FauxPb(base(10, [MYSTERE], self.LOTS[:2]))
@@ -204,13 +238,13 @@ class Mystere(unittest.TestCase):
             ok, txt, _ = run(halloween.acheter(eco, membre(roles=["Fantôme"]), "a_mys"))
             self.assertTrue(ok, txt)
             self.assertNotIn("Fantôme", txt)
-            pb.d["hal_soldes"][0]["bonbons"] = 10
+            pb.d["eco_inventaire"][0]["quantite"] = 10
 
     def test_mystere_vide(self):
         pb = FauxPb(base(10, [MYSTERE]))
         ok, txt, _ = run(halloween.acheter(FauxEco(pb), membre(), "a_mys"))
         self.assertFalse(ok)
-        self.assertEqual(pb.d["hal_soldes"][0]["bonbons"], 10)
+        self.assertEqual(bonbons(pb), 10)
 
 
 class Gerants(unittest.TestCase):
@@ -219,10 +253,10 @@ class Gerants(unittest.TestCase):
         eco = FauxEco(pb)
         ok, txt = run(halloween.donner(eco, membre(uid=42), membre(), 10, "concours"))
         self.assertTrue(ok, txt)
-        self.assertEqual(pb.d["hal_soldes"][0]["bonbons"], 15)
+        self.assertEqual(bonbons(pb), 15)
         ok, _ = run(halloween.donner(eco, membre(uid=42), membre(), -100))
         self.assertTrue(ok)
-        self.assertEqual(pb.d["hal_soldes"][0]["bonbons"], 0)  # jamais négatif
+        self.assertEqual(bonbons(pb), 0)  # jamais négatif
 
     def test_refus_non_gerant(self):
         pb = FauxPb(base(5))

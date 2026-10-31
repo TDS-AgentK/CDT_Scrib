@@ -1,14 +1,15 @@
-"""Boutique d'Halloween : une monnaie à part, les bonbons, donnés par les gérants (site ou /halloween-admin), et dépensés dans une boutique dont tout se règle sur la page « Halloween » du site (Kyanite et K).
+"""Boutique d'Halloween : la monnaie est l'objet « Bonbon » des inventaires (eco_objets, choisi sur la page Halloween :
+objet_bonbon), distribué seulement par les gérants (site, /halloween-admin) ; on le dépense dans une boutique dont tout
+se règle sur la page « Halloween » du site (Kyanite et K).
 
 Collections (créées par scripts/setup-halloween.mjs du site) :
-- hal_reglages (cle « general ») : ouverte, titre, description, couleur, monnaie_nom, emojis (citrouille, fantôme,
+- hal_reglages (cle « general ») : ouverte, objet_bonbon, titre, description, couleur, monnaie_nom, emojis (citrouille, fantôme,
   bonbon : emoji Unicode ou emoji du serveur « <:nom:id> »), admin_discord_ids (gérants côté Discord),
   annonce_hasard (résultat d'un objet mystère montré dans le salon)
 - hal_articles : nom, emoji, description, prix (bonbons), type (objet, role, role_temporaire, hasard, or, xp, demande),
   objet, quantite, role_nom, role_id, duree_jours, stock, stock_illimite, limite_par_joueur, actif, ordre
 - hal_lots : lots d'un article « hasard » (objet mystère) : libelle, type (objet, role, role_temporaire, or, xp,
   rien ; jamais de bonbons : ils ne s'obtiennent que par distribution), objet, quantite, role_nom, role_id, duree_jours, poids (chance relative), actif
-- hal_soldes : bonbons de chaque joueur (joueur, bonbons, total_gagne)
 - hal_mouvements : historique (type achat, don, retrait ; montant signé ; article ; libelle ; resultat)
 
 Sur Discord : /halloween (boutique), /bonbons (solde et classement), /halloween-admin (donner, retirer, vitrine) et
@@ -26,6 +27,7 @@ import discord
 
 from app import eco_vues
 from app.eco_cartes import abrege
+from app.economie import meme_nom
 from app.pocketbase import echapper
 
 log = logging.getLogger("cdt_scrib.halloween")
@@ -114,38 +116,46 @@ async def est_admin(eco, membre: discord.Member) -> bool:
     return str(membre.id) in _ids(r.get("admin_discord_ids")) | LOTERIE_ADMINS
 
 
-# ---------------------------------------------------------------- soldes
+# ---------------------------------------------------------------- soldes (objet « Bonbon » des inventaires)
 
-async def solde(eco, joueur_id: str) -> dict | None:
-    return await eco.pb.premier("hal_soldes", f'joueur="{echapper(joueur_id)}"')
+NOM_OBJET = "Bonbon"
 
 
-async def bonbons_de(eco, joueur: dict | None) -> int:
-    if not joueur:
+async def objet_bonbon(eco) -> dict | None:
+    """L'objet qui sert de monnaie : celui choisi sur la page Halloween (objet_bonbon), sinon l'objet nommé « Bonbon »."""
+    r = await reglages(eco)
+    if r.get("objet_bonbon"):
+        try:
+            return await eco.pb.requete("GET", f'/api/collections/eco_objets/records/{r["objet_bonbon"]}')
+        except Exception:
+            log.warning("Objet bonbon %s introuvable, repli sur le nom « %s »", r["objet_bonbon"], NOM_OBJET)
+    return next((o for o in await eco.pb.lister("eco_objets") if meme_nom(o.get("nom"), NOM_OBJET)), None)
+
+
+async def bonbons_de(eco, joueur: dict | None, objet: dict | None = None) -> int:
+    from app.eco_actions import quantite
+    objet = objet or await objet_bonbon(eco)
+    if not joueur or not objet:
         return 0
-    s = await solde(eco, joueur["id"])
-    return (s or {}).get("bonbons") or 0
+    return (await quantite(eco, joueur["id"], objet["id"]))[1]
 
 
 async def changer_bonbons(eco, joueur_id: str, delta: int, type_: str, libelle: str, origine: str = "",
                           article: str = "", resultat: str = "") -> int:
-    """Ajoute (ou retire) des bonbons, trace le mouvement, et renvoie le nouveau solde (jamais négatif)."""
-    s = await solde(eco, joueur_id)
-    avant = (s or {}).get("bonbons") or 0
+    """Ajoute (ou retire) des Bonbons dans l'inventaire, trace le mouvement, et renvoie le nouveau nombre (jamais négatif)."""
+    from app.eco_actions import quantite, retirer_objet
+    objet = await objet_bonbon(eco)
+    if not objet:
+        raise RuntimeError(f"objet « {NOM_OBJET} » introuvable dans le catalogue")
+    avant = (await quantite(eco, joueur_id, objet["id"]))[1]
+    if delta > 0:
+        await eco.ajouter_objet(joueur_id, objet["id"], delta, "don", f"Halloween : {libelle}")
+    elif delta < 0 and avant > 0:
+        await retirer_objet(eco, joueur_id, objet["id"], min(avant, -delta), "utilisation", f"Halloween : {libelle}")
     apres = max(0, avant + delta)
-    gagne = (s or {}).get("total_gagne") or 0
-    if delta > 0 and type_ == "don":
-        gagne += delta
-    if s:
-        await eco.pb.maj("hal_soldes", s["id"], {"bonbons": apres, "total_gagne": gagne})
-    else:
-        await eco.pb.creer("hal_soldes", {"joueur": joueur_id, "bonbons": apres, "total_gagne": gagne})
     try:
         await eco.pb.creer("hal_mouvements", {"joueur": joueur_id, "type": type_, "montant": apres - avant, "article": article,
                                               "libelle": libelle[:300], "resultat": resultat[:500], "date": _pb_date(), "origine": origine})
-        r = await reglages(eco)
-        await eco.pb.creer("eco_gains", {"joueur": joueur_id, "commande": f"halloween : {libelle}"[:300], "monnaie": r.get("monnaie_nom") or "Bonbons",
-                                         "montant": apres - avant, "points_jauge": 0, "date": _pb_date(), "origine": origine})
     except Exception:  # la trace ne doit jamais bloquer
         log.exception("Trace d'un mouvement de bonbons impossible")
     return apres
@@ -248,6 +258,8 @@ async def acheter(eco, membre: discord.Member, article_id: str, origine: str = "
     joueur = await eco.joueur_de(membre)
     if not joueur:
         return False, "Aucune fiche joueur liée à ce compte Discord.", ""
+    if not await objet_bonbon(eco):
+        return False, f"L'objet « {NOM_OBJET} » qui sert de monnaie est introuvable : préviens un gérant.", ""
     async with eco._verrou(membre.id):
         try:
             a = await eco.pb.requete("GET", f"/api/collections/hal_articles/records/{article_id}")
@@ -323,6 +335,8 @@ async def donner(eco, auteur: discord.Member, cible: discord.Member, n: int, mot
     if not joueur:
         return False, f"{cible.mention} n'a pas de fiche joueur liée à son compte Discord."
     r = await reglages(eco)
+    if not await objet_bonbon(eco):
+        return False, f"L'objet « {NOM_OBJET} » qui sert de monnaie est introuvable dans le catalogue."
     libelle = (motif or ("don" if n > 0 else "retrait")) + f" (par {auteur.display_name})"
     async with eco._verrou(cible.id):
         reste = await changer_bonbons(eco, joueur["id"], n, "don" if n > 0 else "retrait", libelle)
@@ -404,19 +418,21 @@ async def vue_solde(eco, membre, maj: bool = False) -> dict:
     r = await reglages(eco)
     joueur = await eco.joueur_de(membre)
     lignes = [f"## {bonbon(r)} Tes {r.get('monnaie_nom') or 'Bonbons'}"]
+    objet = await objet_bonbon(eco)
     if joueur:
-        s = await solde(eco, joueur["id"]) or {}
-        lignes.append(f"Tu as **{monnaie(r, s.get('bonbons') or 0)}** (gagnés en tout : {eco_vues._n(s.get('total_gagne') or 0)}).")
+        lignes.append(f"Tu as **{monnaie(r, await bonbons_de(eco, joueur, objet))}** dans ton inventaire.")
     else:
         lignes.append("Aucune fiche joueur liée à ton compte Discord.")
-    soldes = sorted((s for s in await eco.pb.lister("hal_soldes", expand="joueur") if (s.get("bonbons") or 0) > 0),
-                    key=lambda s: -(s.get("bonbons") or 0))[:10]
+    soldes = []
+    if objet:
+        soldes = sorted((s for s in await eco.pb.lister("eco_inventaire", f'objet="{echapper(objet["id"])}"', expand="joueur")
+                         if (s.get("quantite") or 0) > 0), key=lambda s: -(s.get("quantite") or 0))[:10]
     if soldes:
         lignes.append(f"\n**{citrouille(r)} Les plus gros sacs**")
         for i, s in enumerate(soldes, 1):
             j = (s.get("expand") or {}).get("joueur") or {}
             qui = f'<@{j["discord_id"]}>' if str(j.get("discord_id") or "").isdigit() else (j.get("pseudo") or "?")
-            lignes.append(f"{i}. {qui} : {eco_vues._n(s.get('bonbons'))} {bonbon(r)}")
+            lignes.append(f"{i}. {qui} : {eco_vues._n(s.get('quantite'))} {bonbon(r)}")
     blocs = [eco_vues._texte("\n".join(lignes)[:3800])]
     if r.get("ouverte"):
         blocs.append({"type": 1, "components": [eco_vues._bouton("Boutique", "eco:hal:pg:0:tout", style=1, emoji=emoji_composant(citrouille(r)))]})
@@ -429,8 +445,7 @@ async def solde_de(eco, cible) -> str:
     joueur = await eco.joueur_de(cible)
     if not joueur:
         return f"{cible.mention} n'a pas de fiche joueur liée à son compte Discord."
-    s = await solde(eco, joueur["id"]) or {}
-    return f"{cible.mention} a {monnaie(r, s.get('bonbons') or 0)} (gagnés en tout : {eco_vues._n(s.get('total_gagne') or 0)})."
+    return f"{cible.mention} a {monnaie(r, await bonbons_de(eco, joueur))} dans son inventaire."
 
 
 async def vitrine(eco) -> dict:

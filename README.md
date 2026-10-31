@@ -37,7 +37,7 @@ domaine ; rien n'est prélevé si le rôle ne peut pas être donné). Menus, bou
 fenêtres (custom_id `eco:…`) arrivent par `/interactions` (`app/eco_interactions.py`).
 
 Boutique d'Halloween (`app/halloween.py`, collections `hal_*` créées par `scripts/setup-halloween.mjs` du site) : une
-monnaie à part, les **bonbons** 🍬, donnés par les gérants (site ou `/halloween-admin`) ou gagnés dans les objets mystère. Tout se paramètre sur la page « Halloween » du site (K et les comptes
+monnaie : l'objet **Bonbon** 🍬 des inventaires (réglable sur le site), distribué seulement par les gérants (site ou `/halloween-admin`). Tout se paramètre sur la page « Halloween » du site (K et les comptes
 cochés `gere_halloween`, c.-à-d. Kyanite) : ouverture, textes, emojis, articles (objet, rôle, rôle temporaire, Or, XP, demande
 remise à la main, objet mystère 👻 avec ses lots pondérés), prix, stocks, limites par joueur, soldes. Sur Discord :
 `/halloween` (boutique), `/bonbons` (solde et classement), `/halloween-admin donner|retirer|solde|vitrine` (gérants : admins
