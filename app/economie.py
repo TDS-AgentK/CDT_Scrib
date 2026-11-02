@@ -21,6 +21,9 @@ log = logging.getLogger("cdt_scrib.economie")
 
 RECHARGE_CONFIG_S = 60
 COULEUR_DEFAUT = 0xC5A24F
+# Salon des annonces de niveau (#général). Réglable sur le site (eco_reglages « general » : salon_niveaux_id)
+# ou par la variable ECO_SALON_NIVEAUX ; à défaut, l'annonce part dans le salon où l'XP a été gagnée.
+SALON_NIVEAUX_DEFAUT = "1285650689619525662"
 
 
 # ---------------------------------------------------------------- courbe de niveau (identique au site)
@@ -281,21 +284,57 @@ class Economie:
 
     # ------------------------------------------------------------ niveaux et récompenses
 
+    async def salon_niveaux(self, cfg: dict, membre: discord.Member, repli):
+        """Salon où annoncer les montées de niveau : celui des réglages (#général par défaut), s'il est sur le
+        serveur du membre ; sinon (serveur de test, salon introuvable) le salon où l'XP a été gagnée."""
+        import os
+        sid = str(cfg["reglages"].get("salon_niveaux_id") or os.getenv("ECO_SALON_NIVEAUX") or SALON_NIVEAUX_DEFAUT).strip()
+        if not sid.isdigit():
+            return repli
+        salon = self.client.get_channel(int(sid))
+        if salon is None:
+            try:
+                salon = await self.client.fetch_channel(int(sid))
+            except Exception:
+                log.warning("Salon des annonces de niveau %s introuvable : annonce dans le salon d'origine", sid)
+                return repli
+        guild = getattr(membre, "guild", None)
+        if guild is not None and getattr(getattr(salon, "guild", None), "id", None) != guild.id:
+            return repli
+        return salon
+
     async def monter_niveau(self, channel, membre: discord.Member, joueur: dict, avant: int, apres: int):
         cfg = await self.config()
         lignes = []
+        # Une récompense qui échoue (rôle, objet, succès) ne doit jamais empêcher l'annonce.
         for niveau in range(avant + 1, apres + 1):
             for r in [r for r in cfg["recompenses"] if r.get("niveau") == niveau]:
-                lignes.append(await self.donner_recompense(membre, joueur, r))
+                try:
+                    lignes.append(await self.donner_recompense(membre, joueur, r))
+                except Exception:
+                    log.exception("Récompense du niveau %s impossible pour %s", niveau, getattr(membre, "name", "?"))
             for p in [p for p in cfg["paliers"] if p.get("declencheur") == "niveau" and p.get("seuil") == niveau]:
-                await self.donner_succes(joueur, p.get("succes"))
+                try:
+                    await self.donner_succes(joueur, p.get("succes"))
+                except Exception:
+                    log.exception("Succès du niveau %s impossible pour %s", niveau, getattr(membre, "name", "?"))
         xp_nom = f'{cfg["reglages"].get("xp_emoji") or ""} {cfg["reglages"].get("xp_nom") or "XP"}'.strip()
-        from app import journal
-        await journal.noter(self.pb, "niveau", f"niveau {apres}", joueur.get("id") or "", motif=xp_nom, **journal._membre(membre))
+        try:
+            from app import journal
+            await journal.noter(self.pb, "niveau", f"niveau {apres}", joueur.get("id") or "", motif=xp_nom, **journal._membre(membre))
+        except Exception:
+            log.exception("Journal de la montée de niveau impossible")
         embed = discord.Embed(description=f"{membre.mention} atteint le niveau **{apres}** ({xp_nom}).", color=COULEUR_DEFAUT)
         if [l for l in lignes if l]:
             embed.add_field(name="Récompenses", value="\n".join(l for l in lignes if l)[:1024], inline=False)
-        await channel.send(embed=embed)
+        cible = await self.salon_niveaux(cfg, membre, channel)
+        try:
+            await cible.send(embed=embed)
+        except Exception:
+            if cible is channel or channel is None:
+                raise
+            log.exception("Annonce de niveau impossible dans #%s : envoi dans le salon d'origine", getattr(cible, "name", "?"))
+            await channel.send(embed=embed)
 
     async def donner_recompense(self, membre: discord.Member, joueur: dict, r: dict) -> str:
         if r.get("recompense_or"):
