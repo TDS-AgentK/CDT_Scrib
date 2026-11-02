@@ -27,11 +27,27 @@ VERT, PALE, OR_ = (92, 214, 176), (190, 220, 210), (226, 196, 120)
 MAX_ETAPES = 5
 CACHE_SUCCES_S = 300
 
-# Noms possibles des champs d'un succès (base issue des badges Wix, enrichie sur le site).
-CHAMPS_SECRET = ("secret", "cache", "hidden", "is_secret", "est_secret")
-CHAMPS_ICONE = ("icon", "icone", "image", "badge", "logo")
-CHAMPS_FOND = ("backgroundColor", "couleur_fond", "background", "couleur")
-CHAMPS_DESCRIPTION = ("description", "texte", "subtitle")
+# Champs d'un succès (page /gestion/succes du site) : secret (case « invisible tant que non obtenu »),
+# image téléversée sinon icon (ancienne icône Wix), background_color, resume (phrase sous le titre), description.
+CHAMPS_SECRET = ("secret",)
+CHAMPS_ICONE = ("image", "icon")
+CHAMPS_FOND = ("background_color",)
+CHAMPS_DESCRIPTION = ("resume", "description")
+
+
+def site_url() -> str:
+    return (os.getenv("SITE_URL") or "https://cdtsite-production.up.railway.app").rstrip("/")
+
+
+def _adresse(v: str) -> str:
+    """Adresse d'une image du site : absolue, chemin du site (/media/…) ou référence Wix."""
+    if v.startswith("http"):
+        return v
+    if v.startswith("wix:image://v1/"):
+        return "https://static.wixstatic.com/media/" + v[len("wix:image://v1/"):].split("/")[0]
+    if v.startswith("/"):
+        return site_url() + v
+    return "https://static.wixstatic.com/media/" + v
 
 
 # ---------------------------------------------------------------- données
@@ -52,17 +68,9 @@ def detenu(s: dict, joueur: dict) -> bool:
     return bool(joueur.get("joueur")) and joueur["joueur"] in (s.get("members") or [])
 
 
-def url_icone(s: dict, pb_url: str) -> str | None:
+def url_icone(s: dict, pb_url: str = "") -> str | None:
     v = _champ(s, CHAMPS_ICONE)
-    if isinstance(v, list):
-        v = v[0] if v else None
-    if not v or not isinstance(v, str):
-        return None
-    if v.startswith("http"):
-        return v
-    if v.startswith("wix:image://v1/"):
-        return "https://static.wixstatic.com/media/" + v[len("wix:image://v1/"):].split("/")[0]
-    return f'{pb_url.rstrip("/")}/api/files/succes/{s.get("id")}/{v}'
+    return _adresse(v) if isinstance(v, str) and v else None
 
 
 def couleur_fond(s: dict) -> tuple[int, int, int]:
@@ -132,20 +140,26 @@ def etapes(cfg: dict, succes: dict[str, dict], joueur: dict, pb_url: str) -> lis
 
 
 def libelle_recompense(r: dict, succes: dict[str, dict], joueur: dict) -> str:
+    """Le succès d'abord (« Récompense secrète » s'il est secret et pas encore reçu), puis objet, Or ou libellé ;
+    le rôle seulement en dernier recours."""
     s = succes.get(r.get("succes") or "")
-    secret_cache = bool(s) and est_secret(s) and not detenu(s, joueur)
-    texte = r.get("libelle") or r.get("recompense_role") or r.get("recompense_objet") \
-        or (f'{r["recompense_or"]} Or' if r.get("recompense_or") else "") or (s.get("title") if s else "")
-    if secret_cache and (not texte or texte == s.get("title") or r.get("categorie") == "customisee"):
-        return "Récompense secrète"
-    return texte or "Récompense"
+    if s:
+        return "Récompense secrète" if est_secret(s) and not detenu(s, joueur) else (s.get("title") or "Succès")
+    return r.get("recompense_objet") or (f'{r["recompense_or"]} Or' if r.get("recompense_or") else "") \
+        or r.get("libelle") or r.get("recompense_role") or "Récompense"
 
 
 def prochaine_recompense(cfg: dict, niveau: int, succes: dict[str, dict], joueur: dict) -> tuple[int, str] | None:
-    suivantes = sorted((r for r in cfg.get("recompenses") or [] if (r.get("niveau") or 0) > niveau), key=lambda r: r["niveau"])
-    if not suivantes:
+    """Récompense du prochain niveau qui en a une (récompenses de niveau et succès de palier), succès en priorité."""
+    candidats = [r for r in cfg.get("recompenses") or [] if (r.get("niveau") or 0) > niveau]
+    candidats += [{"niveau": int(p["seuil"]), "succes": p["succes"]} for p in cfg.get("paliers") or []
+                  if p.get("declencheur") == "niveau" and p.get("succes") and (p.get("seuil") or 0) > niveau]
+    if not candidats:
         return None
-    return suivantes[0]["niveau"], libelle_recompense(suivantes[0], succes, joueur)
+    n = min(c["niveau"] for c in candidats)
+    du_niveau = [c for c in candidats if c["niveau"] == n]
+    du_niveau.sort(key=lambda c: 0 if succes.get(c.get("succes") or "") else 1)
+    return n, libelle_recompense(du_niveau[0], succes, joueur)
 
 
 async def donnees(eco, joueur: dict) -> tuple[list[dict], dict, dict[str, dict]]:
@@ -154,33 +168,16 @@ async def donnees(eco, joueur: dict) -> tuple[list[dict], dict, dict[str, dict]]
     return etapes(cfg, succes, joueur, eco.pb.url), cfg, succes
 
 
-CHAMPS_AVATAR = ("avatar", "avatar_url", "image", "photo")
-
-
-def _url_fichier(pb_url: str, collection: str, rec: dict) -> str | None:
-    v = _champ(rec, CHAMPS_AVATAR)
-    if isinstance(v, list):
-        v = v[0] if v else None
-    if not v or not isinstance(v, str):
-        return None
-    if v.startswith("http"):
-        return v
-    if v.startswith("wix:image://v1/"):
-        return "https://static.wixstatic.com/media/" + v[len("wix:image://v1/"):].split("/")[0]
-    return f'{pb_url.rstrip("/")}/api/files/{collection}/{rec.get("id")}/{v}'
-
-
 async def avatar_site(eco, joueur: dict, cible=None) -> str | None:
-    """Avatar choisi sur le site (fiche joueurs, sinon compte du site lié), à défaut l'avatar Discord."""
-    url = _url_fichier(eco.pb.url, "joueurs", joueur)
-    if not url and joueur.get("joueur"):
+    """Photo de profil choisie sur le site (membres.profile_photo, membre lié par joueurs.joueur),
+    à défaut l'avatar Discord."""
+    if joueur.get("joueur"):
         try:
-            compte = await eco.pb.requete("GET", f'/api/collections/users/records/{joueur["joueur"]}')
-            url = _url_fichier(eco.pb.url, "users", compte)
+            membre = await eco.pb.requete("GET", f'/api/collections/membres/records/{joueur["joueur"]}')
+            if membre.get("profile_photo"):
+                return _adresse(membre["profile_photo"])
         except Exception:
-            log.info("Compte du site %s illisible pour l'avatar", joueur.get("joueur"))
-    if url:
-        return url
+            log.info("Membre du site %s illisible pour l'avatar", joueur.get("joueur"))
     av = getattr(cible, "display_avatar", None)
     if av is None:
         return None

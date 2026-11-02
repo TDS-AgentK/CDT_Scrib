@@ -11,7 +11,7 @@ from PIL import Image
 from app import chemin_rangs as cr
 
 SUCCES = {
-    "s5": {"id": "s5", "title": "Meilleur qu'un blob", "description": "C'est le début du chemin", "members": ["u1"], "icon": "blob.png"},
+    "s5": {"id": "s5", "title": "Meilleur qu'un blob", "description": "C'est le début du chemin", "members": ["u1"], "image": "/media/uploads/blob.png", "icon": "https://static.wixstatic.com/media/x.png"},
     "s15": {"id": "s15", "title": "Slayers", "members": []},
     "s25": {"id": "s25", "title": "Plafond de verre", "secret": True, "members": ["u1"]},
     "s27": {"id": "s27", "title": "Jamais vu auparavant", "secret": True, "members": []},
@@ -34,12 +34,24 @@ class Etapes(unittest.TestCase):
 
     def test_icone_pocketbase(self):
         e = cr.etapes(CFG, SUCCES, JOUEUR, "https://pb")[0]
-        self.assertEqual(e["icone"], "https://pb/api/files/succes/s5/blob.png")
+        self.assertEqual(e["icone"], "https://cdtsite-production.up.railway.app/media/uploads/blob.png")
         self.assertTrue(e["detenu"])
 
+    def test_avatar_du_site(self):
+        eco = mock.Mock()
+        eco.pb.requete = mock.AsyncMock(return_value={"profile_photo": "https://lh3.example/photo.jpg"})
+        self.assertEqual(asyncio.run(cr.avatar_site(eco, JOUEUR)), "https://lh3.example/photo.jpg")
+        eco.pb.requete.assert_awaited_with("GET", "/api/collections/membres/records/u1")
+        eco.pb.requete = mock.AsyncMock(return_value={})
+        self.assertIsNone(asyncio.run(cr.avatar_site(eco, JOUEUR)))
+
     def test_prochaine_recompense(self):
-        self.assertEqual(cr.prochaine_recompense(CFG, 12, SUCCES, JOUEUR), (15, "Rôle Slayers"))
+        # niveau 15 : rôle ET succès de palier → le succès passe avant le rôle
+        self.assertEqual(cr.prochaine_recompense(CFG, 12, SUCCES, JOUEUR), (15, "Slayers"))
         self.assertEqual(cr.prochaine_recompense(CFG, 15, SUCCES, JOUEUR), (20, "500 Or"))
+        # récompense intermédiaire (niveau 13) avant l'étape suivante
+        cfg = {**CFG, "recompenses": CFG["recompenses"] + [{"niveau": 13, "recompense_role": "Rôle X", "recompense_objet": "Potion"}]}
+        self.assertEqual(cr.prochaine_recompense(cfg, 12, SUCCES, JOUEUR), (13, "Potion"))
         self.assertEqual(cr.prochaine_recompense(CFG, 26, SUCCES, JOUEUR), (27, "Récompense secrète"))
         self.assertIsNone(cr.prochaine_recompense(CFG, 30, SUCCES, JOUEUR))
 
