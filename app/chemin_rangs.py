@@ -65,6 +65,12 @@ def est_secret(s: dict) -> bool:
     return v is True or str(v).lower() in ("true", "1", "oui", "yes")
 
 
+def encore_cache(s: dict) -> bool:
+    """Un succès secret reste caché tant que personne ne l'a découvert ; dès qu'un membre l'a obtenu,
+    il devient visible pour tout le monde (comme un succès normal)."""
+    return est_secret(s) and not (s.get("members") or [])
+
+
 def detenu(s: dict, joueur: dict) -> bool:
     return bool(joueur.get("joueur")) and joueur["joueur"] in (s.get("members") or [])
 
@@ -150,18 +156,24 @@ def _ids_succes(cfg: dict) -> dict[str, int]:
 
 def etapes(cfg: dict, succes: dict[str, dict], joueur: dict, pb_url: str) -> list[dict]:
     """Étapes visibles du chemin pour ce joueur, par niveau croissant (succès secrets non reçus retirés)."""
-    sortie = []
+    sortie, caches = [], []
     for sid, niveau in _ids_succes(cfg).items():
         s = succes.get(sid)
         if not s:
             continue
         a = detenu(s, joueur)
-        if est_secret(s) and not a:
+        if encore_cache(s):
+            caches.append((niveau, sid))
             continue
         sortie.append({"id": sid, "niveau": niveau, "titre": s.get("title") or "Succès", "secret": est_secret(s),
                        "description": _champ(s, CHAMPS_DESCRIPTION) or "", "icone": url_icone(s, pb_url),
                        "fond": couleur_fond(s), "detenu": a})
-    return sorted(sortie, key=lambda e: (e["niveau"], e["titre"]))
+    sortie.sort(key=lambda e: (e["niveau"], e["titre"]))
+    if caches:  # prochain succès secret : étape mystère en bout de chemin, sans nom ni niveau affichés
+        niveau, sid = min(caches)
+        sortie.append({"id": sid, "niveau": niveau, "titre": "???", "secret": True, "mystere": True, "description": "",
+                       "icone": None, "fond": (34, 30, 52), "detenu": False})
+    return sortie
 
 
 def libelle_recompense(r: dict, succes: dict[str, dict], joueur: dict) -> str:
@@ -169,7 +181,7 @@ def libelle_recompense(r: dict, succes: dict[str, dict], joueur: dict) -> str:
     reçu), objet, Or ou libellé ; le rôle en dernier recours (les rôles de rang sont déjà sur le chemin)."""
     s = succes.get(r.get("succes") or "")
     if s:
-        return "Récompense secrète" if est_secret(s) and not detenu(s, joueur) else (s.get("title") or "Succès")
+        return "Récompense secrète" if encore_cache(s) else (s.get("title") or "Succès")
     return r.get("recompense_objet") or (f'{r["recompense_or"]} Or' if r.get("recompense_or") else "") \
         or r.get("libelle") or r.get("recompense_role") or "Récompense"
 
@@ -430,13 +442,17 @@ def _x_curseur(xs: list[float], niveaux: list[int], v: float, x_debut: float, n_
 
 
 def fenetre(etapes_visibles: list[dict], niveau: int, maxi: int = MAX_ETAPES) -> tuple[list[dict], int]:
-    """Étapes à dessiner (au plus maxi : les deux dernières atteintes puis les suivantes) et niveau de départ du tracé."""
-    if not etapes_visibles:
-        return [], 0
-    k = next((i for i, e in enumerate(etapes_visibles) if e["niveau"] > niveau), len(etapes_visibles))
-    debut = max(0, min(k - 2, len(etapes_visibles) - maxi))
-    vue = etapes_visibles[debut:debut + maxi]
-    return vue, (etapes_visibles[debut - 1]["niveau"] if debut else 0)
+    """Étapes à dessiner (au plus maxi : les deux dernières atteintes puis les suivantes) et niveau de départ du tracé.
+    L'étape mystère (prochain succès secret) est toujours la dernière, au bout de la barre."""
+    mystere = next((e for e in etapes_visibles if e.get("mystere")), None)
+    liste = [e for e in etapes_visibles if not e.get("mystere") and (not mystere or e["niveau"] < mystere["niveau"])]
+    place = maxi - 1 if mystere else maxi
+    if not liste:
+        return ([mystere] if mystere else []), 0
+    k = next((i for i, e in enumerate(liste) if e["niveau"] > niveau), len(liste))
+    debut = max(0, min(k - 2, len(liste) - place))
+    vue = liste[debut:debut + place] + ([mystere] if mystere else [])
+    return vue, (liste[debut - 1]["niveau"] if debut else 0)
 
 
 async def _icones(vue, pb):
@@ -451,13 +467,29 @@ def _chemin(img, vue, niveau_depart, v, niveau, x0, x1, y, taille_icone=30, libe
     pas = (x1 - x0) / max(1, len(vue))
     xs = [x0 + 34 * S + (x1 - x0 - 34 * S) * (i + 1) / len(vue) - pas / 2 for i in range(len(vue))]
     xa = _x_curseur(xs, [e["niveau"] for e in vue], v, x0, niveau_depart, x1)
+    t = taille_icone * S
+    # Le curseur ne doit pas se cacher derrière une icône : juste après l'étape atteinte, juste avant la suivante.
+    marge = t / 2 + 10 * S
+    for i, (e, x) in enumerate(zip(vue, xs)):
+        if abs(xa - x) < marge:
+            suivant = xs[i + 1] if i + 1 < len(xs) else x1
+            xa = min(x + marge, suivant - marge) if v >= e["niveau"] else max(x - marge, x0)
     d.line((x0, y, x1, y), fill=(255, 255, 255, 45), width=4 * S)
     halo = Image.new("RGBA", img.size, (0, 0, 0, 0))
     ImageDraw.Draw(halo).line((x0, y, xa, y), fill=VERT + (255,), width=8 * S)
     img.alpha_composite(halo.filter(ImageFilter.GaussianBlur(6 * S)))
     d.line((x0, y, xa, y), fill=VERT, width=4 * S)
-    t = taille_icone * S
     for e, x in zip(vue, xs):
+        if e.get("mystere"):
+            _lueur(img, (int(x), y), 22 * S, (150, 110, 230), 90)
+            d = _D(img)
+            d.rounded_rectangle((x - t / 2 - 2 * S, y - t / 2 - 2 * S, x + t / 2 + 2 * S, y + t / 2 + 2 * S), t // 4,
+                                fill=e["fond"], outline=OR_ + (200,), width=S)
+            d.text((x, y + S), "?", font=CINZEL(taille_icone * .62), fill=OR_, anchor="mm")
+            if libelles:
+                d.text((x, y - t / 2 - 9 * S), "niv. ?", font=INTER(12), fill=(196, 176, 236), anchor="ms")
+                d.text((x, y + t / 2 + 19 * S), "Succès mystère", font=CORM_I(17), fill=(196, 176, 236), anchor="ms")
+            continue
         atteint = niveau >= e["niveau"]
         pastille = _pastille(e.get("_img"), e["fond"], t, not atteint)
         if atteint:

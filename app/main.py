@@ -90,6 +90,7 @@ async def startup():
 
     asyncio.create_task(gateway.start(DISCORD_TOKEN))
     asyncio.create_task(economie.boucle_roles_temporaires())
+    asyncio.create_task(economie.boucle_niveaux())
     # Embeds de palier Rostheim envoyés à la demande depuis le site (bouton « Envoyer dans le salon »).
     asyncio.create_task(economie.rostheim.boucle_envois())
     # Annonce quotidienne des anniversaires et décès des personnages (réglages : Économie › Anniversaires).

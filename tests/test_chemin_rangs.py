@@ -24,13 +24,24 @@ JOUEUR = {"id": "j1", "joueur": "u1"}
 
 
 class Etapes(unittest.TestCase):
-    def test_secret_non_recu_invisible(self):
-        titres = [e["titre"] for e in cr.etapes(CFG, SUCCES, JOUEUR, "https://pb")]
-        self.assertEqual(titres, ["Meilleur qu'un blob", "Slayers", "Plafond de verre"])
+    def test_secret_non_recu_cache_en_mystere(self):
+        etapes = cr.etapes(CFG, SUCCES, JOUEUR, "https://pb")
+        self.assertEqual([e["titre"] for e in etapes], ["Meilleur qu'un blob", "Slayers", "Plafond de verre", "???"])
+        self.assertTrue(etapes[-1]["mystere"])
+        self.assertNotIn("Jamais vu", str(etapes))
 
-    def test_secret_invisible_pour_qui_ne_l_a_pas(self):
-        titres = [e["titre"] for e in cr.etapes(CFG, SUCCES, {"id": "j2", "joueur": "u2"}, "https://pb")]
-        self.assertEqual(titres, ["Meilleur qu'un blob", "Slayers"])
+    def test_secret_decouvert_par_quelqu_un_visible_pour_tous(self):
+        # « Plafond de verre » est secret mais déjà obtenu par u1 : visible aussi pour u2 ; le mystère est le 27.
+        etapes = cr.etapes(CFG, SUCCES, {"id": "j2", "joueur": "u2"}, "https://pb")
+        self.assertEqual([(e["titre"], e["niveau"], e["detenu"]) for e in etapes],
+                         [("Meilleur qu'un blob", 5, False), ("Slayers", 15, False), ("Plafond de verre", 25, False), ("???", 27, False)])
+
+    def test_mystere_toujours_en_bout_de_fenetre(self):
+        etapes = [{"niveau": n} for n in (5, 10, 15, 20)] + [{"niveau": 25, "mystere": True}]
+        vue, _ = cr.fenetre(etapes, 22)
+        self.assertEqual([e["niveau"] for e in vue], [5, 10, 15, 20, 25])
+        vue, _ = cr.fenetre(etapes, 3, 3)
+        self.assertEqual([e["niveau"] for e in vue], [5, 10, 25])
 
     def test_icone_pocketbase(self):
         e = cr.etapes(CFG, SUCCES, JOUEUR, "https://pb")[0]
