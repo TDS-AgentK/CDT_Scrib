@@ -307,7 +307,9 @@ async def carte_argent(eco, cible) -> tuple[dict | None, bytes | None]:
 
 
 async def carte_niveau(eco, cible) -> tuple[dict | None, bytes | None]:
-    from app.eco_cartes import carte
+    """Carte « Chemin des rangs » : avatar du site, succès de niveau (secrets cachés tant que non reçus),
+    XP manquante et prochaine récompense de niveau."""
+    from app import chemin_rangs
     from app.economie import niveau_de
     cfg = await eco.config()
     joueur = await eco.joueur_de(cible)
@@ -316,10 +318,12 @@ async def carte_niveau(eco, cible) -> tuple[dict | None, bytes | None]:
     n, fait, besoin = niveau_de(cfg["courbe"], joueur.get("eco_xp") or 0)
     classement = await eco.pb.lister("joueurs", tri="-eco_xp")
     place = next((i for i, j in enumerate(classement, 1) if j["id"] == joueur["id"]), 0)
-    image = await carte(getattr(cible, "display_name", joueur.get("pseudo")), getattr(getattr(cible, "display_avatar", None), "url", None),
-                        (204, 32, 32), fait / besoin if besoin else 1, f"{abrege(fait)} / {abrege(besoin)}" if besoin else "max",
-                        f"Place : {place}", f"Niveau {n}")
-    return {"color": 0xCC2020, "image": {"url": "attachment://carte.png"}}, image
+    etapes, cfg, succes = await chemin_rangs.donnees(eco, joueur)
+    titre = next((e["titre"] for e in reversed(etapes) if e["niveau"] <= n and e["detenu"]), "")
+    image = await chemin_rangs.carte(getattr(cible, "display_name", None) or joueur.get("pseudo") or "?",
+                                     await chemin_rangs.avatar_site(eco, joueur, cible), n, fait, besoin, place, titre, etapes,
+                                     chemin_rangs.prochaine_recompense(cfg, n, succes, joueur), eco.pb)
+    return {"color": 0x2E8C78, "image": {"url": "attachment://carte.png"}}, image
 
 
 # ---------------------------------------------------------------- composants pour les commandes à préfixe (discord.py)

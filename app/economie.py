@@ -7,6 +7,7 @@ Commandes (préfixe ECO_PREFIX, « ?? » par défaut, comme sur Draftbot) :
   + commandes Rostheim et RP lues dans la base (voir app/rostheim.py).
 """
 import asyncio
+import io
 import re
 import logging
 import random
@@ -324,17 +325,43 @@ class Economie:
             await journal.noter(self.pb, "niveau", f"niveau {apres}", joueur.get("id") or "", motif=xp_nom, **journal._membre(membre))
         except Exception:
             log.exception("Journal de la montée de niveau impossible")
-        embed = discord.Embed(description=f"{membre.mention} atteint le niveau **{apres}** ({xp_nom}).", color=COULEUR_DEFAUT)
-        if [l for l in lignes if l]:
-            embed.add_field(name="Récompenses", value="\n".join(l for l in lignes if l)[:1024], inline=False)
+        recus = [l for l in lignes if l]
+        embed, image = await self.annonce_niveau(membre, joueur, avant, apres, recus, xp_nom)
         cible = await self.salon_niveaux(cfg, membre, channel)
+
+        async def envoyer(salon):
+            if image:
+                await salon.send(embed=embed, file=discord.File(io.BytesIO(image), "niveau.png"))
+            else:
+                await salon.send(embed=embed)
         try:
-            await cible.send(embed=embed)
+            await envoyer(cible)
         except Exception:
             if cible is channel or channel is None:
                 raise
             log.exception("Annonce de niveau impossible dans #%s : envoi dans le salon d'origine", getattr(cible, "name", "?"))
-            await channel.send(embed=embed)
+            await envoyer(channel)
+
+    async def annonce_niveau(self, membre, joueur: dict, avant: int, apres: int, recus: list[str], xp_nom: str):
+        """Embed + bannière « Chemin des rangs » ; en cas d'échec du dessin, embed texte seul (comme avant)."""
+        from app import chemin_rangs
+        try:
+            cfg = await self.config()
+            chemin_rangs.oublier_succes(chemin_rangs._ids_succes(cfg))  # succès tout juste donnés
+            etapes, _, _ = await chemin_rangs.donnees(self, joueur)
+            etape = next((e for e in reversed(etapes) if avant < e["niveau"] <= apres and e["detenu"]), None)
+            image = await chemin_rangs.banniere(getattr(membre, "display_name", None) or getattr(membre, "name", "?"),
+                                                await chemin_rangs.avatar_site(self, joueur, membre), avant, apres, etapes, etape,
+                                                recus, self.pb)
+            embed = discord.Embed(description=chemin_rangs.phrase(membre.mention, avant, apres, etape), color=0x2E8C78)
+            embed.set_image(url="attachment://niveau.png")
+            return embed, image
+        except Exception:
+            log.exception("Bannière de niveau impossible : annonce texte")
+            embed = discord.Embed(description=f"{membre.mention} atteint le niveau **{apres}** ({xp_nom}).", color=COULEUR_DEFAUT)
+            if recus:
+                embed.add_field(name="Récompenses", value="\n".join(recus)[:1024], inline=False)
+            return embed, None
 
     async def donner_recompense(self, membre: discord.Member, joueur: dict, r: dict) -> str:
         if r.get("recompense_or"):
