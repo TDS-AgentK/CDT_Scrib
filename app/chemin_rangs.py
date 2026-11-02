@@ -140,8 +140,8 @@ def etapes(cfg: dict, succes: dict[str, dict], joueur: dict, pb_url: str) -> lis
 
 
 def libelle_recompense(r: dict, succes: dict[str, dict], joueur: dict) -> str:
-    """Le succès d'abord (« Récompense secrète » s'il est secret et pas encore reçu), puis objet, Or ou libellé ;
-    le rôle seulement en dernier recours."""
+    """Ce que donne une ligne de récompense de niveau : succès (« Récompense secrète » s'il est secret et pas encore
+    reçu), objet, Or ou libellé ; le rôle en dernier recours (les rôles de rang sont déjà sur le chemin)."""
     s = succes.get(r.get("succes") or "")
     if s:
         return "Récompense secrète" if est_secret(s) and not detenu(s, joueur) else (s.get("title") or "Succès")
@@ -150,16 +150,21 @@ def libelle_recompense(r: dict, succes: dict[str, dict], joueur: dict) -> str:
 
 
 def prochaine_recompense(cfg: dict, niveau: int, succes: dict[str, dict], joueur: dict) -> tuple[int, str] | None:
-    """Récompense du prochain niveau qui en a une (récompenses de niveau et succès de palier), succès en priorité."""
-    candidats = [r for r in cfg.get("recompenses") or [] if (r.get("niveau") or 0) > niveau]
-    candidats += [{"niveau": int(p["seuil"]), "succes": p["succes"]} for p in cfg.get("paliers") or []
-                  if p.get("declencheur") == "niveau" and p.get("succes") and (p.get("seuil") or 0) > niveau]
-    if not candidats:
+    """Récompenses du niveau suivant (ou du premier niveau au-dessus qui en a), toutes réunies ; une ligne qui ne
+    donne qu'un rôle n'est gardée que s'il n'y a rien d'autre à ce niveau."""
+    suivantes = [r for r in cfg.get("recompenses") or [] if (r.get("niveau") or 0) > niveau]
+    if not suivantes:
         return None
-    n = min(c["niveau"] for c in candidats)
-    du_niveau = [c for c in candidats if c["niveau"] == n]
-    du_niveau.sort(key=lambda c: 0 if succes.get(c.get("succes") or "") else 1)
-    return n, libelle_recompense(du_niveau[0], succes, joueur)
+    n = min(r["niveau"] for r in suivantes)
+    du_niveau = [r for r in suivantes if r["niveau"] == n]
+    sans_role = [r for r in du_niveau if not (r.get("recompense_role") and not (r.get("succes") or r.get("recompense_objet")
+                                                                                 or r.get("recompense_or") or r.get("objet")))]
+    textes = []
+    for r in sans_role or du_niveau:
+        t = libelle_recompense(r, succes, joueur)
+        if t not in textes:
+            textes.append(t)
+    return n, " + ".join(textes)
 
 
 async def donnees(eco, joueur: dict) -> tuple[list[dict], dict, dict[str, dict]]:
@@ -540,3 +545,84 @@ async def banniere(nom: str, avatar_url: str | None, avant: int, apres: int, eta
         texte = "Récompenses : " + " · ".join(recompenses)
         d.text((x, 216 * S) if etape else (x, 218 * S), _tronquer(d, texte, INTER(15, "Medium"), xd - x), font=INTER(15, "Medium"), fill=OR_, anchor="ls")
     return _sortie(img, LARGEUR, BANNIERE_H)
+
+
+# ---------------------------------------------------------------- classement /topniveau
+
+CLASSEMENT_ENTETE, CLASSEMENT_LIGNE, CLASSEMENT_PIED = 100, 100, 40
+MEDAILLES = {1: ((248, 214, 120), (176, 132, 40)), 2: ((226, 232, 236), (140, 150, 160)), 3: ((232, 168, 112), (150, 90, 50))}
+
+
+async def classement(lignes: list[dict], page: int, pages: int, pb=None) -> bytes:
+    """Image du classement des niveaux. Chaque ligne : rang, nom, avatar (URL), niveau, fait, besoin, titre,
+    badges (étapes reçues, les plus récentes en dernier)."""
+    h = CLASSEMENT_ENTETE + CLASSEMENT_LIGNE * max(1, len(lignes)) + CLASSEMENT_PIED
+    W, H = LARGEUR * S, h * S
+    img = _fond(W, H)
+    d = _D(img)
+    x0, xd = 36 * S, W - 36 * S
+    _espace(d, (x0 + 74 * S, 34 * S), "CHEMIN DES RANGS", INTER(12, "Bold"), VERT, 3)
+    d.text((x0, 80 * S), "Classement des niveaux", font=CINZEL(34), fill=(236, 246, 240), anchor="ls")
+    d.text((xd, 80 * S), f"Page {page + 1} / {pages}", font=CORM_I(22), fill=PALE, anchor="rs")
+    d.line((x0, 96 * S, xd, 96 * S), fill=OR_ + (110,), width=S)
+    if not lignes:
+        d.text((W / 2, (CLASSEMENT_ENTETE + 50) * S), "Personne n'a encore gagné d'XP.", font=CORM_I(24), fill=PALE, anchor="mm")
+    for k, l in enumerate(lignes):
+        y0 = (CLASSEMENT_ENTETE + 8 + k * CLASSEMENT_LIGNE) * S
+        yc = y0 + 42 * S
+        rang = l["rang"]
+        d = _D(img)
+        d.rounded_rectangle((x0, y0, xd, y0 + 84 * S), 16 * S, fill=(255, 255, 255, 14 if rang > 3 else 22),
+                            outline=(MEDAILLES[rang][0] + (90,)) if rang in MEDAILLES else (255, 255, 255, 30), width=S)
+        # rang
+        rx = x0 + 40 * S
+        if rang in MEDAILLES:
+            clair, fonce = MEDAILLES[rang]
+            _lueur(img, (rx, yc), 26 * S, clair, 70)
+            d = _D(img)
+            d.ellipse((rx - 21 * S, yc - 21 * S, rx + 21 * S, yc + 21 * S), fill=fonce)
+            d.ellipse((rx - 18 * S, yc - 18 * S, rx + 18 * S, yc + 18 * S), fill=clair)
+            d.text((rx, yc + S), str(rang), font=CINZEL(22, "Black"), fill=(60, 40, 20), anchor="mm")
+        else:
+            d.ellipse((rx - 19 * S, yc - 19 * S, rx + 19 * S, yc + 19 * S), outline=(255, 255, 255, 80), width=S)
+            d.text((rx, yc + S), str(rang), font=INTER(17, "Bold"), fill=(220, 236, 230), anchor="mm")
+        # avatar
+        ar = 30 * S
+        ax = rx + 72 * S
+        d.ellipse((ax - ar - 4 * S, yc - ar - 4 * S, ax + ar + 4 * S, yc + ar + 4 * S), fill=OR_)
+        img.alpha_composite(_rond(await _telecharger(l.get("avatar"), pb), 2 * ar, l["nom"]), (ax - ar, yc - ar))
+        d = _D(img)
+        # nom + titre
+        tx = ax + ar + 22 * S
+        d.text((tx, yc - 2 * S), _tronquer(d, l["nom"], CINZEL(25), 250 * S), font=CINZEL(25), fill=(236, 246, 240), anchor="ls")
+        if l.get("titre"):
+            d.text((tx + S, yc + 24 * S), _tronquer(d, l["titre"], CORM_I(20), 250 * S), font=CORM_I(20), fill=PALE, anchor="ls")
+        # badges des étapes reçues (3 dernières)
+        bx = 520 * S
+        for b in (l.get("badges") or [])[-3:]:
+            t = 30 * S
+            img.alpha_composite(_pastille(await _telecharger(b.get("icone"), pb), b["fond"], t, False), (int(bx), int(yc - t / 2)))
+            bx += 36 * S
+        # barre d'XP
+        d = _D(img)
+        b0, b1 = 640 * S, xd - 110 * S
+        ratio = l["fait"] / l["besoin"] if l.get("besoin") else 1
+        d.rounded_rectangle((b0, yc - 12 * S, b1, yc), 6 * S, fill=(255, 255, 255, 40))
+        d.rounded_rectangle((b0, yc - 12 * S, b0 + max(12 * S, (b1 - b0) * ratio), yc), 6 * S, fill=VERT)
+        txt = f"{abrege(l['fait'])} / {abrege(l['besoin'])} XP" if l.get("besoin") else "niveau max"
+        d.text((b0, yc + 22 * S), txt, font=INTER(13, "Medium"), fill=PALE, anchor="ls")
+        # niveau
+        nx = xd - 52 * S
+        _espace(d, (nx, yc - 20 * S), "NIV.", INTER(10, "Bold"), (200, 230, 220), 2)
+        d.text((nx, yc + 14 * S), str(l["niveau"]), font=CINZEL(34), fill=(255, 240, 200), anchor="mm")
+    _D(img).text((W / 2, H - 16 * S), "Tape /niveau pour voir ta carte", font=CORM_I(19), fill=(150, 175, 168), anchor="ms")
+    return _sortie(img, LARGEUR, h)
+
+
+def abrege(v) -> str:
+    v = float(v or 0)
+    if v >= 1_000_000:
+        return f"{v / 1_000_000:.1f}".rstrip("0").rstrip(".").replace(".", ",") + " M"
+    if v >= 10_000:
+        return f"{v / 1000:.1f}".rstrip("0").rstrip(".").replace(".", ",") + " k"
+    return _nb(v)

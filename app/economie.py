@@ -532,9 +532,16 @@ class Economie:
 
     async def _top(self, message: discord.Message, genre: str):
         from app import eco_vues
-        embed, comp = await eco_vues.vue_classement(self, genre)
+        image = None
+        if genre == "niveau":
+            embed, comp, image = await eco_vues.vue_classement_niveau(self)
+        else:
+            embed, comp = await eco_vues.vue_classement(self, genre)
         vue = eco_vues.vue_discord(comp)
-        await message.reply(embed=discord.Embed.from_dict(embed), mention_author=False, **({"view": vue} if vue else {}))
+        extra = {"view": vue} if vue else {}
+        if image:
+            extra["file"] = discord.File(io.BytesIO(image), "carte.png")
+        await message.reply(embed=discord.Embed.from_dict(embed), mention_author=False, **extra)
 
     async def cmd_classement(self, message: discord.Message, arg: str):
         await self._top(message, "niveau")

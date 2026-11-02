@@ -46,12 +46,12 @@ class Etapes(unittest.TestCase):
         self.assertIsNone(asyncio.run(cr.avatar_site(eco, JOUEUR)))
 
     def test_prochaine_recompense(self):
-        # niveau 15 : rôle ET succès de palier → le succès passe avant le rôle
-        self.assertEqual(cr.prochaine_recompense(CFG, 12, SUCCES, JOUEUR), (15, "Slayers"))
+        self.assertEqual(cr.prochaine_recompense(CFG, 12, SUCCES, JOUEUR), (15, "Rôle Slayers"))
         self.assertEqual(cr.prochaine_recompense(CFG, 15, SUCCES, JOUEUR), (20, "500 Or"))
         # récompense intermédiaire (niveau 13) avant l'étape suivante
-        cfg = {**CFG, "recompenses": CFG["recompenses"] + [{"niveau": 13, "recompense_role": "Rôle X", "recompense_objet": "Potion"}]}
-        self.assertEqual(cr.prochaine_recompense(cfg, 12, SUCCES, JOUEUR), (13, "Potion"))
+        cfg = {**CFG, "recompenses": CFG["recompenses"] + [{"niveau": 13, "recompense_role": "Aventurier"},
+                                                            {"niveau": 13, "recompense_or": 100}, {"niveau": 13, "recompense_objet": "Potion"}]}
+        self.assertEqual(cr.prochaine_recompense(cfg, 12, SUCCES, JOUEUR), (13, "100 Or + Potion"))
         self.assertEqual(cr.prochaine_recompense(CFG, 26, SUCCES, JOUEUR), (27, "Récompense secrète"))
         self.assertIsNone(cr.prochaine_recompense(CFG, 30, SUCCES, JOUEUR))
 
@@ -92,3 +92,23 @@ class Dessin(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Classement(unittest.TestCase):
+    def test_image_classement(self):
+        from app import eco_vues
+        joueurs = [{"id": f"j{i}", "pseudo": f"P{i}", "joueur": "u1" if i == 0 else "", "eco_xp": 1000 - i * 100} for i in range(7)]
+        eco = mock.Mock()
+        eco.pb.url = ""
+
+        async def lister(col, filtre=None, tri=None, expand=None):
+            return joueurs
+        eco.pb.lister = lister
+        eco.pb.requete = mock.AsyncMock(return_value={"profile_photo": ""})
+        eco.config = mock.AsyncMock(return_value={**CFG, "reglages": {}, "courbe": {"formule": "personnalisee", "base_xp": 100, "pas_xp": 0, "courbure": 0, "arrondi": 1}})
+        with mock.patch.object(cr, "_telecharger", mock.AsyncMock(return_value=None)), \
+                mock.patch.object(cr, "succes_par_id", mock.AsyncMock(return_value=SUCCES)):
+            embed, comp, image = asyncio.run(eco_vues.vue_classement_niveau(eco, 1))
+        self.assertEqual(embed["image"]["url"], "attachment://carte.png")
+        self.assertEqual(Image.open(io.BytesIO(image)).size[0], cr.LARGEUR)
+        self.assertIn("Page 2/2", str(comp))

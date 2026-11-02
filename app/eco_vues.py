@@ -5,6 +5,7 @@
 - classements (Or, niveaux) paginés, inventaire en grille, cartes image (/argent, /niveau : app/eco_cartes.py).
 Les custom_id « eco:… » sont traités dans app/eco_interactions.py.
 """
+import logging
 from datetime import datetime, timezone
 
 import discord
@@ -15,6 +16,7 @@ from app.pocketbase import echapper
 OR_DEFAUT = 0xC5A24F
 VERT, ROUGE, GRIS = 0x3BA55C, 0xC0392B, 0x99AAB5
 V2, PRIVE = 1 << 15, 1 << 6
+log = logging.getLogger("cdt_scrib.eco_vues")
 PAR_PAGE_BOUTIQUE, PAR_PAGE_TOP, PAR_PAGE_INV = 5, 5, 24
 TRIS = [("prix_asc", "Prix croissant"), ("prix_desc", "Prix décroissant"), ("nom", "Nom"), ("ordre", "Ordre de la boutique")]
 
@@ -236,6 +238,34 @@ async def vue_classement(eco, genre: str, page: int = 0) -> tuple[dict, list]:
     if lien.startswith("http"):
         boutons.append({"type": 2, "style": 5, "label": "Voir l'ensemble du classement", "url": lien})
     return embed, [{"type": 1, "components": boutons}]
+
+
+async def vue_classement_niveau(eco, page: int = 0) -> tuple[dict, list, bytes | None]:
+    """/topniveau en image « Chemin des rangs » (5 par page) ; repli sur la liste texte si le dessin échoue."""
+    import asyncio
+    from app import chemin_rangs
+    from app.economie import niveau_de
+    embed, comp = await vue_classement(eco, "niveau", page)
+    try:
+        cfg = await eco.config()
+        joueurs = [j for j in await eco.pb.lister("joueurs", tri="-eco_xp") if (j.get("eco_xp") or 0) > 0]
+        pages = max(1, -(-len(joueurs) // PAR_PAGE_TOP))
+        page = max(0, min(page, pages - 1))
+        succes = await chemin_rangs.succes_par_id(eco, set(chemin_rangs._ids_succes(cfg)))
+
+        async def ligne(i, j):
+            n, fait, besoin = niveau_de(cfg["courbe"], j.get("eco_xp") or 0)
+            recues = [e for e in chemin_rangs.etapes(cfg, succes, j, eco.pb.url) if e["detenu"] and e["niveau"] <= n]
+            return {"rang": i + 1, "nom": j.get("pseudo") or j.get("pseudo_discord") or "?", "niveau": n, "fait": fait,
+                    "besoin": besoin, "titre": recues[-1]["titre"] if recues else "", "badges": recues,
+                    "avatar": await chemin_rangs.avatar_site(eco, j)}
+        tranche = list(enumerate(joueurs))[page * PAR_PAGE_TOP:(page + 1) * PAR_PAGE_TOP]
+        lignes = await asyncio.gather(*(ligne(i, j) for i, j in tranche))
+        image = await chemin_rangs.classement(list(lignes), page, pages, eco.pb)
+        return {"color": 0x2E8C78, "image": {"url": "attachment://carte.png"}}, comp, image
+    except Exception:
+        log.exception("Classement des niveaux en image impossible : liste texte")
+        return embed, comp, None
 
 
 # ---------------------------------------------------------------- inventaire (grille)
