@@ -27,6 +27,7 @@ def salon(sid, guild=GUILD, echoue=False):
 def annoncer(reglages=None, salons=None, recompenses=None, fetch=None):
     salons = salons or {}
     eco = Economie.__new__(Economie)
+    eco._niveaux_vus, eco._hausses, eco._recompenses_max = {}, {}, {}
     eco.pb = SimpleNamespace()
     eco.client = SimpleNamespace(get_channel=lambda i: salons.get(i),
                                  fetch_channel=mock.AsyncMock(side_effect=fetch or RuntimeError("introuvable")))
@@ -76,6 +77,7 @@ class AnnonceIllustree(unittest.TestCase):
     def test_banniere_jointe(self):
         general = salon(int(economie.SALON_NIVEAUX_DEFAUT))
         eco = Economie.__new__(Economie)
+        eco._niveaux_vus, eco._hausses, eco._recompenses_max = {}, {}, {}
         eco.pb = SimpleNamespace(url="")
         eco.client = SimpleNamespace(get_channel=lambda i: general)
         eco.config = mock.AsyncMock(return_value={"reglages": {}, "recompenses": [], "paliers": []})
@@ -91,3 +93,77 @@ class AnnonceIllustree(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SurveillanceNiveaux(unittest.TestCase):
+    """XP modifiée hors des gains du bot (page Économie du site) : annonce après deux passages."""
+    COURBE = {"formule": "personnalisee", "base_xp": 100, "pas_xp": 0, "courbure": 0, "arrondi": 1}
+
+    def preparer(self):
+        self.joueurs = [{"id": "j1", "pseudo": "Kelora", "discord_id": "7", "eco_xp": 250}]
+        eco = Economie.__new__(Economie)
+        eco._niveaux_vus, eco._hausses, eco._recompenses_max = {}, {}, {}
+        eco.guild_id = None
+        membre = SimpleNamespace(mention="<@7>", name="Kelora", guild=GUILD)
+        guild = SimpleNamespace(id=1, get_member=lambda i: membre)
+        general = SimpleNamespace(id=int(economie.SALON_NIVEAUX_DEFAUT), guild=guild)
+        eco.client = SimpleNamespace(get_channel=lambda i: general, get_guild=lambda i: None)
+
+        async def lister(col, filtre=None, tri=None, expand=None):
+            return [dict(j) for j in self.joueurs]
+        eco.pb = SimpleNamespace(lister=lister)
+        eco.config = mock.AsyncMock(return_value={"reglages": {}, "courbe": self.COURBE})
+        eco.monter_niveau = mock.AsyncMock()
+        return eco
+
+    def passe(self, eco):
+        asyncio.run(eco.surveiller_niveaux())
+
+    def test_hausse_annoncee_au_second_passage(self):
+        eco = self.preparer()
+        self.passe(eco)                      # base : niveau 2
+        self.joueurs[0]["eco_xp"] = 450      # niveau 4 (modifié sur le site)
+        self.passe(eco)
+        eco.monter_niveau.assert_not_awaited()
+        self.passe(eco)
+        eco.monter_niveau.assert_awaited_once()
+        _, _, j, avant, apres = eco.monter_niveau.await_args.args
+        self.assertEqual((j["id"], avant, apres), ("j1", 2, 4))
+
+    def test_deja_annonce_par_un_gain(self):
+        eco = self.preparer()
+        self.passe(eco)
+        self.joueurs[0]["eco_xp"] = 450
+        self.passe(eco)
+        eco._niveaux_vus["j1"] = 4           # le gain de message l'a annoncé entre-temps
+        self.passe(eco)
+        eco.monter_niveau.assert_not_awaited()
+
+    def test_retrait_puis_ajout_reannonce(self):
+        eco = self.preparer()
+        self.passe(eco)
+        self.joueurs[0]["eco_xp"] = 50       # retrait : niveau 0, rien d'annoncé
+        self.passe(eco); self.passe(eco)
+        eco.monter_niveau.assert_not_awaited()
+        self.joueurs[0]["eco_xp"] = 250      # ajout : retour au niveau 2
+        self.passe(eco); self.passe(eco)
+        _, _, _, avant, apres = eco.monter_niveau.await_args.args
+        self.assertEqual((avant, apres), (0, 2))
+
+
+class RecompensesPasRedonnees(unittest.TestCase):
+    def test_niveau_regagne_sans_recompense(self):
+        general = salon(int(economie.SALON_NIVEAUX_DEFAUT))
+        eco = Economie.__new__(Economie)
+        eco._niveaux_vus, eco._hausses, eco._recompenses_max = {}, {}, {"j1": 3}
+        eco.pb = SimpleNamespace(url="")
+        eco.client = SimpleNamespace(get_channel=lambda i: general)
+        eco.config = mock.AsyncMock(return_value={"reglages": {}, "recompenses": [{"niveau": 3, "recompense_or": 10}], "paliers": []})
+        eco.donner_recompense = mock.AsyncMock(return_value="10 Or")
+        eco.donner_succes = mock.AsyncMock()
+        membre = SimpleNamespace(mention="<@7>", name="M", guild=GUILD)
+        with mock.patch("app.journal.noter", mock.AsyncMock()), \
+                mock.patch("app.chemin_rangs.succes_famille_niveau", mock.AsyncMock(return_value={})):
+            asyncio.run(eco.monter_niveau(salon(99), membre, {"id": "j1"}, 2, 3))
+        eco.donner_recompense.assert_not_awaited()
+        self.assertEqual(len(general.envoyes), 1)

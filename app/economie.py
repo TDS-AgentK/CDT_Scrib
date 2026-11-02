@@ -89,6 +89,12 @@ class Economie:
         self._charge_a = 0.0
         self._dernier_gain: dict[int, float] = {}
         self._verrous: dict[int, asyncio.Lock] = {}
+        # Plus haut niveau déjà annoncé par joueur (id de la fiche joueurs) et hausses vues par la surveillance.
+        self._niveaux_vus: dict[str, int] = {}
+        self._hausses: dict[str, int] = {}
+        # Plus haut niveau dont les récompenses ont été données (un niveau reperdu puis regagné est réannoncé,
+        # mais ses récompenses ne sont pas redonnées).
+        self._recompenses_max: dict[str, int] = {}
         # ECO_DEBUG=1 : explique dans les journaux pourquoi chaque message rapporte (ou non) de l'XP.
         import os
         self.debug = os.getenv("ECO_DEBUG", "") not in ("", "0")
@@ -305,10 +311,15 @@ class Economie:
         return salon
 
     async def monter_niveau(self, channel, membre: discord.Member, joueur: dict, avant: int, apres: int):
+        jid = joueur.get("id") or ""
+        deja = max(avant, self._recompenses_max.get(jid, avant))
+        if jid:
+            self._niveaux_vus[jid] = apres
+            self._recompenses_max[jid] = max(deja, apres)
         cfg = await self.config()
         lignes = []
         # Une récompense qui échoue (rôle, objet, succès) ne doit jamais empêcher l'annonce.
-        for niveau in range(avant + 1, apres + 1):
+        for niveau in range(deja + 1, apres + 1):
             for r in [r for r in cfg["recompenses"] if r.get("niveau") == niveau]:
                 try:
                     lignes.append(await self.donner_recompense(membre, joueur, r))
@@ -483,6 +494,58 @@ class Economie:
                 log.warning("Rôle temporaire %s de %s : %s", role.name, t["discord_user_id"], erreur)
                 await self.pb.maj("eco_roles_temporaires", t["id"], {"erreur": erreur})
             return False
+
+    async def surveiller_niveaux(self):
+        """Un passage : annonce les montées de niveau faites hors des gains du bot (XP modifiée sur la page Économie
+        du site, par un admin…). Une hausse doit être vue à deux passages de suite sans avoir été annoncée, pour
+        laisser aux gains du bot (messages, loteries, commandes) le temps d'annoncer eux-mêmes. Un niveau perdu puis
+        regagné est réannoncé, mais ses récompenses ne sont pas redonnées (tant que le bot tourne)."""
+        import os
+        cfg = await self.config()
+        sid = str(cfg["reglages"].get("salon_niveaux_id") or os.getenv("ECO_SALON_NIVEAUX") or SALON_NIVEAUX_DEFAUT).strip()
+        salon = self.client.get_channel(int(sid)) if sid.isdigit() else None
+        guild = (self.client.get_guild(self.guild_id) if self.guild_id else None) or getattr(salon, "guild", None)
+        premier = not self._niveaux_vus
+        for j in await self.pb.lister("joueurs", 'eco_xp>0'):
+            n = niveau_de(cfg["courbe"], j.get("eco_xp") or 0)[0]
+            vu = self._niveaux_vus.get(j["id"])
+            if vu is None or premier:
+                self._niveaux_vus[j["id"]] = max(vu or 0, n)
+                self._recompenses_max.setdefault(j["id"], self._niveaux_vus[j["id"]])
+                continue
+            if n <= vu:
+                self._niveaux_vus[j["id"]] = n  # XP retirée : le prochain passage de niveau sera annoncé
+                self._hausses.pop(j["id"], None)
+                continue
+            if self._hausses.get(j["id"]) != n:
+                self._hausses[j["id"]] = n  # vue une première fois : on attend le passage suivant
+                continue
+            self._hausses.pop(j["id"], None)
+            did = str(j.get("discord_id") or "")
+            membre = None
+            if guild and did.isdigit():
+                membre = guild.get_member(int(did))
+                if membre is None:
+                    try:
+                        membre = await guild.fetch_member(int(did))
+                    except Exception:
+                        membre = None
+            if membre is None:
+                log.info("Niveau %s de %s non annoncé : membre introuvable sur le serveur", n, j.get("pseudo"))
+                self._niveaux_vus[j["id"]] = n
+                continue
+            log.info("Montée de niveau hors gains du bot : %s %s → %s", j.get("pseudo"), vu, n)
+            await self.monter_niveau(salon, membre, j, vu, n)
+
+    async def boucle_niveaux(self):
+        """Surveille les niveaux toutes les 20 secondes (voir surveiller_niveaux)."""
+        await self.client.wait_until_ready()
+        while not self.client.is_closed():
+            try:
+                await self.surveiller_niveaux()
+            except Exception:
+                log.exception("Erreur dans la surveillance des niveaux")
+            await asyncio.sleep(20)
 
     async def boucle_roles_temporaires(self):
         """Retire les rôles temporaires arrivés à échéance (toutes les minutes). Les échéances sont en base : celles
