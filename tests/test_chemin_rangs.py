@@ -112,3 +112,24 @@ class Classement(unittest.TestCase):
         self.assertEqual(embed["image"]["url"], "attachment://carte.png")
         self.assertEqual(Image.open(io.BytesIO(image)).size[0], cr.LARGEUR)
         self.assertIn("Page 2/2", str(comp))
+
+
+class FamilleNiveau(unittest.TestCase):
+    def setUp(self):
+        cr._cache_famille[:] = [0.0, {}]
+        cr._cache_succes.clear()
+
+    def test_succes_de_la_famille_niveau(self):
+        eco = mock.Mock()
+
+        async def lister(col, filtre=None, tri=None, expand=None):
+            if col == "succes_familles":
+                return [{"id": "fN", "nom": "Niveau"}, {"id": "fA", "nom": "Aventure"}]
+            return [{"id": "a", "title": "Meilleur qu'un blob", "description": "Atteindre le niveau 5"},
+                    {"id": "b", "title": "Sans niveau", "description": "Gagner un tournoi"}] if 'famille="fN"' in filtre else []
+        eco.pb.lister = lister
+        eco.pb.url = ""
+        eco.pb.requete = mock.AsyncMock(side_effect=RuntimeError("ne doit pas relire"))
+        eco.config = mock.AsyncMock(return_value={"paliers": [], "recompenses": []})
+        etapes, _, _ = asyncio.run(cr.donnees(eco, JOUEUR))
+        self.assertEqual([(e["titre"], e["niveau"]) for e in etapes], [("Meilleur qu'un blob", 5)])

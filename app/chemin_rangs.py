@@ -12,6 +12,7 @@ import logging
 import math
 import os
 import random
+import re
 import time
 
 import httpx
@@ -111,12 +112,36 @@ def oublier_succes(ids):
         _cache_succes.pop(i, None)
 
 
-def _ids_succes(cfg: dict) -> dict[str, int]:
-    """{id du succès: niveau} pour les succès liés à un niveau (paliers et récompenses)."""
+NIVEAU_DANS_TEXTE = re.compile(r"niveau\s+(\d+)", re.I)
+_cache_famille: list = [0.0, {}]
+
+
+async def succes_famille_niveau(eco) -> dict[str, int]:
+    """Succès de la famille « Niveau » (page Gestion des succès) avec le niveau lu dans leur condition
+    (« Atteindre le niveau 5 »). Relu au plus toutes les 5 minutes ; les fiches complètes vont dans le cache."""
+    if time.time() - _cache_famille[0] < CACHE_SUCCES_S:
+        return _cache_famille[1]
     niveaux = {}
+    try:
+        familles = [f for f in await eco.pb.lister("succes_familles") if re.fullmatch(r"\s*niveaux?\s*", str(f.get("nom") or ""), re.I)]
+        for f in familles:
+            for s in await eco.pb.lister("succes", f'famille="{f["id"]}"'):
+                m = NIVEAU_DANS_TEXTE.search(f'{s.get("description") or ""} {s.get("resume") or ""} {s.get("title") or ""}')
+                if m:
+                    niveaux[s["id"]] = int(m.group(1))
+                    _cache_succes[s["id"]] = (time.time(), s)
+    except Exception:
+        log.exception("Succès de la famille Niveau illisibles")
+    _cache_famille[:] = [time.time(), niveaux]
+    return niveaux
+
+
+def _ids_succes(cfg: dict) -> dict[str, int]:
+    """{id du succès: niveau} : famille « Niveau » des succès, puis paliers et récompenses de niveau (prioritaires)."""
+    niveaux = dict(cfg.get("_succes_famille") or {})
     for p in cfg.get("paliers") or []:
         if p.get("declencheur") == "niveau" and p.get("succes") and p.get("seuil"):
-            niveaux.setdefault(p["succes"], int(p["seuil"]))
+            niveaux[p["succes"]] = int(p["seuil"])
     for r in cfg.get("recompenses") or []:
         if r.get("succes") and r.get("niveau"):
             niveaux.setdefault(r["succes"], int(r["niveau"]))
@@ -167,9 +192,19 @@ def prochaine_recompense(cfg: dict, niveau: int, succes: dict[str, dict], joueur
     return n, " + ".join(textes)
 
 
+async def config_chemin(eco) -> tuple[dict, dict[str, dict]]:
+    """Configuration de l'économie complétée des succès de niveau, et ces succès."""
+    cfg = {**await eco.config(), "_succes_famille": await succes_famille_niveau(eco)}
+    return cfg, await succes_par_id(eco, set(_ids_succes(cfg)))
+
+
+def oublier_tout():
+    _cache_famille[0] = 0.0
+    _cache_succes.clear()
+
+
 async def donnees(eco, joueur: dict) -> tuple[list[dict], dict, dict[str, dict]]:
-    cfg = await eco.config()
-    succes = await succes_par_id(eco, set(_ids_succes(cfg)))
+    cfg, succes = await config_chemin(eco)
     return etapes(cfg, succes, joueur, eco.pb.url), cfg, succes
 
 

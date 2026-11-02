@@ -247,11 +247,10 @@ async def vue_classement_niveau(eco, page: int = 0) -> tuple[dict, list, bytes |
     from app.economie import niveau_de
     embed, comp = await vue_classement(eco, "niveau", page)
     try:
-        cfg = await eco.config()
+        cfg, succes = await chemin_rangs.config_chemin(eco)
         joueurs = [j for j in await eco.pb.lister("joueurs", tri="-eco_xp") if (j.get("eco_xp") or 0) > 0]
         pages = max(1, -(-len(joueurs) // PAR_PAGE_TOP))
         page = max(0, min(page, pages - 1))
-        succes = await chemin_rangs.succes_par_id(eco, set(chemin_rangs._ids_succes(cfg)))
 
         async def ligne(i, j):
             n, fait, besoin = niveau_de(cfg["courbe"], j.get("eco_xp") or 0)
