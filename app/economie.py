@@ -7,6 +7,7 @@ Commandes (préfixe ECO_PREFIX, « ?? » par défaut, comme sur Draftbot) :
   + commandes Rostheim et RP lues dans la base (voir app/rostheim.py).
 """
 import asyncio
+import io
 import re
 import logging
 import random
@@ -21,6 +22,9 @@ log = logging.getLogger("cdt_scrib.economie")
 
 RECHARGE_CONFIG_S = 60
 COULEUR_DEFAUT = 0xC5A24F
+# Salon des annonces de niveau (#général). Réglable sur le site (eco_reglages « general » : salon_niveaux_id)
+# ou par la variable ECO_SALON_NIVEAUX ; à défaut, l'annonce part dans le salon où l'XP a été gagnée.
+SALON_NIVEAUX_DEFAUT = "1285650689619525662"
 
 
 # ---------------------------------------------------------------- courbe de niveau (identique au site)
@@ -281,21 +285,83 @@ class Economie:
 
     # ------------------------------------------------------------ niveaux et récompenses
 
+    async def salon_niveaux(self, cfg: dict, membre: discord.Member, repli):
+        """Salon où annoncer les montées de niveau : celui des réglages (#général par défaut), s'il est sur le
+        serveur du membre ; sinon (serveur de test, salon introuvable) le salon où l'XP a été gagnée."""
+        import os
+        sid = str(cfg["reglages"].get("salon_niveaux_id") or os.getenv("ECO_SALON_NIVEAUX") or SALON_NIVEAUX_DEFAUT).strip()
+        if not sid.isdigit():
+            return repli
+        salon = self.client.get_channel(int(sid))
+        if salon is None:
+            try:
+                salon = await self.client.fetch_channel(int(sid))
+            except Exception:
+                log.warning("Salon des annonces de niveau %s introuvable : annonce dans le salon d'origine", sid)
+                return repli
+        guild = getattr(membre, "guild", None)
+        if guild is not None and getattr(getattr(salon, "guild", None), "id", None) != guild.id:
+            return repli
+        return salon
+
     async def monter_niveau(self, channel, membre: discord.Member, joueur: dict, avant: int, apres: int):
         cfg = await self.config()
         lignes = []
+        # Une récompense qui échoue (rôle, objet, succès) ne doit jamais empêcher l'annonce.
         for niveau in range(avant + 1, apres + 1):
             for r in [r for r in cfg["recompenses"] if r.get("niveau") == niveau]:
-                lignes.append(await self.donner_recompense(membre, joueur, r))
+                try:
+                    lignes.append(await self.donner_recompense(membre, joueur, r))
+                except Exception:
+                    log.exception("Récompense du niveau %s impossible pour %s", niveau, getattr(membre, "name", "?"))
             for p in [p for p in cfg["paliers"] if p.get("declencheur") == "niveau" and p.get("seuil") == niveau]:
-                await self.donner_succes(joueur, p.get("succes"))
+                try:
+                    await self.donner_succes(joueur, p.get("succes"))
+                except Exception:
+                    log.exception("Succès du niveau %s impossible pour %s", niveau, getattr(membre, "name", "?"))
         xp_nom = f'{cfg["reglages"].get("xp_emoji") or ""} {cfg["reglages"].get("xp_nom") or "XP"}'.strip()
-        from app import journal
-        await journal.noter(self.pb, "niveau", f"niveau {apres}", joueur.get("id") or "", motif=xp_nom, **journal._membre(membre))
-        embed = discord.Embed(description=f"{membre.mention} atteint le niveau **{apres}** ({xp_nom}).", color=COULEUR_DEFAUT)
-        if [l for l in lignes if l]:
-            embed.add_field(name="Récompenses", value="\n".join(l for l in lignes if l)[:1024], inline=False)
-        await channel.send(embed=embed)
+        try:
+            from app import journal
+            await journal.noter(self.pb, "niveau", f"niveau {apres}", joueur.get("id") or "", motif=xp_nom, **journal._membre(membre))
+        except Exception:
+            log.exception("Journal de la montée de niveau impossible")
+        recus = [l for l in lignes if l]
+        embed, image = await self.annonce_niveau(membre, joueur, avant, apres, recus, xp_nom)
+        cible = await self.salon_niveaux(cfg, membre, channel)
+
+        async def envoyer(salon):
+            if image:
+                await salon.send(embed=embed, file=discord.File(io.BytesIO(image), "niveau.png"))
+            else:
+                await salon.send(embed=embed)
+        try:
+            await envoyer(cible)
+        except Exception:
+            if cible is channel or channel is None:
+                raise
+            log.exception("Annonce de niveau impossible dans #%s : envoi dans le salon d'origine", getattr(cible, "name", "?"))
+            await envoyer(channel)
+
+    async def annonce_niveau(self, membre, joueur: dict, avant: int, apres: int, recus: list[str], xp_nom: str):
+        """Embed + bannière « Chemin des rangs » ; en cas d'échec du dessin, embed texte seul (comme avant)."""
+        from app import chemin_rangs
+        try:
+            cfg = await self.config()
+            chemin_rangs.oublier_succes(chemin_rangs._ids_succes(cfg))  # succès tout juste donnés
+            etapes, _, _ = await chemin_rangs.donnees(self, joueur)
+            etape = next((e for e in reversed(etapes) if avant < e["niveau"] <= apres and e["detenu"]), None)
+            image = await chemin_rangs.banniere(getattr(membre, "display_name", None) or getattr(membre, "name", "?"),
+                                                await chemin_rangs.avatar_site(self, joueur, membre), avant, apres, etapes, etape,
+                                                recus, self.pb)
+            embed = discord.Embed(description=chemin_rangs.phrase(membre.mention, avant, apres, etape), color=0x2E8C78)
+            embed.set_image(url="attachment://niveau.png")
+            return embed, image
+        except Exception:
+            log.exception("Bannière de niveau impossible : annonce texte")
+            embed = discord.Embed(description=f"{membre.mention} atteint le niveau **{apres}** ({xp_nom}).", color=COULEUR_DEFAUT)
+            if recus:
+                embed.add_field(name="Récompenses", value="\n".join(recus)[:1024], inline=False)
+            return embed, None
 
     async def donner_recompense(self, membre: discord.Member, joueur: dict, r: dict) -> str:
         if r.get("recompense_or"):
@@ -466,9 +532,16 @@ class Economie:
 
     async def _top(self, message: discord.Message, genre: str):
         from app import eco_vues
-        embed, comp = await eco_vues.vue_classement(self, genre)
+        image = None
+        if genre == "niveau":
+            embed, comp, image = await eco_vues.vue_classement_niveau(self)
+        else:
+            embed, comp = await eco_vues.vue_classement(self, genre)
         vue = eco_vues.vue_discord(comp)
-        await message.reply(embed=discord.Embed.from_dict(embed), mention_author=False, **({"view": vue} if vue else {}))
+        extra = {"view": vue} if vue else {}
+        if image:
+            extra["file"] = discord.File(io.BytesIO(image), "carte.png")
+        await message.reply(embed=discord.Embed.from_dict(embed), mention_author=False, **extra)
 
     async def cmd_classement(self, message: discord.Message, arg: str):
         await self._top(message, "niveau")

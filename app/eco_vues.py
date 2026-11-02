@@ -5,6 +5,7 @@
 - classements (Or, niveaux) paginés, inventaire en grille, cartes image (/argent, /niveau : app/eco_cartes.py).
 Les custom_id « eco:… » sont traités dans app/eco_interactions.py.
 """
+import logging
 from datetime import datetime, timezone
 
 import discord
@@ -15,6 +16,7 @@ from app.pocketbase import echapper
 OR_DEFAUT = 0xC5A24F
 VERT, ROUGE, GRIS = 0x3BA55C, 0xC0392B, 0x99AAB5
 V2, PRIVE = 1 << 15, 1 << 6
+log = logging.getLogger("cdt_scrib.eco_vues")
 PAR_PAGE_BOUTIQUE, PAR_PAGE_TOP, PAR_PAGE_INV = 5, 5, 24
 TRIS = [("prix_asc", "Prix croissant"), ("prix_desc", "Prix décroissant"), ("nom", "Nom"), ("ordre", "Ordre de la boutique")]
 
@@ -238,6 +240,34 @@ async def vue_classement(eco, genre: str, page: int = 0) -> tuple[dict, list]:
     return embed, [{"type": 1, "components": boutons}]
 
 
+async def vue_classement_niveau(eco, page: int = 0) -> tuple[dict, list, bytes | None]:
+    """/topniveau en image « Chemin des rangs » (5 par page) ; repli sur la liste texte si le dessin échoue."""
+    import asyncio
+    from app import chemin_rangs
+    from app.economie import niveau_de
+    embed, comp = await vue_classement(eco, "niveau", page)
+    try:
+        cfg = await eco.config()
+        joueurs = [j for j in await eco.pb.lister("joueurs", tri="-eco_xp") if (j.get("eco_xp") or 0) > 0]
+        pages = max(1, -(-len(joueurs) // PAR_PAGE_TOP))
+        page = max(0, min(page, pages - 1))
+        succes = await chemin_rangs.succes_par_id(eco, set(chemin_rangs._ids_succes(cfg)))
+
+        async def ligne(i, j):
+            n, fait, besoin = niveau_de(cfg["courbe"], j.get("eco_xp") or 0)
+            recues = [e for e in chemin_rangs.etapes(cfg, succes, j, eco.pb.url) if e["detenu"] and e["niveau"] <= n]
+            return {"rang": i + 1, "nom": j.get("pseudo") or j.get("pseudo_discord") or "?", "niveau": n, "fait": fait,
+                    "besoin": besoin, "titre": recues[-1]["titre"] if recues else "", "badges": recues,
+                    "avatar": await chemin_rangs.avatar_site(eco, j)}
+        tranche = list(enumerate(joueurs))[page * PAR_PAGE_TOP:(page + 1) * PAR_PAGE_TOP]
+        lignes = await asyncio.gather(*(ligne(i, j) for i, j in tranche))
+        image = await chemin_rangs.classement(list(lignes), page, pages, eco.pb)
+        return {"color": 0x2E8C78, "image": {"url": "attachment://carte.png"}}, comp, image
+    except Exception:
+        log.exception("Classement des niveaux en image impossible : liste texte")
+        return embed, comp, None
+
+
 # ---------------------------------------------------------------- inventaire (grille)
 
 # Ordre et titres des catégories d'objets dans /inventaire (catégorie réglée par objet dans la page Économie).
@@ -307,7 +337,9 @@ async def carte_argent(eco, cible) -> tuple[dict | None, bytes | None]:
 
 
 async def carte_niveau(eco, cible) -> tuple[dict | None, bytes | None]:
-    from app.eco_cartes import carte
+    """Carte « Chemin des rangs » : avatar du site, succès de niveau (secrets cachés tant que non reçus),
+    XP manquante et prochaine récompense de niveau."""
+    from app import chemin_rangs
     from app.economie import niveau_de
     cfg = await eco.config()
     joueur = await eco.joueur_de(cible)
@@ -316,10 +348,12 @@ async def carte_niveau(eco, cible) -> tuple[dict | None, bytes | None]:
     n, fait, besoin = niveau_de(cfg["courbe"], joueur.get("eco_xp") or 0)
     classement = await eco.pb.lister("joueurs", tri="-eco_xp")
     place = next((i for i, j in enumerate(classement, 1) if j["id"] == joueur["id"]), 0)
-    image = await carte(getattr(cible, "display_name", joueur.get("pseudo")), getattr(getattr(cible, "display_avatar", None), "url", None),
-                        (204, 32, 32), fait / besoin if besoin else 1, f"{abrege(fait)} / {abrege(besoin)}" if besoin else "max",
-                        f"Place : {place}", f"Niveau {n}")
-    return {"color": 0xCC2020, "image": {"url": "attachment://carte.png"}}, image
+    etapes, cfg, succes = await chemin_rangs.donnees(eco, joueur)
+    titre = next((e["titre"] for e in reversed(etapes) if e["niveau"] <= n and e["detenu"]), "")
+    image = await chemin_rangs.carte(getattr(cible, "display_name", None) or joueur.get("pseudo") or "?",
+                                     await chemin_rangs.avatar_site(eco, joueur, cible), n, fait, besoin, place, titre, etapes,
+                                     chemin_rangs.prochaine_recompense(cfg, n, succes, joueur), eco.pb)
+    return {"color": 0x2E8C78, "image": {"url": "attachment://carte.png"}}, image
 
 
 # ---------------------------------------------------------------- composants pour les commandes à préfixe (discord.py)

@@ -14,7 +14,7 @@ au-dessus de celui du bot) ne bloque pas le tirage : la raison est annoncée et 
 Gain personnalisé (« gain_perso », texte libre) : affiché dans l'annonce et le tirage, rien n'est distribué sur Discord ;
 un administrateur le remet et le coche sur le site (« gains_remis »).
 XP par gagnant (« xp_lot ») : créditée au tirage comme l'XP des messages (joueurs.eco_xp + ligne eco_gains « XP ») ;
-une montée de niveau est annoncée dans le salon de la loterie, avec ses récompenses (Economie.monter_niveau).
+une montée de niveau est annoncée dans le salon des niveaux (#général), avec ses récompenses (Economie.monter_niveau).
 """
 import re
 import asyncio

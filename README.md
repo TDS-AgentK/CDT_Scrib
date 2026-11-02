@@ -29,7 +29,7 @@ Commandes (préfixe `ECO_PREFIX`, `??` par défaut) : `??niveau [@membre]`, `??c
 
 Commandes slash de l'économie (à enregistrer avec `python -m scripts.register_commands`), dans l'esprit de Draftbot :
 `/boutique` (Components V2 : choix de la boutique, articles paginés avec bouton « prix - Acheter », tri, fenêtre de
-quantité), `/argent` et `/niveau` (cartes image), `/topargent`, `/topniveau` (paginés), `/inventaire` (grille),
+quantité), `/argent` et `/niveau` (cartes image ; `/niveau` = « Chemin des rangs », `app/chemin_rangs.py` : avatar choisi sur le site, succès de niveau en étapes, secrets cachés tant que non reçus, XP manquante, prochaine récompense de niveau ; annonce de niveau illustrée dans #général), `/topargent`, `/topniveau` (paginés), `/inventaire` (grille),
 `/payer` (Or, ou monnaie Rostheim si les échanges sont activés), `/donner`, `/vendre` (prix de revente de l'objet),
 `/utiliser` (objets utilisables), `/echanger` (proposition acceptée ou refusée par bouton), `/boite-a-role` (Conseiller des Rôles, en un seul message : choix du rôle, puis paiement
 de la boîte avec 30 d'une monnaie de Rostheim, 200 Or ou une boîte de l'inventaire ; le rôle coûte en plus 10 dans la monnaie de son

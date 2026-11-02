@@ -149,8 +149,11 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
                 return await _modifier(app_id, jeton, [eco_vues.erreur("Les informations des autres membres ne sont pas visibles.")])
             embed, image = await (eco_vues.carte_argent if nom == "argent" else eco_vues.carte_niveau)(eco, c)
             return await _modifier(app_id, jeton, [embed], fichier=image)
-        if nom in ("topargent", "topniveau"):
-            embed, comp = await eco_vues.vue_classement(eco, "argent" if nom == "topargent" else "niveau")
+        if nom == "topniveau":
+            embed, comp, image = await eco_vues.vue_classement_niveau(eco)
+            return await _modifier(app_id, jeton, [embed], comp, fichier=image)
+        if nom == "topargent":
+            embed, comp = await eco_vues.vue_classement(eco, "argent")
             return await _modifier(app_id, jeton, [embed], comp)
         if nom == "inventaire":
             c = await cible()
@@ -396,6 +399,9 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
         return {"type": DIFFERE_MAJ}
     if morceaux[1] == "top":
         async def page_top():
+            if morceaux[2] == "niveau":
+                embed, comp, image = await eco_vues.vue_classement_niveau(eco, int(morceaux[3]))
+                return await _modifier(app_id, jeton, [embed], comp, fichier=image)
             embed, comp = await eco_vues.vue_classement(eco, morceaux[2], int(morceaux[3]))
             await _modifier(app_id, jeton, [embed], comp)
         _en_fond(taches, page_top)
