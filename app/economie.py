@@ -319,6 +319,14 @@ class Economie:
                     await self.donner_succes(joueur, p.get("succes"))
                 except Exception:
                     log.exception("Succès du niveau %s impossible pour %s", niveau, getattr(membre, "name", "?"))
+        # Succès de la famille « Niveau » (« Atteindre le niveau N ») : donnés automatiquement au passage du niveau.
+        try:
+            from app import chemin_rangs
+            for sid, niveau in (await chemin_rangs.succes_famille_niveau(self)).items():
+                if avant < niveau <= apres:
+                    await self.donner_succes(joueur, sid)
+        except Exception:
+            log.exception("Succès de la famille Niveau impossibles pour %s", getattr(membre, "name", "?"))
         xp_nom = f'{cfg["reglages"].get("xp_emoji") or ""} {cfg["reglages"].get("xp_nom") or "XP"}'.strip()
         try:
             from app import journal
@@ -347,7 +355,7 @@ class Economie:
         from app import chemin_rangs
         try:
             cfg = await self.config()
-            chemin_rangs.oublier_succes(chemin_rangs._ids_succes(cfg))  # succès tout juste donnés
+            chemin_rangs.oublier_tout()  # succès tout juste donnés
             etapes, _, _ = await chemin_rangs.donnees(self, joueur)
             etape = next((e for e in reversed(etapes) if avant < e["niveau"] <= apres and e["detenu"]), None)
             image = await chemin_rangs.banniere(getattr(membre, "display_name", None) or getattr(membre, "name", "?"),
