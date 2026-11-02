@@ -30,9 +30,11 @@ class Etapes(unittest.TestCase):
         self.assertTrue(etapes[-1]["mystere"])
         self.assertNotIn("Jamais vu", str(etapes))
 
-    def test_seul_le_prochain_secret_en_mystere(self):
+    def test_secret_decouvert_par_quelqu_un_visible_pour_tous(self):
+        # « Plafond de verre » est secret mais déjà obtenu par u1 : visible aussi pour u2 ; le mystère est le 27.
         etapes = cr.etapes(CFG, SUCCES, {"id": "j2", "joueur": "u2"}, "https://pb")
-        self.assertEqual([(e["titre"], e["niveau"]) for e in etapes], [("Meilleur qu'un blob", 5), ("Slayers", 15), ("???", 25)])
+        self.assertEqual([(e["titre"], e["niveau"], e["detenu"]) for e in etapes],
+                         [("Meilleur qu'un blob", 5, False), ("Slayers", 15, False), ("Plafond de verre", 25, False), ("???", 27, False)])
 
     def test_mystere_toujours_en_bout_de_fenetre(self):
         etapes = [{"niveau": n} for n in (5, 10, 15, 20)] + [{"niveau": 25, "mystere": True}]

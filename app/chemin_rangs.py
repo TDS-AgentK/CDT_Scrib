@@ -65,6 +65,12 @@ def est_secret(s: dict) -> bool:
     return v is True or str(v).lower() in ("true", "1", "oui", "yes")
 
 
+def encore_cache(s: dict) -> bool:
+    """Un succès secret reste caché tant que personne ne l'a découvert ; dès qu'un membre l'a obtenu,
+    il devient visible pour tout le monde (comme un succès normal)."""
+    return est_secret(s) and not (s.get("members") or [])
+
+
 def detenu(s: dict, joueur: dict) -> bool:
     return bool(joueur.get("joueur")) and joueur["joueur"] in (s.get("members") or [])
 
@@ -156,7 +162,7 @@ def etapes(cfg: dict, succes: dict[str, dict], joueur: dict, pb_url: str) -> lis
         if not s:
             continue
         a = detenu(s, joueur)
-        if est_secret(s) and not a:
+        if encore_cache(s):
             caches.append((niveau, sid))
             continue
         sortie.append({"id": sid, "niveau": niveau, "titre": s.get("title") or "Succès", "secret": est_secret(s),
@@ -175,7 +181,7 @@ def libelle_recompense(r: dict, succes: dict[str, dict], joueur: dict) -> str:
     reçu), objet, Or ou libellé ; le rôle en dernier recours (les rôles de rang sont déjà sur le chemin)."""
     s = succes.get(r.get("succes") or "")
     if s:
-        return "Récompense secrète" if est_secret(s) and not detenu(s, joueur) else (s.get("title") or "Succès")
+        return "Récompense secrète" if encore_cache(s) else (s.get("title") or "Succès")
     return r.get("recompense_objet") or (f'{r["recompense_or"]} Or' if r.get("recompense_or") else "") \
         or r.get("libelle") or r.get("recompense_role") or "Récompense"
 
