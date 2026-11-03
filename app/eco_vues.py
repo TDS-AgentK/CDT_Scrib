@@ -2,7 +2,7 @@
 - boutique au format « Components V2 » : choix de la boutique, puis un cadre aux couleurs de la boutique avec,
   pour chaque article, titre, quantité restante, description et un bouton « 🪙 prix - Acheter » ; pages, tri,
   changement de boutique ;
-- classements (Or, niveaux) paginés, inventaire en grille, cartes image (/argent, /niveau : app/eco_cartes.py).
+- classements (Or, niveaux) paginés, inventaire en grille, cartes image (/argent : app/tresor.py, /niveau : app/chemin_rangs.py).
 Les custom_id « eco:… » sont traités dans app/eco_interactions.py.
 """
 import logging
@@ -267,6 +267,31 @@ async def vue_classement_niveau(eco, page: int = 0) -> tuple[dict, list, bytes |
         return embed, comp, None
 
 
+async def vue_classement_argent(eco, page: int = 0) -> tuple[dict, list, bytes | None]:
+    """/topargent en image « Trésor » (5 par page) ; repli sur la liste texte si le dessin échoue."""
+    import asyncio
+    from app import chemin_rangs, tresor
+    embed, comp = await vue_classement(eco, "argent", page)
+    try:
+        cfg = await eco.config()
+        joueurs = [j for j in await eco.pb.lister("joueurs", tri="-eco_or") if (j.get("eco_or") or 0) > 0]
+        pages = max(1, -(-len(joueurs) // PAR_PAGE_TOP))
+        page = max(0, min(page, pages - 1))
+
+        async def ligne(i, j):
+            return {"rang": i + 1, "nom": j.get("pseudo") or j.get("pseudo_discord") or "?", "solde": j.get("eco_or") or 0,
+                    "record": j.get("eco_or_record") or 0,
+                    "sous_titre": f'@{j["pseudo_discord"]}' if j.get("pseudo_discord") else "",
+                    "avatar": await chemin_rangs.avatar_site(eco, j)}
+        tranche = list(enumerate(joueurs))[page * PAR_PAGE_TOP:(page + 1) * PAR_PAGE_TOP]
+        lignes = await asyncio.gather(*(ligne(i, j) for i, j in tranche))
+        image = await tresor.classement(list(lignes), page, pages, emoji=await tresor.icone_or(or_id(cfg)), pb=eco.pb)
+        return {"color": 0xD6A72E, "image": {"url": "attachment://carte.png"}}, comp, image
+    except Exception:
+        log.exception("Classement des fortunes en image impossible : liste texte")
+        return embed, comp, None
+
+
 # ---------------------------------------------------------------- inventaire (grille)
 
 # Ordre et titres des catégories d'objets dans /inventaire (catégorie réglée par objet dans la page Économie).
@@ -322,17 +347,20 @@ async def vue_inventaire(eco, cible, page: int = 0) -> tuple[dict, list]:
 # ---------------------------------------------------------------- cartes image
 
 async def carte_argent(eco, cible) -> tuple[dict | None, bytes | None]:
-    from app.eco_cartes import carte
+    """Carte « Trésor » : avatar du site, solde, record, Or dépensé et place au classement des fortunes."""
+    from app import chemin_rangs, tresor
     cfg = await eco.config()
     joueur = await eco.joueur_de(cible)
     if not joueur:
         return erreur("Aucune fiche joueur liée à ce compte Discord."), None
     classement = await eco.pb.lister("joueurs", tri="-eco_or")
     place = next((i for i, j in enumerate(classement, 1) if j["id"] == joueur["id"]), 0)
-    solde, record = joueur.get("eco_or") or 0, max(joueur.get("eco_or_record") or 0, joueur.get("eco_or") or 0)
-    image = await carte(getattr(cible, "display_name", joueur.get("pseudo")), getattr(getattr(cible, "display_avatar", None), "url", None),
-                        (214, 196, 16), solde / record if record else 0, f"{_n(solde)} Or", f"Place : {place}", f"Record : {abrege(record)}")
-    return {"color": 0xD6C410, "image": {"url": "attachment://carte.png"}}, image
+    solde = joueur.get("eco_or") or 0
+    record = max(joueur.get("eco_or_record") or 0, solde)
+    image = await tresor.carte(getattr(cible, "display_name", None) or joueur.get("pseudo") or "?",
+                               await chemin_rangs.avatar_site(eco, joueur, cible), solde, record,
+                               joueur.get("eco_or_depense") or 0, place, emoji=await tresor.icone_or(or_id(cfg)), pb=eco.pb)
+    return {"color": 0xD6A72E, "image": {"url": "attachment://carte.png"}}, image
 
 
 async def carte_niveau(eco, cible) -> tuple[dict | None, bytes | None]:

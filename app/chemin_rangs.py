@@ -401,7 +401,8 @@ def _fond(w, h):
     return img
 
 
-def _banniere(img, x0, x1, h, avatar: Image.Image, niveau: int, haut_avatar: int):
+def _banniere(img, x0, x1, h, avatar: Image.Image, niveau, haut_avatar: int, etiquette="NIVEAU",
+              tissu=((24, 92, 82), (12, 52, 50)), clair=(200, 230, 220)):
     def forme(dd, dec, col):
         o = dec[0] * S, dec[1] * S
         dd.polygon([(x0 + o[0], 0), (x1 + o[0], 0), (x1 + o[0], h - 30 * S + o[1]), ((x0 + x1) / 2 + o[0], h - 2 * S + o[1]),
@@ -409,7 +410,7 @@ def _banniere(img, x0, x1, h, avatar: Image.Image, niveau: int, haut_avatar: int
     _ombre(img, forme)
     cal = Image.new("RGBA", img.size, (0, 0, 0, 0))
     forme(ImageDraw.Draw(cal), (0, 0), (255, 255, 255, 255))
-    tissu = _grain(_degrade(img.width, img.height, (24, 92, 82), (12, 52, 50), vertical=True), 7, 12)
+    tissu = _grain(_degrade(img.width, img.height, *tissu, vertical=True), 7, 12)
     tissu.putalpha(cal.getchannel("A"))
     img.alpha_composite(tissu)
     d = _D(img)
@@ -420,8 +421,8 @@ def _banniere(img, x0, x1, h, avatar: Image.Image, niveau: int, haut_avatar: int
     d.ellipse((ax - ar - 5 * S, ay - ar - 5 * S, ax + ar + 5 * S, ay + ar + 5 * S), fill=OR_)
     img.alpha_composite(avatar, (ax - ar, ay - ar))
     d = _D(img)
-    _espace(d, (ax, ay + ar + 26 * S), "NIVEAU", INTER(11), (200, 230, 220))
-    d.text((ax, ay + ar + 62 * S), str(niveau), font=CINZEL(44 if niveau < 100 else 36), fill=(255, 240, 200), anchor="mm")
+    _espace(d, (ax, ay + ar + 26 * S), etiquette, INTER(11), clair)
+    d.text((ax, ay + ar + 62 * S), str(niveau), font=CINZEL(44 if len(str(niveau)) < 3 else 36), fill=(255, 240, 200), anchor="mm")
 
 
 def _sortie(img, w, h) -> bytes:
