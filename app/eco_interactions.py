@@ -153,8 +153,8 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             embed, comp, image = await eco_vues.vue_classement_niveau(eco)
             return await _modifier(app_id, jeton, [embed], comp, fichier=image)
         if nom == "topargent":
-            embed, comp = await eco_vues.vue_classement(eco, "argent")
-            return await _modifier(app_id, jeton, [embed], comp)
+            embed, comp, image = await eco_vues.vue_classement_argent(eco)
+            return await _modifier(app_id, jeton, [embed], comp, fichier=image)
         if nom == "inventaire":
             c = await cible()
             if not c:
@@ -401,6 +401,9 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
         async def page_top():
             if morceaux[2] == "niveau":
                 embed, comp, image = await eco_vues.vue_classement_niveau(eco, int(morceaux[3]))
+                return await _modifier(app_id, jeton, [embed], comp, fichier=image)
+            if morceaux[2] == "argent":
+                embed, comp, image = await eco_vues.vue_classement_argent(eco, int(morceaux[3]))
                 return await _modifier(app_id, jeton, [embed], comp, fichier=image)
             embed, comp = await eco_vues.vue_classement(eco, morceaux[2], int(morceaux[3]))
             await _modifier(app_id, jeton, [embed], comp)

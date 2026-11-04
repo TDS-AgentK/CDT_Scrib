@@ -606,6 +606,8 @@ class Economie:
         image = None
         if genre == "niveau":
             embed, comp, image = await eco_vues.vue_classement_niveau(self)
+        elif genre == "argent":
+            embed, comp, image = await eco_vues.vue_classement_argent(self)
         else:
             embed, comp = await eco_vues.vue_classement(self, genre)
         vue = eco_vues.vue_discord(comp)
