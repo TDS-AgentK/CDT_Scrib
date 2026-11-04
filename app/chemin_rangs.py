@@ -282,7 +282,9 @@ class _D:
         def f(*a, **k):
             calque = Image.new("RGBA", self.img.size, (0, 0, 0, 0))
             getattr(ImageDraw.Draw(calque), nom)(*a, **k)
-            self.img.alpha_composite(calque)
+            boite = calque.getbbox()  # ne mélange que la zone tracée
+            if boite:
+                self.img.alpha_composite(calque, boite[:2], boite)
         return f
 
 
@@ -307,16 +309,34 @@ def _grain(img, force=8, graine=11):
 
 
 def _lueur(img, xy, rayon, couleur, force=160):
-    calque = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    x, y = xy
-    ImageDraw.Draw(calque).ellipse((x - rayon, y - rayon, x + rayon, y + rayon), fill=tuple(couleur) + (force,))
-    img.alpha_composite(calque.filter(ImageFilter.GaussianBlur(rayon * 0.6)))
+    """Halo flou ; seul le carré autour du halo est flouté (bien plus rapide que toute l'image)."""
+    x, y = int(xy[0]), int(xy[1])
+    flou = rayon * 0.6
+    m = int(rayon + 3 * flou)
+    calque = Image.new("RGBA", (2 * m, 2 * m), (0, 0, 0, 0))
+    ImageDraw.Draw(calque).ellipse((m - rayon, m - rayon, m + rayon, m + rayon), fill=tuple(couleur) + (force,))
+    calque = calque.filter(ImageFilter.GaussianBlur(flou))
+    gauche, haut = x - m, y - m
+    boite = (max(0, -gauche), max(0, -haut), min(2 * m, img.width - gauche), min(2 * m, img.height - haut))
+    if boite[2] > boite[0] and boite[3] > boite[1]:
+        img.alpha_composite(calque, (gauche + boite[0], haut + boite[1]), boite)
+
+
+def _flou_local(img, calque, rayon):
+    """Floute un calque de la taille de l'image en ne traitant que la zone dessinée (plus une marge), puis le mélange."""
+    boite = calque.getbbox()
+    if not boite:
+        return
+    m = int(3 * rayon) + 2
+    boite = (max(0, boite[0] - m), max(0, boite[1] - m), min(img.width, boite[2] + m), min(img.height, boite[3] + m))
+    morceau = calque.crop(boite).filter(ImageFilter.GaussianBlur(rayon))
+    img.alpha_composite(morceau, boite[:2])
 
 
 def _ombre(img, forme, decal=(0, 6), flou=10, opacite=170):
     calque = Image.new("RGBA", img.size, (0, 0, 0, 0))
     forme(ImageDraw.Draw(calque), decal, (0, 0, 0, opacite))
-    img.alpha_composite(calque.filter(ImageFilter.GaussianBlur(flou * S)))
+    _flou_local(img, calque, flou * S)
 
 
 def _espace(d, xy, t, f, fill, ecart=4):
@@ -352,9 +372,25 @@ def _tronquer(d, texte, f, largeur):
     return texte.rstrip() + "…"
 
 
+CACHE_IMAGES_S, CACHE_IMAGES_MAX = 600, 300
+_cache_images: dict[str, tuple[float, Image.Image | None]] = {}
+
+
 async def _telecharger(url: str | None, pb=None) -> Image.Image | None:
+    """Image distante (avatars, icônes de succès), gardée 10 min en mémoire : les cartes suivantes ne la retéléchargent pas."""
     if not url:
         return None
+    vu = _cache_images.get(url)
+    if vu and time.monotonic() - vu[0] < CACHE_IMAGES_S:
+        return vu[1]
+    image = await _telecharger_sans_cache(url, pb)
+    if len(_cache_images) >= CACHE_IMAGES_MAX:
+        _cache_images.pop(next(iter(_cache_images)))
+    _cache_images[url] = (time.monotonic(), image)
+    return image
+
+
+async def _telecharger_sans_cache(url: str, pb=None) -> Image.Image | None:
     try:
         entetes = {}
         if pb is not None and url.startswith(pb.url):
@@ -394,11 +430,38 @@ def _pastille(icone: Image.Image | None, fond, taille: int, eteinte: bool) -> Im
     return p
 
 
+_fonds: dict[tuple, Image.Image] = {}
+
+
+def fond_en_cache(cle, fabrique) -> Image.Image:
+    """Les fonds (dégradé, grain, lueur) ne changent jamais : dessinés une fois par taille, puis copiés."""
+    if cle not in _fonds:
+        _fonds[cle] = fabrique()
+    return _fonds[cle].copy()
+
+
+def prechauffer():
+    """Dessine à l'avance les fonds et tissus (au démarrage, hors boucle) : la toute première carte n'attend pas."""
+    from app import tresor
+    for h in (HAUTEUR, BANNIERE_H):
+        _fond(LARGEUR * S, h * S)
+        fond_en_cache(("tissu", (LARGEUR * S, h * S), ((24, 92, 82), (12, 52, 50))),
+                      lambda h=h: _grain(_degrade(LARGEUR * S, h * S, (24, 92, 82), (12, 52, 50), vertical=True), 7, 12))
+    fond_en_cache(("tissu", (LARGEUR * S, HAUTEUR * S), tresor.TISSU),
+                  lambda: _grain(_degrade(LARGEUR * S, HAUTEUR * S, *tresor.TISSU, vertical=True), 7, 12))
+    tresor._fond(LARGEUR * S, HAUTEUR * S)
+    for n in range(1, 6):
+        h = (CLASSEMENT_ENTETE + CLASSEMENT_LIGNE * n + CLASSEMENT_PIED) * S
+        _fond(LARGEUR * S, h)
+        tresor._fond(LARGEUR * S, h)
+
+
 def _fond(w, h):
-    img = _degrade(w, h, (18, 34, 36), (10, 18, 24))
-    img = _grain(img, 6)
-    _lueur(img, (int(w * .62), int(h * .75)), 300 * S, (40, 140, 120), 60)
-    return img
+    def fabrique():
+        img = _grain(_degrade(w, h, (18, 34, 36), (10, 18, 24)), 6)
+        _lueur(img, (int(w * .62), int(h * .75)), 300 * S, (40, 140, 120), 60)
+        return img
+    return fond_en_cache(("chemin", w, h), fabrique)
 
 
 def _banniere(img, x0, x1, h, avatar: Image.Image, niveau, haut_avatar: int, etiquette="NIVEAU",
@@ -410,7 +473,9 @@ def _banniere(img, x0, x1, h, avatar: Image.Image, niveau, haut_avatar: int, eti
     _ombre(img, forme)
     cal = Image.new("RGBA", img.size, (0, 0, 0, 0))
     forme(ImageDraw.Draw(cal), (0, 0), (255, 255, 255, 255))
-    tissu = _grain(_degrade(img.width, img.height, *tissu, vertical=True), 7, 12)
+    couleurs = tissu
+    tissu = fond_en_cache(("tissu", img.size, couleurs),
+                          lambda: _grain(_degrade(img.width, img.height, *couleurs, vertical=True), 7, 12))
     tissu.putalpha(cal.getchannel("A"))
     img.alpha_composite(tissu)
     d = _D(img)
@@ -427,7 +492,7 @@ def _banniere(img, x0, x1, h, avatar: Image.Image, niveau, haut_avatar: int, eti
 
 def _sortie(img, w, h) -> bytes:
     buf = io.BytesIO()
-    img.convert("RGB").resize((w, h), Image.LANCZOS).save(buf, "PNG", optimize=True)
+    img.convert("RGB").resize((w, h), Image.LANCZOS).save(buf, "PNG", compress_level=3)
     return buf.getvalue()
 
 
@@ -478,7 +543,7 @@ def _chemin(img, vue, niveau_depart, v, niveau, x0, x1, y, taille_icone=30, libe
     d.line((x0, y, x1, y), fill=(255, 255, 255, 45), width=4 * S)
     halo = Image.new("RGBA", img.size, (0, 0, 0, 0))
     ImageDraw.Draw(halo).line((x0, y, xa, y), fill=VERT + (255,), width=8 * S)
-    img.alpha_composite(halo.filter(ImageFilter.GaussianBlur(6 * S)))
+    _flou_local(img, halo, 6 * S)
     d.line((x0, y, xa, y), fill=VERT, width=4 * S)
     for e, x in zip(vue, xs):
         if e.get("mystere"):

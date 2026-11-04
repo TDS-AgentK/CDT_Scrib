@@ -19,10 +19,11 @@ _emoji: dict[str, Image.Image | None] = {}
 
 
 def _fond(w, h):
-    img = _degrade(w, h, (34, 26, 18), (14, 11, 10))
-    img = _grain(img, 6)
-    _lueur(img, (int(w * .66), int(h * .7)), 300 * S, (200, 150, 50), 55)
-    return img
+    def fabrique():
+        img = _grain(_degrade(w, h, (34, 26, 18), (14, 11, 10)), 6)
+        _lueur(img, (int(w * .66), int(h * .7)), 300 * S, (200, 150, 50), 55)
+        return img
+    return cr.fond_en_cache(("tresor", w, h), fabrique)
 
 
 async def icone_or(emoji_id: str) -> Image.Image | None:
@@ -66,10 +67,14 @@ def _barre(img, x0, y0, x1, y1, ratio):
     masque = Image.new("L", remplissage.size, 0)
     ImageDraw.Draw(masque).rounded_rectangle((0, 0, remplissage.width - 1, remplissage.height - 1), r, fill=255)
     remplissage.putalpha(masque)
-    halo = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    ImageDraw.Draw(halo).rounded_rectangle((x0, y0, fin, y1), r, fill=OR_CLAIR + (200,))
     from PIL import ImageFilter
-    img.alpha_composite(halo.filter(ImageFilter.GaussianBlur(5 * S)))
+    m = 16 * S  # halo flouté sur la seule zone de la barre
+    halo = Image.new("RGBA", (int(fin - x0) + 2 * m, int(y1 - y0) + 2 * m), (0, 0, 0, 0))
+    ImageDraw.Draw(halo).rounded_rectangle((m, m, m + fin - x0, m + y1 - y0), r, fill=OR_CLAIR + (200,))
+    halo = halo.filter(ImageFilter.GaussianBlur(5 * S))
+    gx, gy = int(x0) - m, int(y0) - m
+    boite = (max(0, -gx), max(0, -gy), min(halo.width, img.width - gx), min(halo.height, img.height - gy))
+    img.alpha_composite(halo, (gx + boite[0], gy + boite[1]), boite)
     img.alpha_composite(remplissage, (int(x0), int(y0)))
 
 
