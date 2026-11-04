@@ -364,18 +364,23 @@ async def carte_argent(eco, cible) -> tuple[dict | None, bytes | None]:
     joueur = await eco.joueur_de(cible)
     if not joueur:
         return erreur("Aucune fiche joueur liée à ce compte Discord."), None
-    classement = await eco.pb.lister("joueurs", tri="-eco_or")
+    import asyncio
+
+    async def depenses_sures():
+        try:
+            return await depenses(eco, joueur["id"])
+        except Exception:
+            log.exception("Dépenses de %s illisibles", joueur["id"])
+            return joueur.get("eco_or_depense") or 0, 0
+    # Lectures en parallèle (classement, dépenses, avatar du site, emoji d'Or) plutôt qu'une à une.
+    classement, (boutique, receleur), avatar, emoji = await asyncio.gather(
+        eco.pb.lister("joueurs", tri="-eco_or"), depenses_sures(), chemin_rangs.avatar_site(eco, joueur, cible),
+        tresor.icone_or(or_id(cfg)))
     place = next((i for i, j in enumerate(classement, 1) if j["id"] == joueur["id"]), 0)
     solde = joueur.get("eco_or") or 0
     record = max(joueur.get("eco_or_record") or 0, solde)
-    try:
-        boutique, receleur = await depenses(eco, joueur["id"])
-    except Exception:
-        log.exception("Dépenses de %s illisibles", joueur["id"])
-        boutique, receleur = joueur.get("eco_or_depense") or 0, 0
-    image = await tresor.carte(getattr(cible, "display_name", None) or joueur.get("pseudo") or "?",
-                               await chemin_rangs.avatar_site(eco, joueur, cible), solde, record,
-                               boutique, receleur, place, emoji=await tresor.icone_or(or_id(cfg)), pb=eco.pb)
+    image = await tresor.carte(getattr(cible, "display_name", None) or joueur.get("pseudo") or "?", avatar, solde, record,
+                               boutique, receleur, place, emoji=emoji, pb=eco.pb)
     return {"color": 0xD6A72E, "image": {"url": "attachment://carte.png"}}, image
 
 
@@ -389,12 +394,13 @@ async def carte_niveau(eco, cible) -> tuple[dict | None, bytes | None]:
     if not joueur:
         return erreur("Aucune fiche joueur liée à ce compte Discord."), None
     n, fait, besoin = niveau_de(cfg["courbe"], joueur.get("eco_xp") or 0)
-    classement = await eco.pb.lister("joueurs", tri="-eco_xp")
+    import asyncio
+    classement, (etapes, cfg, succes), avatar = await asyncio.gather(
+        eco.pb.lister("joueurs", tri="-eco_xp"), chemin_rangs.donnees(eco, joueur), chemin_rangs.avatar_site(eco, joueur, cible))
     place = next((i for i, j in enumerate(classement, 1) if j["id"] == joueur["id"]), 0)
-    etapes, cfg, succes = await chemin_rangs.donnees(eco, joueur)
     titre = next((e["titre"] for e in reversed(etapes) if e["niveau"] <= n and e["detenu"]), "")
     image = await chemin_rangs.carte(getattr(cible, "display_name", None) or joueur.get("pseudo") or "?",
-                                     await chemin_rangs.avatar_site(eco, joueur, cible), n, fait, besoin, place, titre, etapes,
+                                     avatar, n, fait, besoin, place, titre, etapes,
                                      chemin_rangs.prochaine_recompense(cfg, n, succes, joueur), eco.pb)
     return {"color": 0x2E8C78, "image": {"url": "attachment://carte.png"}}, image
 

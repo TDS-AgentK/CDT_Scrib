@@ -130,5 +130,28 @@ class ReceleurSuccesDepense(unittest.TestCase):
         eco.donner_succes.assert_awaited_once_with(apres, "sD")
 
 
+class Rapidite(unittest.TestCase):
+    def test_image_telechargee_une_seule_fois(self):
+        cr._cache_images.clear()
+        brut = mock.AsyncMock(return_value=Image.new("RGBA", (4, 4)))
+        with mock.patch.object(cr, "_telecharger_sans_cache", brut):
+            asyncio.run(cr._telecharger("https://x/a.png"))
+            asyncio.run(cr._telecharger("https://x/a.png"))
+        brut.assert_awaited_once()
+        cr._cache_images.clear()
+
+    def test_fond_en_cache_renvoie_une_copie(self):
+        a = cr.fond_en_cache(("test",), lambda: Image.new("RGBA", (4, 4), (1, 2, 3, 255)))
+        a.putpixel((0, 0), (9, 9, 9, 255))
+        b = cr.fond_en_cache(("test",), lambda: None)
+        self.assertEqual(b.getpixel((0, 0)), (1, 2, 3, 255))
+
+    def test_lueur_au_bord_de_l_image(self):
+        img = Image.new("RGBA", (100, 60), (0, 0, 0, 255))
+        cr._lueur(img, (-30, 70), 40, (255, 200, 90), 200)
+        cr._lueur(img, (50, 30), 10, (255, 200, 90), 200)
+        self.assertGreater(img.getpixel((50, 30))[0], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
