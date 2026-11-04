@@ -75,7 +75,7 @@ def _barre(img, x0, y0, x1, y1, ratio):
 
 # ---------------------------------------------------------------- carte /argent
 
-async def carte(nom: str, avatar_url: str | None, solde: int, record: int, depense: int, place: int,
+async def carte(nom: str, avatar_url: str | None, solde: int, record: int, boutique: int, receleur: int, place: int,
                 nom_or: str = "Or", emoji: Image.Image | None = None, pb=None) -> bytes:
     W, H = LARGEUR * S, HAUTEUR * S
     img = _fond(W, H)
@@ -105,8 +105,11 @@ async def carte(nom: str, avatar_url: str | None, solde: int, record: int, depen
     else:
         d.text((x, 262 * S), "Ta bourse n'a jamais été aussi pleine !" if solde else "Ta bourse attend sa première pièce.",
                font=CORM_I(21), fill=BEIGE, anchor="ls")
-    d.text((xd, 236 * S), f"Dépensé au total : {_nb(depense)} {nom_or}", font=INTER(15, "Medium"), fill=OR_CLAIR, anchor="rs")
-    d.text((xd, 262 * S), "en boutiques et chez le receleur", font=CORM_I(21), fill=OR_CLAIR, anchor="rs")
+    for y, libelle, valeur in ((236, "Dépenses en boutique", boutique), (262, "Dépenses au receleur", receleur)):
+        v = f"{_nb(valeur)} {nom_or}"
+        d.text((xd, y * S), v, font=INTER(15, "Bold"), fill=OR_CLAIR, anchor="rs")
+        d.text((xd - d.textlength(v, font=INTER(15, "Bold")) - 8 * S, y * S), libelle + " :", font=INTER(15, "Medium"),
+               fill=BEIGE, anchor="rs")
     return _sortie(img, LARGEUR, HAUTEUR)
 
 

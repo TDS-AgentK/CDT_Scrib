@@ -346,8 +346,19 @@ async def vue_inventaire(eco, cible, page: int = 0) -> tuple[dict, list]:
 
 # ---------------------------------------------------------------- cartes image
 
+async def depenses(eco, joueur_id: str) -> tuple[int, int]:
+    """Or dépensé (boutique, receleur), recalculé depuis les historiques : eco_achats et rec_mouvements (sens « vente »)."""
+    import asyncio
+    jid = echapper(joueur_id)
+    achats, receleur = await asyncio.gather(
+        eco.pb.lister("eco_achats", f'joueur="{jid}"'),
+        eco.pb.lister("rec_mouvements", f'joueur="{jid}" && sens="vente"'))
+    return (sum(a.get("prix") or 0 for a in achats),
+            sum((m.get("quantite") or 0) * (m.get("prix_unitaire") or 0) for m in receleur))
+
+
 async def carte_argent(eco, cible) -> tuple[dict | None, bytes | None]:
-    """Carte « Trésor » : avatar du site, solde, record, Or dépensé et place au classement des fortunes."""
+    """Carte « Trésor » : avatar du site, solde, record, dépenses en boutique et au receleur, place au classement."""
     from app import chemin_rangs, tresor
     cfg = await eco.config()
     joueur = await eco.joueur_de(cible)
@@ -357,9 +368,14 @@ async def carte_argent(eco, cible) -> tuple[dict | None, bytes | None]:
     place = next((i for i, j in enumerate(classement, 1) if j["id"] == joueur["id"]), 0)
     solde = joueur.get("eco_or") or 0
     record = max(joueur.get("eco_or_record") or 0, solde)
+    try:
+        boutique, receleur = await depenses(eco, joueur["id"])
+    except Exception:
+        log.exception("Dépenses de %s illisibles", joueur["id"])
+        boutique, receleur = joueur.get("eco_or_depense") or 0, 0
     image = await tresor.carte(getattr(cible, "display_name", None) or joueur.get("pseudo") or "?",
                                await chemin_rangs.avatar_site(eco, joueur, cible), solde, record,
-                               joueur.get("eco_or_depense") or 0, place, emoji=await tresor.icone_or(or_id(cfg)), pb=eco.pb)
+                               boutique, receleur, place, emoji=await tresor.icone_or(or_id(cfg)), pb=eco.pb)
     return {"color": 0xD6A72E, "image": {"url": "attachment://carte.png"}}, image
 
 

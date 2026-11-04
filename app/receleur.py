@@ -156,10 +156,15 @@ async def acheter(eco, membre: discord.Member, objet_id: str, q: int, origine: s
         if (frais.get("eco_or") or 0) < total:
             return False, f"Il te manque {_n(total - (frais.get('eco_or') or 0))} {eco_vues.or_txt(cfg)}."
         j = await changer_or(eco, joueur["id"], -total)
-        await eco.pb.maj("joueurs", joueur["id"], {"eco_or_depense": (j.get("eco_or_depense") or 0) + total})
+        depense_avant = j.get("eco_or_depense") or 0
+        await eco.pb.maj("joueurs", joueur["id"], {"eco_or_depense": depense_avant + total})
         await eco.ajouter_objet(joueur["id"], objet["id"], q, "achat_receleur", f"{prix} Or l'unité")
         await eco.pb.maj("rec_objets", ligne["id"], {"stock": stock - q})
         await _mouvement(eco, joueur["id"], objet["id"], q, prix, "vente", origine)
+        # Mêmes succès de dépense qu'en boutique (avant, un seuil franchi au Receleur n'était jamais donné).
+        for p in cfg["paliers"]:
+            if p.get("declencheur") == "or_depense" and depense_avant < (p.get("seuil") or 0) <= depense_avant + total:
+                await eco.donner_succes(j, p.get("succes"))
     await _gain(eco, joueur["id"], f"receleur : achat de {objet['nom']}", "Or", -total, origine)
     return True, (f"Acheté au Receleur : **{q} × {objet['nom']}** pour **{_n(total)}** {eco_vues.or_txt(cfg)}. "
                   f"Il te reste **{_n(j.get('eco_or'))}** {eco_vues.or_txt(cfg)}.")
