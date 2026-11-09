@@ -178,12 +178,14 @@ def lire_tirage(texte: str) -> list[list[tuple[str, str]]]:
     return groupes
 
 
-async def _xp(eco, membre, joueur_id: str, xp: int, nom: str, salon) -> None:
+async def _xp(eco, membre, joueur_id: str, xp: int, nom: str, salon, commande: str | None = None,
+              origine: str = "") -> None:
+    """Ajoute de l'XP (et annonce un passage de niveau). `commande` remplace le libellé « utiliser : nom » du gain."""
     from app.economie import niveau_de
     j = await eco.pb.requete("GET", f"/api/collections/joueurs/records/{joueur_id}")
     ancien = j.get("eco_xp") or 0
     j = await eco.pb.maj("joueurs", joueur_id, {"eco_xp": ancien + xp})
-    await _gain(eco, joueur_id, f"utiliser : {nom}", "XP", xp, "")
+    await _gain(eco, joueur_id, commande or f"utiliser : {nom}", "XP", xp, origine)
     cfg = await eco.config()
     n0, n1 = niveau_de(cfg["courbe"], ancien)[0], niveau_de(cfg["courbe"], j["eco_xp"])[0]
     if n1 > n0 and salon is not None:

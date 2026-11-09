@@ -51,7 +51,7 @@ def base(ouvertures=()):
     cases[1] = {**cases[1], "nom": "Le Conte de Lanjis, fragment I", "recompenses": [], "fragment": 1}
     return {
         "avent_reglages": [dict(REGLAGES)], "avent_cases": cases,
-        "avent_fragments": [{"id": "f1", "ordre": 1, "jour": 2, "texte": "Il neigeait sur Rostheim."}],
+        "avent_fragments": [{"id": "f1", "ordre": 5, "jour": 2, "texte": "Il neigeait sur Rostheim."}],
         "avent_ouvertures": [dict(o) for o in ouvertures],
         "joueurs": [{"id": "j1", "pseudo": "Ràlas", "discord_id": "123456789012345678", "eco_or": 0}],
         "eco_inventaire": [], "eco_objets": [{"id": "o1", "nom": "Masque"}], "eco_gains": [],
@@ -168,6 +168,68 @@ class Ouverture(unittest.TestCase):
         res = pb.d["avent_ouvertures"][0]["recompenses"]
         self.assertEqual([r["ok"] for r in res], [False, True])
         self.assertIn("pas encore donné", embed["description"])
+
+
+class Recompenses(unittest.TestCase):
+    """Mêmes écritures que le site (lib/aventServeur.ts)."""
+
+    def avec(self, recompenses, **extra):
+        d = base()
+        d["avent_cases"][6]["recompenses"] = recompenses
+        d.update(extra)
+        pb = Pb(d)
+        ok, embed = run(avent.ouvrir(Eco(pb), membre(), None, maintenant=le(7)))
+        self.assertTrue(ok, embed)
+        return pb
+
+    def test_or_note_comme_le_site(self):
+        pb = self.avec([{"type": "or", "quantite": 30}])
+        self.assertEqual(pb.d["joueurs"][0]["eco_or"], 30)
+        g = pb.d["eco_gains"][0]
+        self.assertEqual((g["commande"], g["monnaie"], g["montant"]), ("Calendrier de l'Avent : case 7", "Or", 30))
+
+    def test_objet_du_bureau_ajoute_a_possedes(self):
+        pb = self.avec([{"type": "bureau", "objet": "bougie-bleue", "objet_nom": "Bougie bleue"}],
+                       bureau_joueurs=[{"id": "b1", "pseudo": "Ràlas", "possedes": ["plume"], "poses": {"a": "plume"}}])
+        b = pb.d["bureau_joueurs"][0]
+        self.assertEqual(b["possedes"], ["plume", "bougie-bleue"])
+        self.assertEqual(b["poses"], {"a": "plume"})
+
+    def test_objet_du_bureau_sans_ligne(self):
+        pb = self.avec([{"type": "bureau", "objet": "boule-cristal", "objet_nom": "Boule de cristal"}])
+        self.assertEqual(pb.d["bureau_joueurs"], [{"id": pb.d["bureau_joueurs"][0]["id"], "pseudo": "Ràlas",
+                                                    "possedes": ["boule-cristal"], "poses": {}}])
+
+    def test_multiplicateur_commun_sans_doublon(self):
+        rec = {"type": "multiplicateur", "facteur": 2, "monnaie": "xp", "salons": ["sj0dp5dwja7a633"], "jusqu": "minuit"}
+        pb = self.avec([rec], eco_multiplicateurs=[])
+        m = pb.d["eco_multiplicateurs"][0]
+        self.assertTrue(m["libelle"].startswith("Avent : "))
+        self.assertEqual((m["facteur_or"], m["facteur_xp"], m["portee"], m["salons"]), (1, 2.0, "salons", ["sj0dp5dwja7a633"]))
+        # Un second joueur ouvre la même fenêtre : le multiplicateur déjà actif n'est pas recréé.
+        pb.d["joueurs"].append({"id": "j2", "pseudo": "Kya", "discord_id": "222", "eco_or": 0})
+        autre = membre()
+        autre.id = 222
+        with mock.patch.object(Eco, "joueur_de", new=lambda self, m: _j2(pb)):
+            run(avent.ouvrir(Eco(pb), autre, None, maintenant=le(7)))
+        self.assertEqual(len(pb.d["eco_multiplicateurs"]), 1)
+
+    def test_lignes_notees_avant_les_recompenses(self):
+        # Si le bot s'arrête pendant la distribution, l'ouverture garde des lignes « non données ».
+        notes = []
+
+        async def appliquer(eco, membre, joueur, rec, libelle, salon=None, maintenant=None):
+            notes.append([dict(x) for x in pb.d["avent_ouvertures"][0]["recompenses"]])
+        pb = Pb(base())
+        with mock.patch.object(avent, "appliquer", appliquer):
+            run(avent.ouvrir(Eco(pb), membre(), None, maintenant=le(7)))
+        self.assertEqual(notes[0][0]["ok"], False)
+        self.assertEqual(notes[0][0]["erreur"], "Non donnée : ouverture interrompue.")
+        self.assertTrue(pb.d["avent_ouvertures"][0]["recompenses"][0]["ok"])
+
+
+async def _j2(pb):
+    return pb.d["joueurs"][1]
 
 
 class Bonus(unittest.TestCase):

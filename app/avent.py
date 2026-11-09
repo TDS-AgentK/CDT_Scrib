@@ -6,7 +6,7 @@ scripts/setup-avent.mjs du site) :
   (« MM-JJ », inclus), bonus_compte_rattrapees, salon_annonce, rappel (aucun | prive | salon), salon_rappel, heure_rappel,
   afficher_compteur, bonus (récompenses du bonus des 24), lien_site ; derniere_annonce et dernier_rappel (AAAA-MM-JJ),
   écrits par le bot seulement, pour ne poster qu'une fois par jour même après un redémarrage.
-- avent_cases : jour (1..25), nom, phrase, recompenses (liste), fragment (ordre du fragment du Conte dévoilé, 0 = aucun)
+- avent_cases : jour (1..25), nom, phrase, recompenses (liste), fragment (indicatif : le fragment dévoilé est celui dont avent_fragments.jour = jour)
 - avent_fragments : ordre, jour, texte
 - avent_ouvertures : joueur, jour (0 = bonus des 24), ouvert_le, rattrapee, source (site | discord), recompenses.
   Index unique (joueur, jour) : on crée l'ouverture AVANT de donner quoi que ce soit, si bien qu'une fenêtre ne
@@ -152,11 +152,12 @@ async def ouvertures(eco, joueur_id: str) -> dict[int, dict]:
     return {int(o.get("jour") or 0): o for o in lignes}
 
 
-async def fragment(eco, ordre: int) -> dict | None:
-    if not ordre:
+async def fragment(eco, jour: int) -> dict | None:
+    """Fragment du Conte dévoilé par la fenêtre `jour` (avent_fragments.jour fait foi, comme sur le site)."""
+    if not jour:
         return None
     try:
-        return await eco.pb.premier("avent_fragments", f"ordre={int(ordre)}")
+        return await eco.pb.premier("avent_fragments", f"jour={int(jour)}")
     except Exception:
         return None
 
@@ -200,18 +201,20 @@ def _fin_multiplicateur(rec: dict, maintenant: datetime) -> datetime:
 
 async def appliquer(eco, membre: discord.Member, joueur: dict, rec: dict, libelle: str, salon=None,
                     maintenant: datetime | None = None) -> str | None:
-    """Donne une récompense. Renvoie None si c'est fait, sinon la raison de l'échec."""
+    """Donne une récompense. Renvoie None si c'est fait, sinon la raison de l'échec.
+    `libelle` vaut « case N » (ou « bonus des 24 ») : mêmes écritures que le site (lib/aventServeur.ts)."""
     from app.eco_actions import _gain, _xp, changer_or
     t, q = rec.get("type"), max(1, int(rec.get("quantite") or 1))
     origine = f"Calendrier de l'Avent : {libelle}"
+    lien = _lien_salon(salon)
     if t in ("role", "role_temporaire"):
         jours = (rec.get("duree_jours") or 0) if t == "role_temporaire" else 0
         return await eco.donner_role(membre, joueur, rec.get("role_id") or None, rec.get("role_nom") or None, jours, origine=origine)
     if t == "or":
         await changer_or(eco, joueur["id"], q)
-        await _gain(eco, joueur["id"], f"avent : {libelle}", "Or", q, "")
+        await _gain(eco, joueur["id"], origine, "Or", q, lien)
     elif t == "xp":
-        await _xp(eco, membre, joueur["id"], q, origine, salon)
+        await _xp(eco, membre, joueur["id"], q, origine, salon, commande=origine, origine=lien)
     elif t == "objet":
         if not rec.get("objet"):
             return f"l'objet « {rec.get('objet_nom') or '?'} » n'est pas relié au catalogue"
@@ -221,29 +224,56 @@ async def appliquer(eco, membre: discord.Member, joueur: dict, rec: dict, libell
             return f"l'objet du bureau « {rec.get('objet_nom') or '?'} » n'est pas relié au catalogue"
         await donner_objet_bureau(eco, joueur, rec)
     elif t == "multiplicateur":
-        m = maintenant or datetime.now(timezone.utc)
-        facteur = float(rec.get("facteur") or 1)
-        monnaie = rec.get("monnaie") or "les_deux"
-        salons = [s for s in (rec.get("salons") or []) if s]
-        await eco.pb.creer("eco_multiplicateurs", {
-            "libelle": f"{origine} ({membre.display_name})", "portee": "salons" if salons else "global", "salons": salons,
-            **({"facteur_or": facteur} if monnaie in ("or", "les_deux") else {}),
-            **({"facteur_xp": facteur} if monnaie in ("xp", "les_deux") else {}),
-            "debut": _pb_date(m), "fin": _pb_date(_fin_multiplicateur(rec, m)), "actif": True})
-        eco._charge_a = 0  # recharge la config : le multiplicateur compte tout de suite
+        await poser_multiplicateur(eco, rec, maintenant or datetime.now(timezone.utc))
     else:
         return f"type de récompense inconnu : {t}"
     return None
 
 
+def _lien_salon(salon) -> str:
+    """Origine d'un gain, comme les autres commandes : le lien du salon Discord où la fenêtre a été ouverte."""
+    guilde = getattr(salon, "guild", None)
+    return f"https://discord.com/channels/{guilde.id}/{salon.id}" if guilde is not None and getattr(salon, "id", None) else ""
+
+
+async def poser_multiplicateur(eco, rec: dict, maintenant: datetime):
+    """Multiplicateur commun à tout le serveur, comme sur le site : libellé « Avent : … », facteur 1 pour la monnaie
+    non concernée, portée « salons » (ids eco_salons) ou « global ». Pas de doublon si le même est déjà actif."""
+    facteur = float(rec.get("facteur") or 1)
+    monnaie = rec.get("monnaie") or "les_deux"
+    salons = [s for s in (rec.get("salons") or []) if s]
+    libelle = f"Avent : {texte_recompense(rec)}"
+    deja = await eco.pb.premier("eco_multiplicateurs",
+                                f'libelle="{echapper(libelle)}" && actif=true && fin>"{_pb_date(maintenant)}"')
+    if deja:
+        return
+    await eco.pb.creer("eco_multiplicateurs", {
+        "libelle": libelle, "portee": "salons" if salons else "global", "salons": salons,
+        "facteur_or": facteur if monnaie in ("or", "les_deux") else 1,
+        "facteur_xp": facteur if monnaie in ("xp", "les_deux") else 1,
+        "debut": _pb_date(maintenant), "fin": _pb_date(_fin_multiplicateur(rec, maintenant)), "actif": True})
+    eco._charge_a = 0  # recharge la config : le multiplicateur compte tout de suite
+
+
 async def donner_objet_bureau(eco, joueur: dict, rec: dict):
-    """Objet du bureau des missives : même enregistrement que le site (lib/bureauObjets.ts)."""
-    q = max(1, int(rec.get("quantite") or 1))
-    ligne = await eco.pb.premier("bureau_inventaire", f'joueur="{echapper(joueur["id"])}" && objet="{echapper(rec["objet"])}"')
+    """Objet du bureau des missives, comme le site : une ligne bureau_joueurs par joueur, la clé de l'objet
+    ajoutée à `possedes` (les objets posés ne bougent pas)."""
+    cle = rec["objet"]
+    if not joueur.get("pseudo"):
+        raise ValueError("fiche joueur sans pseudo")
+    ligne = await eco.pb.premier("bureau_joueurs", f'pseudo="{echapper(joueur.get("pseudo") or "")}"')
     if ligne:
-        await eco.pb.maj("bureau_inventaire", ligne["id"], {"quantite": (ligne.get("quantite") or 0) + q})
+        possedes = list(ligne.get("possedes") or [])
+        if cle not in possedes:
+            await eco.pb.maj("bureau_joueurs", ligne["id"], {"possedes": possedes + [cle]})
     else:
-        await eco.pb.creer("bureau_inventaire", {"joueur": joueur["id"], "objet": rec["objet"], "quantite": q})
+        await eco.pb.creer("bureau_joueurs", {"pseudo": joueur.get("pseudo") or "", "possedes": [cle], "poses": {}})
+
+
+def _en_attente(recompenses) -> list[dict]:
+    """Lignes notées à la création de l'ouverture : si le bot s'arrête en route, le suivi du site les montre non données."""
+    return [{**rec, "libelle": texte_recompense(rec), "ok": False, "erreur": "Non donnée : ouverture interrompue."}
+            for rec in recompenses or []]
 
 
 async def _donner_tout(eco, membre, joueur, recompenses: list[dict], libelle: str, salon=None) -> list[dict]:
@@ -288,19 +318,19 @@ async def ouvrir(eco, membre: discord.Member, jour: int | None = None, salon=Non
         try:
             ouverture = await eco.pb.creer("avent_ouvertures", {
                 "joueur": joueur["id"], "jour": jour, "ouvert_le": _pb_date(maintenant), "rattrapee": rattrapee,
-                "source": "discord", "recompenses": []})
+                "source": "discord", "recompenses": _en_attente(case.get("recompenses"))})
         except Exception:  # index unique : ouverte à l'instant sur le site
             deja = await eco.pb.premier("avent_ouvertures", f'joueur="{echapper(joueur["id"])}" && jour={jour}')
             if deja:
                 return False, await _embed_deja(eco, jour, deja)
             log.exception("Ouverture de la fenêtre %s impossible", jour)
             return False, eco_vues.erreur(T_ERREUR)
-        resultats = await _donner_tout(eco, membre, joueur, case.get("recompenses") or [], case.get("nom") or date_txt(jour), salon)
+        resultats = await _donner_tout(eco, membre, joueur, case.get("recompenses") or [], f"case {jour}", salon)
         try:
             await eco.pb.maj("avent_ouvertures", ouverture["id"], {"recompenses": resultats})
         except Exception:
             log.exception("Résultat des récompenses de l'Avent non noté")
-        frag = await fragment(eco, int(case.get("fragment") or 0))
+        frag = await fragment(eco, jour)
         embed = embed_case(jour, case, resultats, frag)
         bonus = await _bonus_si_merite(eco, membre, joueur, r, aujourdhui, salon, maintenant)
         if bonus:
@@ -322,7 +352,7 @@ async def _bonus_si_merite(eco, membre, joueur, r, aujourdhui, salon, maintenant
     try:
         ligne = await eco.pb.creer("avent_ouvertures", {
             "joueur": joueur["id"], "jour": 0, "ouvert_le": _pb_date(maintenant), "rattrapee": False, "source": "discord",
-            "recompenses": []})
+            "recompenses": _en_attente(r["bonus"])})
     except Exception:
         return None
     resultats = await _donner_tout(eco, membre, joueur, r["bonus"], "bonus des 24 fenêtres", salon)
