@@ -228,6 +228,50 @@ class Recompenses(unittest.TestCase):
         self.assertTrue(pb.d["avent_ouvertures"][0]["recompenses"][0]["ok"])
 
 
+CHOIX = {"type": "choix", "options": [
+    {"libelle": "Vert lutin", "recompenses": [{"type": "role_temporaire", "role_nom": "Lutin", "duree_jours": 7}]},
+    {"libelle": "Vert sapin", "recompenses": [{"type": "role_temporaire", "role_nom": "Sapin", "duree_jours": 7}]}]}
+
+
+class AuChoix(unittest.TestCase):
+    """Case 21 : rôle Lutin ou Sapin, le joueur choisit avec deux boutons."""
+
+    def ouvrir(self):
+        d = base()
+        d["avent_cases"][6]["recompenses"] = [CHOIX, {"type": "objet", "objet": "o1", "objet_nom": "Masque"}]
+        pb = Pb(d)
+        eco = Eco(pb, roles_existants=("Lutin", "Sapin"))
+        ok, embed = run(avent.ouvrir(eco, membre(), None, maintenant=le(7)))
+        self.assertTrue(ok, embed)
+        return pb, eco, embed
+
+    def test_boutons_et_rien_donne_avant_le_choix(self):
+        pb, eco, embed = self.ouvrir()
+        self.assertEqual(eco.roles_donnes, [])
+        self.assertEqual(eco.objets_donnes, [("o1", 1)])
+        ids = [b["custom_id"] for b in embed["composants"][0]["components"]]
+        self.assertEqual(ids, ["eco:av:ch:7:0:0", "eco:av:ch:7:0:1"])
+        self.assertNotIn("pas encore donné", embed["description"])
+        self.assertTrue(pb.d["avent_ouvertures"][0]["recompenses"][0]["a_choisir"])
+
+    def test_choix_donne_une_seule_option(self):
+        pb, eco, _ = self.ouvrir()
+        e = run(avent.choisir(eco, membre(), 7, 0, 1))
+        self.assertIn("Vert sapin", e["description"])
+        self.assertEqual(eco.roles_donnes, [("Sapin", 7)])
+        ligne = pb.d["avent_ouvertures"][0]["recompenses"][0]
+        self.assertEqual((ligne["a_choisir"], ligne["choisi"], ligne["ok"]), (False, "Vert sapin", True))
+        e = run(avent.choisir(eco, membre(), 7, 0, 0))
+        self.assertIn("déjà fait", e["description"])
+        self.assertEqual(eco.roles_donnes, [("Sapin", 7)])
+
+    def test_choix_propose_de_nouveau_si_pas_fait(self):
+        pb, eco, _ = self.ouvrir()
+        ok, embed = run(avent.ouvrir(eco, membre(), 7, maintenant=le(8)))
+        self.assertFalse(ok)
+        self.assertEqual(len(embed["composants"][0]["components"]), 2)
+
+
 async def _j2(pb):
     return pb.d["joueurs"][1]
 

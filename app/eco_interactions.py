@@ -483,7 +483,8 @@ async def _halloween_clic(eco, payload, membre, taches, app_id, morceaux) -> dic
 
 
 async def _avent_clic(eco, payload, membre, taches, app_id, morceaux, valeurs) -> dict:
-    """Calendrier de l'Avent : ouv = ouvrir la fenêtre du jour, rat = rattraper (menu), cal = mon calendrier.
+    """Calendrier de l'Avent : ouv = ouvrir la fenêtre du jour, rat = rattraper (menu), cal = mon calendrier,
+    ch = choisir une récompense au choix.
     Réponses toujours privées (les boutons sont sur un message public)."""
     action = morceaux[2]
     if action == "cal":
@@ -498,9 +499,22 @@ async def _avent_clic(eco, payload, membre, taches, app_id, morceaux, valeurs) -
             except Exception:
                 log.exception("Ouverture d'une fenêtre de l'Avent")
                 embed = eco_vues.erreur(avent.T_ERREUR)
-            await _modifier(app_id, payload["token"], [embed])
+            composants = embed.pop("composants", None)  # boutons d'une récompense au choix
+            await _modifier(app_id, payload["token"], [embed], composants)
         _en_fond(taches, ouverture)
         return {"type": DIFFERE, "data": {"flags": PRIVE}}
+    if action == "ch" and len(morceaux) >= 6:
+        # Récompense au choix : eco:av:ch:<jour>:<ligne>:<option>. Le message privé est remplacé par le résultat.
+        async def choix():
+            salon = membre.guild.get_channel(int(payload["channel_id"])) if payload.get("channel_id") else None
+            try:
+                embed = await avent.choisir(eco, membre, int(morceaux[3]), int(morceaux[4]), int(morceaux[5]), salon)
+            except Exception:
+                log.exception("Choix d'une récompense de l'Avent")
+                embed = eco_vues.erreur(avent.T_ERREUR)
+            await _modifier(app_id, payload["token"], [embed])
+        _en_fond(taches, choix)
+        return {"type": DIFFERE_MAJ}
     return {"type": DIFFERE_MAJ}
 
 
