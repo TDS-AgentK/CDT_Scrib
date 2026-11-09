@@ -75,10 +75,10 @@ async def startup():
     async def on_ready():
         log.info("Économie connectée à Discord en tant que %s", gateway.user)
         synchro_listes()
-        # /session, /attaque (fiches de jeu), /boite-a-role, /info et Halloween (/halloween, /bonbons, /halloween-admin) : déclarées ici, sans toucher aux autres commandes ni relancer
+        # /session, /attaque (fiches de jeu), /boite-a-role, /info et Halloween (/halloween, /bonbons, /halloween-admin), /avent : déclarées ici, sans toucher aux autres commandes ni relancer
         # scripts/register_commands.py à la main.
         from scripts.register_commands import COMMANDS
-        for nom in ("session", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin"):
+        for nom in ("session", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent"):
             try:
                 commande = next(c for c in COMMANDS if c["name"] == nom)
                 if os.getenv("GUILD_ID"):
@@ -116,6 +116,9 @@ async def startup():
     # Rôles gagnés sur le site (ex. récompense d'un record de quiz), donnés comme ceux des loteries.
     from app import roles_site
     asyncio.create_task(roles_site.boucle(economie))
+    # Calendrier de l'Avent (réglages : site › Saisonniers › Calendrier de l'Avent) : annonce de minuit et rappel du soir.
+    from app import avent
+    asyncio.create_task(avent.boucle(economie))
     # Fiches de personnage créées sur le site : envoi, modification et effacement 24 h après (logo contrat du site).
     from app import fiches_site
     asyncio.create_task(fiches_site.boucle(gateway, pocketbase, db))

@@ -131,6 +131,7 @@ COMMANDS = [
     {"name": "receleur", "description": "Voir ce que le Receleur reprend et vend, et vos ventes de la semaine", "options": []},
     # Boutique d'Halloween (app/halloween.py) : monnaie « bonbons », tout se règle sur la page Halloween du site.
     {"name": "halloween", "description": "🎃 Ouvrir la boutique d'Halloween (rôles, objets, roues 👻) payée en bonbons 🍬", "options": []},
+    {"name": "avent", "description": "📅 Ton calendrier des Fêtes de Lanjis", "options": []},
     {"name": "bonbons", "description": "🍬 Voir vos bonbons d'Halloween et les plus gros sacs du serveur", "options": []},
     {
         "name": "halloween-admin", "description": "🎃 Gérer la boutique d'Halloween (gérants : Kyanite, admins)",
