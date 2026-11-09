@@ -11,13 +11,13 @@ import os
 import discord
 import httpx
 
-from app import combat, drop, eco_actions, eco_vues, emblemes, halloween, info, jets_site, loteries, receleur, ros_boutique, sessions_jeu
+from app import avent, combat, drop, eco_actions, eco_vues, emblemes, halloween, info, jets_site, loteries, receleur, ros_boutique, sessions_jeu
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
              "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
-             "session", "recompense", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin"}
+             "session", "recompense", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -130,6 +130,9 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
         return {"type": MESSAGE, "data": await halloween.vue(eco, membre)}
     if nom == "bonbons":
         return {"type": MESSAGE, "data": await halloween.vue_solde(eco, membre)}
+    if nom == "avent":
+        # Calendrier de l'Avent des Fêtes de Lanjis (app/avent.py) : le même que la page /avent du site.
+        return {"type": MESSAGE, "data": await avent.vue_calendrier(eco, membre)}
     if nom == "boite-a-role":
         # Conseiller des Rôles (app/ros_boutique.py) : choix du rôle puis du paiement de la boîte, dans un seul message.
         return {"type": MESSAGE, "data": await ros_boutique.vue_boite(eco, membre)}
@@ -337,6 +340,8 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
         return _maj_v2(await eco_vues.vue_boutique(eco, membre, valeurs[0]))
     if morceaux[1] == "hal":
         return await _halloween_clic(eco, payload, membre, taches, app_id, morceaux)
+    if morceaux[1] == "av":
+        return await _avent_clic(eco, payload, membre, taches, app_id, morceaux, valeurs)
     if morceaux[1] == "cbt":
         # Combat : accepter / refuser (défenseur, éventuellement avec un objet du menu), voter en cas d'égalité,
         # Try again / Échec critique après les jets.
@@ -473,6 +478,28 @@ async def _halloween_clic(eco, payload, membre, taches, app_id, morceaux) -> dic
                 await _webhook("POST", f"https://discord.com/api/v10/webhooks/{app_id}/{payload['token']}",
                                {"content": annonce, "allowed_mentions": {"parse": []}})
         _en_fond(taches, achat)
+        return {"type": DIFFERE, "data": {"flags": PRIVE}}
+    return {"type": DIFFERE_MAJ}
+
+
+async def _avent_clic(eco, payload, membre, taches, app_id, morceaux, valeurs) -> dict:
+    """Calendrier de l'Avent : ouv = ouvrir la fenêtre du jour, rat = rattraper (menu), cal = mon calendrier.
+    Réponses toujours privées (les boutons sont sur un message public)."""
+    action = morceaux[2]
+    if action == "cal":
+        return {"type": MESSAGE, "data": await avent.vue_calendrier(eco, membre)}
+    if action in ("ouv", "rat"):
+        jour = int(valeurs[0]) if action == "rat" and valeurs else None
+
+        async def ouverture():
+            salon = membre.guild.get_channel(int(payload["channel_id"])) if payload.get("channel_id") else None
+            try:
+                _, embed = await avent.ouvrir(eco, membre, jour, salon)
+            except Exception:
+                log.exception("Ouverture d'une fenêtre de l'Avent")
+                embed = eco_vues.erreur(avent.T_ERREUR)
+            await _modifier(app_id, payload["token"], [embed])
+        _en_fond(taches, ouverture)
         return {"type": DIFFERE, "data": {"flags": PRIVE}}
     return {"type": DIFFERE_MAJ}
 
