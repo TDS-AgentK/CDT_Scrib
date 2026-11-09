@@ -58,6 +58,8 @@ T_FERME = "Le calendrier des Fêtes de Lanjis est fermé pour cette année. À l
 T_ERREUR = "La neige a bloqué la fenêtre. Ne pas hésiter à râler sur Kelora pour ses features buguées."
 T_SANS_FICHE = "Aucune fiche joueur liée à ce compte Discord. Lie ton compte sur le site pour ouvrir le calendrier."
 T_RATTRAPAGE_FINI = "Le temps du rattrapage est passé : cette fenêtre est restée fermée."
+T_A_CHOISIR = "En attente du choix du joueur."
+T_DEJA_CHOISI = "Ton choix est déjà fait : le Père Lanjis ne reprend pas ses cadeaux."
 T_BONUS = "Tu as ouvert les 24 fenêtres du village. Le Père Lanjis te laisse un présent de plus."
 T_RAPPEL = "🕯️ Ta fenêtre du jour est encore fermée. Le Père Lanjis passe avant minuit…"
 T_SPECIAUX = {
@@ -189,6 +191,8 @@ def texte_recompense(rec: dict) -> str:
         ou = f" sur {len(rec.get('salons') or [])} salon(s)" if rec.get("salons") else ""
         quand = "jusqu'à minuit" if rec.get("jusqu", "minuit") == "minuit" else f"pendant {rec.get('heures') or 0:g} h"
         return f"{quoi} ×{float(rec.get('facteur') or 1):g}{ou} {quand}"
+    if t == "choix":
+        return "Au choix : " + " ou ".join(o.get("libelle") or "?" for o in rec.get("options") or [])
     return rec.get("objet_nom") or rec.get("libelle") or "?"
 
 
@@ -280,6 +284,10 @@ async def _donner_tout(eco, membre, joueur, recompenses: list[dict], libelle: st
     """Chaque récompense est tentée même si une autre échoue ; le résultat de chacune est noté (suivi du site)."""
     resultats = []
     for rec in recompenses or []:
+        if rec.get("type") == "choix":  # rien n'est donné avant que le joueur choisisse (choisir)
+            resultats.append({**rec, "libelle": texte_recompense(rec), "ok": False, "a_choisir": True,
+                              "erreur": T_A_CHOISIR})
+            continue
         try:
             raison = await appliquer(eco, membre, joueur, rec, libelle, salon)
         except Exception as exc:
@@ -332,6 +340,8 @@ async def ouvrir(eco, membre: discord.Member, jour: int | None = None, salon=Non
             log.exception("Résultat des récompenses de l'Avent non noté")
         frag = await fragment(eco, jour)
         embed = embed_case(jour, case, resultats, frag)
+        if boutons_choix(jour, resultats):
+            embed["composants"] = boutons_choix(jour, resultats)
         bonus = await _bonus_si_merite(eco, membre, joueur, r, aujourdhui, salon, maintenant)
         if bonus:
             embed.setdefault("fields", []).append(bonus)
@@ -365,7 +375,19 @@ async def _bonus_si_merite(eco, membre, joueur, r, aujourdhui, salon, maintenant
 
 def _lignes(resultats: list[dict]) -> str:
     return "\n".join(f"• **{x['libelle']}**" + (f" — ⚠️ pas encore donné ({x['erreur']}) : un gérant s'en occupe."
-                                                 if not x.get("ok") else "") for x in resultats) or "—"
+                                                 if not x.get("ok") and not x.get("a_choisir") else "")
+                     for x in resultats) or "—"
+
+
+def boutons_choix(jour: int, resultats: list[dict]) -> list[dict]:
+    """Une récompense au choix en attente : un bouton par option, à la place de « Empocher le pactole » du site."""
+    for i, x in enumerate(resultats or []):
+        if x.get("a_choisir"):
+            return [{"type": 1, "components": [
+                {"type": 2, "style": 1 if n == 0 else 3, "label": (o.get("libelle") or "?")[:80],
+                 "custom_id": f"eco:av:ch:{jour}:{i}:{n}"}
+                for n, o in enumerate((x.get("options") or [])[:5])]}]
+    return []
 
 
 def embed_case(jour: int, case: dict, resultats: list[dict], frag: dict | None) -> dict:
@@ -376,8 +398,10 @@ def embed_case(jour: int, case: dict, resultats: list[dict], frag: dict | None) 
     else:
         description = f"🎁 {surtitre}"
     description += f"\n\n*{case.get('phrase')}*" if case.get("phrase") else ""
-    if any(not x.get("ok") for x in resultats):
-        description += "\n\n" + _lignes([x for x in resultats if not x.get("ok")])
+    if any(not x.get("ok") and not x.get("a_choisir") for x in resultats):
+        description += "\n\n" + _lignes([x for x in resultats if not x.get("ok") and not x.get("a_choisir")])
+    if any(x.get("a_choisir") for x in resultats):
+        description += "\n\n🎄 **À toi de choisir** ton cadeau avec les boutons ci-dessous."
     embed = {"title": f"❄️ {date_txt(jour).capitalize()} · {case.get('nom') or ''}".rstrip(" ·"),
              "description": description, "color": NEIGE}
     if frag and (frag.get("texte") or "").strip():
@@ -392,7 +416,47 @@ async def _embed_deja(eco, jour: int, ouverture: dict) -> dict:
     if ouverture.get("recompenses"):
         e["description"] += "\n\nElle contenait :\n" + "\n".join(f"• {x.get('libelle') or texte_recompense(x)}"
                                                                for x in ouverture["recompenses"])
+    if boutons_choix(jour, ouverture.get("recompenses")):  # choix pas encore fait : on le propose de nouveau
+        e["description"] += "\n\n🎄 **Ton cadeau t'attend encore** : choisis-le avec les boutons ci-dessous."
+        e["composants"] = boutons_choix(jour, ouverture["recompenses"])
     return e
+
+
+async def choisir(eco, membre: discord.Member, jour: int, ligne: int, option: int, salon=None) -> dict:
+    """Le joueur choisit une option d'une récompense au choix (bouton eco:av:ch). Le site fait de même
+    (api/avent/choisir) : la ligne de l'ouverture passe de a_choisir à choisi, une seule fois."""
+    joueur = await eco.joueur_de(membre)
+    if not joueur:
+        return eco_vues.erreur(T_SANS_FICHE)
+    async with eco._verrou(membre.id):
+        o = await eco.pb.premier("avent_ouvertures", f'joueur="{echapper(joueur["id"])}" && jour={int(jour)}')
+        lignes = list((o or {}).get("recompenses") or [])
+        if not o or ligne >= len(lignes) or lignes[ligne].get("type") != "choix":
+            return eco_vues.erreur(T_ERREUR)
+        x = lignes[ligne]
+        if not x.get("a_choisir"):
+            return eco_vues.erreur(T_DEJA_CHOISI)
+        options = x.get("options") or []
+        if option >= len(options):
+            return eco_vues.erreur(T_ERREUR)
+        choix = options[option]
+        # Noté choisi avant de donner : un second clic (ou le site) ne peut plus donner l'autre option.
+        lignes[ligne] = {**x, "a_choisir": False, "choisi": choix.get("libelle") or "", "ok": False,
+                         "erreur": "Non donnée : ouverture interrompue.", "libelle": choix.get("libelle") or "?"}
+        await eco.pb.maj("avent_ouvertures", o["id"], {"recompenses": lignes})
+        donnes = await _donner_tout(eco, membre, joueur, choix.get("recompenses") or [],
+                                    "case 0" if not jour else f"case {jour}", salon)
+        lignes[ligne] = {**lignes[ligne], "ok": all(d["ok"] for d in donnes),
+                         "erreur": "; ".join(d["erreur"] for d in donnes if d["erreur"]), "donnees": donnes,
+                         "libelle": f"{choix.get('libelle') or '?'} : " + ", ".join(d["libelle"] for d in donnes)}
+        try:
+            await eco.pb.maj("avent_ouvertures", o["id"], {"recompenses": lignes})
+        except Exception:
+            log.exception("Choix de l'Avent non noté")
+    texte = f"🎁 Va pour **{choix.get('libelle')}** : " + ", ".join(f"**{d['libelle']}**" for d in donnes) + "."
+    if any(not d["ok"] for d in donnes):
+        texte += "\n\n" + _lignes([d for d in donnes if not d["ok"]])
+    return {"title": f"❄️ {date_txt(jour).capitalize()}", "description": texte, "color": NEIGE}
 
 
 # ---------------------------------------------------------------- vues
