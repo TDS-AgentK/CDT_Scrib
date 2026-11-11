@@ -1,6 +1,7 @@
-"""Phases des deux lunes (Davos la rouge, Amarante), copie du calcul du site (src/lib/lunesCalcul.ts, repris du
-masterPage.js de Wix) : jour lunaire en UTC pur, date du jour ramenée à l'année 1255, compté depuis le 1er janvier -7000
-(calendrier grégorien proleptique, comme Date.UTC en JavaScript). tests/lunes_reference.json est produit par le site
+"""Phases des deux lunes (Davos la rouge, Amarante), copie du calcul du site (src/lib/lunesCalcul.ts, d'après le
+masterPage.js de Wix, revu le 11/11/2026) : jour lunaire CONTINU, compté depuis le 1er janvier -7000 (calendrier grégorien
+proleptique, comme Date.UTC en JavaScript) jusqu'à la date en jeu — le 1er janvier 2026 réel est le 1er Sanfio 1257,
+le 10/11/2026 le 10 Amoria 1257 (j = 3016121) — puis +1 par jour réel UTC. Périodes : Davos 12,8 jours, Amarante 42,4. tests/lunes_reference.json est produit par le site
 (tests/lunes.test.ts) : tests/test_lunes.py vérifie que les deux calculs donnent les mêmes phases."""
 import math
 from datetime import date, datetime, timedelta, timezone
@@ -21,6 +22,9 @@ def _jours_civils(a: int, m: int, j: int) -> int:
 
 
 _REF = _jours_civils(-7000, 1, 1)
+# Jours du 1er janvier -7000 au 1er janvier 1257 (= 1er janvier 2026 réel).
+J_ANCRE = _jours_civils(1257, 1, 1) - _REF
+_ANCRE_REELLE = date(2026, 1, 1)
 
 
 def _jour_utc(quand: datetime | date | None) -> date:
@@ -32,15 +36,13 @@ def _jour_utc(quand: datetime | date | None) -> date:
 
 
 def jour_lunaire(quand: datetime | date | None = None) -> int:
-    d = _jour_utc(quand)
-    # Date.UTC(1255, mois, jour) : un 29 février devient le 1er mars (1255 n'est pas bissextile).
-    return _jours_civils(1255, d.month, 1) + d.day - 1 - _REF
+    return J_ANCRE + (_jour_utc(quand) - _ANCRE_REELLE).days
 
 
-def pourcentage(nom: str, j: int) -> float:
+def pourcentage(nom: str, j: float) -> float:
     if nom == DAVOS:
-        return (math.sin((j + 1) * 2 * math.pi / 13) + 1) / 2 * 100
-    return (math.sin((j + 1) * 2.1 * math.pi / 43) + 1) / 2 * 100
+        return (math.sin((j + 1) * 2 * math.pi / 12.8) + 1) / 2 * 100
+    return (math.sin((j + 1) * 2 * math.pi / 42.4) + 1) / 2 * 100
 
 
 def phase(cur: float, prev: float, nxt: float) -> str:
@@ -97,3 +99,38 @@ def prochaines_pleines_lunes(nom: str, depuis: datetime | date | None = None, n:
     if cours and len(out) < n:
         out.append(cours)
     return out
+
+
+def instant(nom: str, quand: datetime | None = None) -> tuple[float, bool, str]:
+    """Pourcentage à l'heure près (comme l'en-tête du site : jf = j + heure UTC / 24 - 0,5), sens (croissante) et phase
+    écrite du jour."""
+    if quand is None:
+        quand = datetime.now(timezone.utc)
+    quand = (quand if quand.tzinfo else quand.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
+    j = jour_lunaire(quand)
+    jf = j + (quand.hour + quand.minute / 60 + quand.second / 3600) / 24 - 0.5
+    cur = pourcentage(nom, jf)
+    return cur, pourcentage(nom, jf + 0.05) >= pourcentage(nom, jf - 0.05), etat(nom, quand)[1]
+
+
+def emoji_phase(p: float, croissante: bool, phase_jour: str = "") -> str:
+    if phase_jour == "Nouvelle lune" or (not phase_jour and p < 6):
+        return "🌑"
+    if phase_jour == "Pleine lune" or (not phase_jour and p > 95):
+        return "🌕"
+    if croissante:
+        return "🌒" if p < 35 else "🌓" if p <= 65 else "🌔"
+    return "🌘" if p < 35 else "🌗" if p <= 65 else "🌖"
+
+
+def texte_statut(quand: datetime | None = None) -> str:
+    """Statut Discord du bot : « 🌔 Davos 40 % · 🌖 Amarante 35 % », avec « (Pleine lune) » / « (Nouvelle lune) »
+    pour une lune pleine ou nouvelle ce jour-là (moins de 128 caractères)."""
+    parts = []
+    for nom in (DAVOS, AMARANTE):
+        p, croissante, ph = instant(nom, quand)
+        texte = f"{emoji_phase(p, croissante, ph)} {nom} {round(p)} %"
+        if ph in ("Pleine lune", "Nouvelle lune"):
+            texte += f" ({ph})"
+        parts.append(texte)
+    return " · ".join(parts)[:128]

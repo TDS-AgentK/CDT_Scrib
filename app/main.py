@@ -88,6 +88,28 @@ async def startup():
             except Exception:
                 log.exception("Impossible de déclarer la commande /%s", nom)
 
+    # Statut du bot : état des deux lunes (« 🌗 Davos 40 % · 🌓 Amarante 35 % »), au démarrage puis toutes les 30 min,
+    # changé seulement quand le texte change (app/lunes.py, même calcul que l'en-tête du site).
+    from discord.ext import tasks
+
+    from app import lunes as lunes_statut
+    dernier_statut = {"texte": None}
+
+    @tasks.loop(minutes=30)
+    async def statut_lunes():
+        try:  # une erreur ne doit pas arrêter la boucle : on réessaie au tour suivant
+            texte = lunes_statut.texte_statut()
+            if texte != dernier_statut["texte"]:
+                await gateway.change_presence(activity=discord.CustomActivity(name=texte))
+                dernier_statut["texte"] = texte
+        except Exception:
+            log.exception("Statut des lunes : échec")
+
+    @statut_lunes.before_loop
+    async def statut_lunes_attente():
+        await gateway.wait_until_ready()
+
+    statut_lunes.start()
     asyncio.create_task(gateway.start(DISCORD_TOKEN))
     asyncio.create_task(economie.boucle_roles_temporaires())
     asyncio.create_task(economie.boucle_niveaux())

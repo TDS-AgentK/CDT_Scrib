@@ -28,27 +28,30 @@ class MemeCalculQueLeSite(unittest.TestCase):
 
     def test_jour_utc(self):
         # 23 h 30 à Paris le 29/10 = 22 h 30 UTC, même jour ; une heure sans fuseau est prise en UTC.
-        self.assertEqual(lunes.jour_lunaire(datetime(2026, 10, 29, 22, 30, tzinfo=timezone.utc)), lunes.jour_lunaire(date(2026, 10, 29)))
-        self.assertEqual(lunes.jour_lunaire(datetime(2026, 10, 29, 23, 59)), lunes.jour_lunaire(date(2026, 10, 29)))
-        self.assertEqual(lunes.jour_lunaire(date(2028, 2, 29)), lunes.jour_lunaire(date(2028, 3, 1)))
+        self.assertEqual(lunes.jour_lunaire(datetime(2026, 12, 2, 22, 30, tzinfo=timezone.utc)), lunes.jour_lunaire(date(2026, 12, 2)))
+        self.assertEqual(lunes.jour_lunaire(datetime(2026, 12, 2, 23, 59)), lunes.jour_lunaire(date(2026, 12, 2)))
+        # Jour continu : +1 par jour réel, sans retour en arrière au 1er janvier ni doublon au 29 février.
+        self.assertEqual(lunes.jour_lunaire(date(2026, 11, 10)), 3016121)
+        self.assertEqual(lunes.jour_lunaire(date(2028, 3, 1)) - lunes.jour_lunaire(date(2028, 2, 29)), 1)
+        self.assertEqual(lunes.jour_lunaire(date(2027, 1, 1)) - lunes.jour_lunaire(date(2026, 12, 31)), 1)
 
     def test_prochaines_pleines_lunes(self):
-        self.assertEqual(lunes.prochaines_pleines_lunes(lunes.DAVOS, date(2026, 10, 21), 2),
-                         [(date(2026, 10, 29), date(2026, 10, 30)), (date(2026, 11, 11), date(2026, 11, 12))])
-        self.assertEqual(lunes.prochaines_pleines_lunes(lunes.AMARANTE, date(2026, 10, 21), 1), [(date(2026, 10, 23), date(2026, 10, 27))])
+        self.assertEqual(lunes.prochaines_pleines_lunes(lunes.DAVOS, date(2026, 11, 10), 2),
+                         [(date(2026, 11, 19), date(2026, 11, 20)), (date(2026, 12, 2), date(2026, 12, 2))])
+        self.assertEqual(lunes.prochaines_pleines_lunes(lunes.AMARANTE, date(2026, 11, 10), 1), [(date(2026, 11, 20), date(2026, 11, 25))])
 
 
 class Disponibilite(unittest.TestCase):
     def test_disponible_et_mention(self):
         davos = {"disponibilite": "pleine_lune_davos"}
         amarante = {"disponibilite": "pleine_lune_amarante"}
-        self.assertTrue(lunes.disponible({}, date(2026, 10, 21)))
-        self.assertTrue(lunes.disponible({"disponibilite": "toujours"}, date(2026, 10, 21)))
-        self.assertTrue(lunes.disponible({"disponibilite": ""}, date(2026, 10, 21)))
-        self.assertFalse(lunes.disponible(davos, date(2026, 10, 21)))
-        self.assertTrue(lunes.disponible(davos, date(2026, 10, 29)))
-        self.assertTrue(lunes.disponible(amarante, date(2026, 10, 25)))
-        self.assertFalse(lunes.disponible(amarante, date(2026, 10, 29)))
+        self.assertTrue(lunes.disponible({}, date(2026, 11, 10)))
+        self.assertTrue(lunes.disponible({"disponibilite": "toujours"}, date(2026, 11, 10)))
+        self.assertTrue(lunes.disponible({"disponibilite": ""}, date(2026, 11, 10)))
+        self.assertFalse(lunes.disponible(davos, date(2026, 11, 10)))
+        self.assertTrue(lunes.disponible(davos, date(2026, 12, 2)))
+        self.assertTrue(lunes.disponible(amarante, date(2026, 11, 22)))
+        self.assertFalse(lunes.disponible(amarante, date(2026, 12, 2)))
         self.assertEqual(lunes.mention(davos), "🌕 Pleine lune de Davos")
         self.assertEqual(lunes.mention(amarante), "🌕 Pleine lune d'Amarante")
         self.assertEqual(lunes.mention({"disponibilite": "toujours"}), "")
@@ -79,12 +82,12 @@ class BoutiqueRostheim(unittest.TestCase):
             return [r["libelle"] for r in asyncio.run(ros_boutique.articles(faux_eco(), DOMAINE))]
 
     def test_articles_masques_hors_pleine_lune(self):
-        self.assertEqual(self.libelles(date(2026, 10, 21)), ["Gagner 10 XP"])
-        self.assertEqual(self.libelles(date(2026, 10, 25)), ["Gagner 10 XP", "Gagner 30 XP"])
-        self.assertEqual(self.libelles(date(2026, 10, 29)), ["Gagner 10 XP", "Gagner 20 XP"])
+        self.assertEqual(self.libelles(date(2026, 11, 10)), ["Gagner 10 XP"])
+        self.assertEqual(self.libelles(date(2026, 11, 22)), ["Gagner 10 XP", "Gagner 30 XP"])
+        self.assertEqual(self.libelles(date(2026, 12, 2)), ["Gagner 10 XP", "Gagner 20 XP"])
 
     def test_mention_dans_la_vue(self):
-        with mock.patch.object(lunes, "_jour_utc", lambda q: date(2026, 10, 29)), \
+        with mock.patch.object(lunes, "_jour_utc", lambda q: date(2026, 12, 2)), \
                 mock.patch.object(ros_boutique.eco_vues, "options_boutiques", mock.AsyncMock(return_value=[])):
             vue = asyncio.run(ros_boutique.vue(faux_eco(), SimpleNamespace(id=1), "r_d1"))
         textes = json.dumps(vue, ensure_ascii=False)
@@ -92,14 +95,14 @@ class BoutiqueRostheim(unittest.TestCase):
         self.assertNotIn("Gagner 30 XP", textes)
 
     def test_achat_refuse_hors_pleine_lune(self):
-        with mock.patch.object(lunes, "_jour_utc", lambda q: date(2026, 10, 21)):
+        with mock.patch.object(lunes, "_jour_utc", lambda q: date(2026, 11, 10)):
             ok, txt = asyncio.run(ros_boutique.acheter(faux_eco(), SimpleNamespace(id=1), "d1", "r2"))
         self.assertFalse(ok)
         self.assertEqual(txt, "Cette récompense ne s'achète que pendant la pleine lune de Davos.")
 
     def test_achat_accepte_pendant_la_pleine_lune(self):
         # La vérification de lune passe : l'achat va plus loin (ici, faute de fiche joueur).
-        with mock.patch.object(lunes, "_jour_utc", lambda q: date(2026, 10, 29)):
+        with mock.patch.object(lunes, "_jour_utc", lambda q: date(2026, 12, 2)):
             ok, txt = asyncio.run(ros_boutique.acheter(faux_eco(), SimpleNamespace(id=1), "d1", "r2"))
         self.assertFalse(ok)
         self.assertEqual(txt, "Aucune fiche joueur liée à ce compte Discord.")
@@ -167,23 +170,42 @@ class BoutiqueNormale(unittest.TestCase):
             return json.dumps(asyncio.run(eco_vues.vue_boutique(eco, None, "b1")), ensure_ascii=False)
 
     def test_masque_hors_pleine_lune_et_mention(self):
-        v = self.vue(date(2026, 10, 21))
+        v = self.vue(date(2026, 11, 10))
         self.assertIn("Bonbon", v)
         self.assertNotIn("Lanterne rouge", v)
         self.assertNotIn("Voile d'argent", v)
-        v = self.vue(date(2026, 10, 29))
+        v = self.vue(date(2026, 12, 2))
         self.assertIn("Lanterne rouge", v)
         self.assertIn("🌕 Pleine lune de Davos", v)
         self.assertNotIn("Voile d'argent", v)
-        self.assertIn("🌕 Pleine lune d'Amarante", self.vue(date(2026, 10, 25)))
+        self.assertIn("🌕 Pleine lune d'Amarante", self.vue(date(2026, 11, 22)))
 
     def test_achat_refuse_hors_pleine_lune(self):
         from app.economie import Economie
         eco = SimpleNamespace(config=mock.AsyncMock(return_value={"boutiques": []}), _boutiques_accessibles=lambda c, m: [{"id": "b1"}],
                               _verrou=lambda i: _Verrou(), joueur_de=mock.AsyncMock(return_value={"id": "j1", "eco_or": 100}),
                               pb=SimpleNamespace(requete=mock.AsyncMock(return_value=dict(self.ARTICLES[2])), maj=mock.AsyncMock()))
-        with mock.patch.object(lunes, "_jour_utc", lambda q: date(2026, 10, 21)):
+        with mock.patch.object(lunes, "_jour_utc", lambda q: date(2026, 11, 10)):
             ok, txt = asyncio.run(Economie.acheter(eco, SimpleNamespace(id=1), {"id": "b1"}, {"id": "a3"}, "", 1))
         self.assertFalse(ok)
         self.assertEqual(txt, "Cet article ne s'achète que pendant la pleine lune d'Amarante.")
         eco.pb.maj.assert_not_awaited()
+
+
+class StatutDiscord(unittest.TestCase):
+    def test_texte_statut(self):
+        # 10/11/2026 à midi UTC : valeurs officielles du jour (Davos 40,2 % décroissante, Amarante 35,4 % croissante).
+        self.assertEqual(lunes.texte_statut(datetime(2026, 11, 10, 12, tzinfo=timezone.utc)), "🌗 Davos 40 % · 🌓 Amarante 35 %")
+        # Pleine lune d'Amarante écrite en toutes lettres.
+        self.assertEqual(lunes.texte_statut(datetime(2026, 11, 22, 12, tzinfo=timezone.utc)), "🌗 Davos 60 % · 🌕 Amarante 100 % (Pleine lune)")
+        self.assertLess(len(lunes.texte_statut()), 128)
+
+    def test_emoji_phase(self):
+        self.assertEqual(lunes.emoji_phase(3, True), "🌑")
+        self.assertEqual(lunes.emoji_phase(97, False), "🌕")
+        self.assertEqual(lunes.emoji_phase(20, True), "🌒")
+        self.assertEqual(lunes.emoji_phase(50, True), "🌓")
+        self.assertEqual(lunes.emoji_phase(80, True), "🌔")
+        self.assertEqual(lunes.emoji_phase(80, False), "🌖")
+        self.assertEqual(lunes.emoji_phase(50, False), "🌗")
+        self.assertEqual(lunes.emoji_phase(20, False), "🌘")
