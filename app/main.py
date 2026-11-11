@@ -74,6 +74,13 @@ async def startup():
     @gateway.event
     async def on_ready():
         log.info("Économie connectée à Discord en tant que %s", gateway.user)
+        # Statut des lunes : lancé une fois le bot connecté (wait_until_ready ne marche pas avant la connexion) ;
+        # après une reconnexion, remis tout de suite au cas où Discord l'aurait oublié.
+        dernier_statut["texte"] = None
+        if statut_lunes.is_running():
+            statut_lunes.restart()
+        else:
+            statut_lunes.start()
         synchro_listes()
         # /session, /attaque (fiches de jeu), /boite-a-role, /info et Halloween (/halloween, /bonbons, /halloween-admin), /avent : déclarées ici, sans toucher aux autres commandes ni relancer
         # scripts/register_commands.py à la main.
@@ -105,11 +112,6 @@ async def startup():
         except Exception:
             log.exception("Statut des lunes : échec")
 
-    @statut_lunes.before_loop
-    async def statut_lunes_attente():
-        await gateway.wait_until_ready()
-
-    statut_lunes.start()
     asyncio.create_task(gateway.start(DISCORD_TOKEN))
     asyncio.create_task(economie.boucle_roles_temporaires())
     asyncio.create_task(economie.boucle_niveaux())
