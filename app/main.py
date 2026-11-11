@@ -109,6 +109,7 @@ async def startup():
             if texte != dernier_statut["texte"]:
                 await gateway.change_presence(activity=discord.CustomActivity(name=texte))
                 dernier_statut["texte"] = texte
+                log.info("Statut des lunes : %s", texte)
         except Exception:
             log.exception("Statut des lunes : échec")
 
