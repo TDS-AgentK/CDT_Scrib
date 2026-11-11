@@ -3,6 +3,7 @@
 Le bot s'authentifie comme superuser (compte dédié conseillé) : les collections eco_* n'ont aucune règle
 publique. Identifiants uniquement par variables d'environnement (PB_URL, PB_EMAIL, PB_PASSWORD).
 """
+import asyncio
 import logging
 import time
 
@@ -23,6 +24,9 @@ class PocketBase:
         self.password = password
         self._jeton = None
         self._expire = 0.0
+        # Une seule connexion admin à la fois : au démarrage, une quinzaine de boucles demandent un jeton en même temps
+        # et PocketBase refusait les logins simultanés (429 Too Many Requests).
+        self._verrou_auth = asyncio.Lock()
         self._client = httpx.AsyncClient(timeout=15)
 
     async def close(self):
@@ -31,14 +35,18 @@ class PocketBase:
     async def _auth(self) -> str:
         if self._jeton and time.time() < self._expire:
             return self._jeton
-        resp = await self._client.post(
-            f"{self.url}/api/collections/_superusers/auth-with-password",
-            json={"identity": self.email, "password": self.password},
-        )
-        resp.raise_for_status()
-        self._jeton = resp.json()["token"]
-        self._expire = time.time() + 15 * 60  # rafraîchi bien avant l'expiration réelle
-        return self._jeton
+        async with self._verrou_auth:
+            # Une autre tâche a pu obtenir le jeton pendant qu'on attendait le verrou : on le réutilise.
+            if self._jeton and time.time() < self._expire:
+                return self._jeton
+            resp = await self._client.post(
+                f"{self.url}/api/collections/_superusers/auth-with-password",
+                json={"identity": self.email, "password": self.password},
+            )
+            resp.raise_for_status()
+            self._jeton = resp.json()["token"]
+            self._expire = time.time() + 15 * 60  # rafraîchi bien avant l'expiration réelle
+            return self._jeton
 
     async def requete(self, methode: str, chemin: str, json=None, params=None):
         resp = await self._client.request(
