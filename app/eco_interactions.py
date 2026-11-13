@@ -11,13 +11,14 @@ import os
 import discord
 import httpx
 
-from app import avent, combat, drop, eco_actions, eco_vues, emblemes, halloween, info, jets_site, loteries, receleur, ros_boutique, sessions_jeu
+from app import avent, combat, drop, eco_actions, eco_vues, emblemes, halloween, info, jets_site, loteries, receleur, ros_boutique, rp_demandes, sessions_jeu
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
              "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
-             "session", "recompense", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent"}
+             "session", "recompense", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent",
+             "proposer-rp", "je-veux-rp"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -133,6 +134,9 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
     if nom == "avent":
         # Calendrier de l'Avent des Fêtes de Lanjis (app/avent.py) : le même que la page /avent du site.
         return {"type": MESSAGE, "data": await avent.vue_calendrier(eco, membre)}
+    if nom == "proposer-rp":
+        # Liste des RP (app/rp_demandes.py) : la fenêtre « Proposer un RP » s'ouvre tout de suite (pas de réponse différée).
+        return await rp_demandes.commande_proposer(eco, membre, data)
     if nom == "boite-a-role":
         # Conseiller des Rôles (app/ros_boutique.py) : choix du rôle puis du paiement de la boîte, dans un seul message.
         return {"type": MESSAGE, "data": await ros_boutique.vue_boite(eco, membre)}
@@ -248,6 +252,10 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             await _modifier(app_id, jeton, [eco_vues.resultat(True, "C'est enregistré.")])
             return await _webhook("POST", f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}",
                                   {"content": f"{membre.mention} {txt}", "allowed_mentions": {"parse": ["users"]}})
+        if nom == "je-veux-rp":
+            cle = opt.get("categorie") or ""
+            vue = rp_demandes.vue_tirage(await rp_demandes.candidats(eco.pb, cle), cle)
+            return await _modifier(app_id, jeton, vue["embeds"], vue["components"])
         if nom == "utiliser":
             o = await eco_actions.objet_par_nom(eco, opt.get("objet") or "")
             if emblemes.type_de(o):
@@ -338,6 +346,8 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
         return _maj_v2(eco_vues.boutique_fermee())
     if cid == "eco:shop":
         return _maj_v2(await eco_vues.vue_boutique(eco, membre, valeurs[0]))
+    if morceaux[1] == "rp":
+        return await _rp_clic(eco, payload, membre, taches, app_id, morceaux)
     if morceaux[1] == "hal":
         return await _halloween_clic(eco, payload, membre, taches, app_id, morceaux)
     if morceaux[1] == "av":
@@ -459,6 +469,38 @@ async def _poster_salon(channel_id, corps: dict) -> bool:
         return False
 
 
+async def _rp_clic(eco, payload, membre, taches, app_id, morceaux) -> dict:
+    """Liste des RP : g = « Gérer » sous l'annonce (privé, auteur et admins), a = action du message de gestion,
+    t = « Un autre » de /je-veux-rp (eco:rp:t:<catégorie ou ->:<ID exclu>)."""
+    action, jeton = morceaux[2], payload["token"]
+    if action == "g" and len(morceaux) > 3:
+        fiche = await rp_demandes.lire_fiche(eco.pb, morceaux[3])
+        if not fiche:
+            return {"type": MESSAGE, "data": {"embeds": [eco_vues.erreur("Ce RP n'existe plus.")], "flags": PRIVE}}
+        if not rp_demandes.peut_gerer(membre, fiche):
+            return {"type": MESSAGE, "data": {"embeds": [eco_vues.erreur("Seuls l'auteur du RP et les administrateurs peuvent le gérer.")], "flags": PRIVE}}
+        return {"type": MESSAGE, "data": rp_demandes.vue_gestion(fiche)}
+    if action == "a" and len(morceaux) > 4:
+        async def appliquer():
+            ok, txt, fiche = await rp_demandes.appliquer(eco, membre, morceaux[3], morceaux[4])
+            if not ok:
+                return await _modifier(app_id, jeton, [eco_vues.erreur(txt)])
+            vue = rp_demandes.vue_gestion(fiche)
+            vue["embeds"][0]["description"] = f"✅ {txt}\n" + vue["embeds"][0]["description"]
+            await _modifier(app_id, jeton, vue["embeds"], vue["components"])
+        _en_fond(taches, appliquer)
+        return {"type": DIFFERE_MAJ}
+    if action == "t" and len(morceaux) > 4:
+        cle = "" if morceaux[3] == "-" else morceaux[3]
+
+        async def autre():
+            vue = rp_demandes.vue_tirage(await rp_demandes.candidats(eco.pb, cle), cle, morceaux[4])
+            await _modifier(app_id, jeton, vue["embeds"], vue["components"])
+        _en_fond(taches, autre)
+        return {"type": DIFFERE_MAJ}
+    return {"type": DIFFERE_MAJ}
+
+
 async def _halloween_clic(eco, payload, membre, taches, app_id, morceaux) -> dict:
     """Boutons d'Halloween : v = vitrine publique (ouvre un message privé), pg = pages et filtre, sol = solde, buy = achat."""
     action = morceaux[2]
@@ -550,6 +592,17 @@ async def _fenetre(eco, payload, membre, taches, app_id) -> dict:
                 if c.get("custom_id") == "precision":
                     precision = (c.get("value") or "").strip()
         _en_fond(taches, _achat_ros, eco, payload, membre, app_id, morceaux[2], morceaux[3], precision)
+        return {"type": DIFFERE, "data": {"flags": PRIVE}}
+    if morceaux[1] == "rpm":
+        # Fenêtre « Proposer un RP » (app/rp_demandes.py) : fiche, illustration et annonce en arrière-plan.
+        async def proposer():
+            try:
+                ok, txt = await rp_demandes.envoyer_proposition(eco, membre, payload)
+            except Exception:
+                log.exception("Proposition de RP")
+                ok, txt = False, "La proposition n'a pas pu être enregistrée : réessayez dans un instant."
+            await _modifier(app_id, payload["token"], [eco_vues.resultat(ok, txt)])
+        _en_fond(taches, proposer)
         return {"type": DIFFERE, "data": {"flags": PRIVE}}
     if morceaux[1] != "buyq":
         return {"type": DIFFERE_MAJ}

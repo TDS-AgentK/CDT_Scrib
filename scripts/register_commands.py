@@ -20,6 +20,11 @@ SECTION_CHOICES = [
     {"name": "Apparence", "value": "apparence"},
 ]
 
+# Catégories de la Liste des RP (mêmes clés que app/rp_demandes.py et lib/rpDemandes.ts du site).
+CATEGORIES_RP = [{"name": "RP découverte", "value": "decouverte"}, {"name": "RP aventure", "value": "aventure"},
+                 {"name": "RP bavard", "value": "bavard"}, {"name": "RP wtf am I doin'", "value": "wtf"},
+                 {"name": "RP maaaagic", "value": "magie"}]
+
 COMMANDS = [
     {"name": "info", "description": "Résumé de toutes les commandes du bot", "options": []},
     {
@@ -250,6 +255,19 @@ COMMANDS = [
             {"type": 3, "name": "recoit_monnaie", "description": "Monnaie Rostheim que vous voulez recevoir", "required": False, "autocomplete": True},
             {"type": 4, "name": "recoit_montant", "description": "Montant de cette monnaie", "required": False, "min_value": 1},
         ],
+    },
+    {
+        # Liste des RP (app/rp_demandes.py, page /liste-des-rp du site) : proposer un RP, tirer un RP prêt au hasard.
+        "name": "proposer-rp", "description": "Proposer un RP (annoncé sur Discord et ajouté à la Liste des RP du site)",
+        "options": [
+            {"type": 3, "name": "categorie", "description": "Catégorie du RP", "required": True, "choices": CATEGORIES_RP},
+            {"type": 5, "name": "chroniqueur-pret", "description": "Un chroniqueur est déjà prêt à le mener (non par défaut)", "required": False},
+            {"type": 11, "name": "illustration", "description": "Image d'illustration (facultatif)", "required": False},
+        ],
+    },
+    {
+        "name": "je-veux-rp", "description": "Tirer au hasard un RP proposé dont le chroniqueur est prêt",
+        "options": [{"type": 3, "name": "categorie", "description": "Seulement cette catégorie (facultatif)", "required": False, "choices": CATEGORIES_RP}],
     },
 ]
 

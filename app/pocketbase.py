@@ -84,5 +84,15 @@ class PocketBase:
     async def maj(self, collection: str, id_: str, donnees: dict) -> dict:
         return await self.requete("PATCH", f"/api/collections/{collection}/records/{id_}", json=donnees)
 
+    async def envoyer_fichier(self, collection: str, id_: str, champ: str, nom: str, contenu: bytes, type_mime: str) -> dict:
+        """Remplace le fichier d'un champ « file » (envoi multipart) ; renvoie la fiche à jour."""
+        resp = await self._client.patch(
+            f"{self.url}/api/collections/{collection}/records/{id_}",
+            files={champ: (nom, contenu, type_mime)}, headers={"Authorization": await self._auth()}, timeout=30,
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"PocketBase envoi de fichier {collection}/{id_} -> {resp.status_code} {resp.text}")
+        return resp.json()
+
     async def supprimer(self, collection: str, id_: str):
         return await self.requete("DELETE", f"/api/collections/{collection}/records/{id_}")

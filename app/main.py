@@ -82,10 +82,12 @@ async def startup():
         else:
             statut_lunes.start()
         synchro_listes()
-        # /session, /attaque (fiches de jeu), /boite-a-role, /info et Halloween (/halloween, /bonbons, /halloween-admin), /avent : déclarées ici, sans toucher aux autres commandes ni relancer
+        # /session, /attaque (fiches de jeu), /boite-a-role, /info et Halloween (/halloween, /bonbons, /halloween-admin), /avent,
+        # /proposer-rp et /je-veux-rp (Liste des RP) : déclarées ici, sans toucher aux autres commandes ni relancer
         # scripts/register_commands.py à la main.
         from scripts.register_commands import COMMANDS
-        for nom in ("session", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent"):
+        for nom in ("session", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent",
+                    "proposer-rp", "je-veux-rp"):
             try:
                 commande = next(c for c in COMMANDS if c["name"] == nom)
                 if os.getenv("GUILD_ID"):
@@ -151,6 +153,9 @@ async def startup():
     from app import combat
     # Tout passe par la base partagée (comme Rostheim) : aucune variable à poser.
     asyncio.create_task(combat.boucle(gateway, pocketbase))
+    # Liste des RP (/proposer-rp) : annonces Discord remises à jour quand la fiche change sur le site (~1 min).
+    from app import rp_demandes
+    asyncio.create_task(rp_demandes.boucle(economie))
 
 
 def fiches_site_lecture():
