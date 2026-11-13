@@ -143,6 +143,9 @@ async def startup():
     # Rôles gagnés sur le site (ex. récompense d'un record de quiz), donnés comme ceux des loteries.
     from app import roles_site
     asyncio.create_task(roles_site.boucle(economie))
+    # Rôles Discord de chaque joueur recopiés dans sa fiche (bonus de rôle appliqués aux missives du site).
+    from app import roles_joueurs
+    asyncio.create_task(roles_joueurs.boucle(economie))
     # Calendrier de l'Avent (réglages : site › Saisonniers › Calendrier de l'Avent) : annonce de minuit et rappel du soir.
     from app import avent
     asyncio.create_task(avent.boucle(economie))

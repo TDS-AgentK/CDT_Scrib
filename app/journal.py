@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 import discord
 
+from app import roles_joueurs
 from app.pocketbase import echapper
 
 log = logging.getLogger("cdt_scrib.journal")
@@ -83,10 +84,13 @@ def brancher(client: discord.Client, eco):
 
     async def on_member_update(avant, apres):
         if suivi(apres.guild) and avant.roles != apres.roles:
+            # Rôles recopiés dans la fiche joueur (bonus de rôle des missives du site), avant l'attente du journal d'audit.
+            await roles_joueurs.noter(eco, apres)
             await roles_changes(eco, avant, apres)
 
     async def on_member_join(membre):
         if suivi(membre.guild):
+            await roles_joueurs.noter(eco, membre)
             await noter(eco.pb, "arrivee", "arrivée sur le serveur", await _joueur(eco, membre), **_membre(membre))
 
     async def on_member_remove(membre):
