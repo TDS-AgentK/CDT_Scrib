@@ -51,7 +51,7 @@ CATEGORIES = {
     "bavard": ("RP bavard", 0x8FB8E6, "💬"),
     "wtf": ("RP wtf am I doin'", 0xE98FB0, "🌀"),
     "magie": ("RP maaaagic", 0xB9A0F2, "✨"),
-    "bagarre": ("RP bagarr", 0xE0665A, "👊"),  # orthographe de K (13/11/2026)
+    "bagarre": ("RP bagarr", 0xE0665A, "🥊"),  # orthographe de K (13/11/2026)
 }
 
 

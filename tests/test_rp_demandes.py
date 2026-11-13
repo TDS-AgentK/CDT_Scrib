@@ -275,7 +275,7 @@ class TriTest(unittest.TestCase):
         self.assertEqual(len(v["components"]), 5)  # 4 menus + rangée de pages
         self.assertEqual(v["components"][0]["components"][0]["custom_id"], "eco:rp:c:t00000000000004:1")
         self.assertEqual(len(v["components"][0]["components"][0]["options"]), 6)
-        self.assertEqual(rp.categorie("bagarre"), ("RP bagarr", 0xE0665A, "👊"))
+        self.assertEqual(rp.categorie("bagarre"), ("RP bagarr", 0xE0665A, "🥊"))
         nav = v["components"][-1]["components"]
         self.assertEqual((nav[0]["custom_id"], nav[1]["label"], nav[2]["custom_id"]), ("eco:rp:tri:0", "Page 2/3", "eco:rp:tri:2"))
         self.assertEqual(rp.vue_tri([])["embeds"][0]["title"], "Rien à trier, merci !")
