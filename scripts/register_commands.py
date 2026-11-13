@@ -23,7 +23,7 @@ SECTION_CHOICES = [
 # Catégories de la Liste des RP (mêmes clés que app/rp_demandes.py et lib/rpDemandes.ts du site).
 CATEGORIES_RP = [{"name": "RP découverte", "value": "decouverte"}, {"name": "RP aventure", "value": "aventure"},
                  {"name": "RP bavard", "value": "bavard"}, {"name": "RP wtf am I doin'", "value": "wtf"},
-                 {"name": "RP maaaagic", "value": "magie"}]
+                 {"name": "RP maaaagic", "value": "magie"}, {"name": "RP bagarr", "value": "bagarre"}]
 
 COMMANDS = [
     {"name": "info", "description": "Résumé de toutes les commandes du bot", "options": []},

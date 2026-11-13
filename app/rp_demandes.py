@@ -14,7 +14,7 @@ Collection `rp_demandes` du site (scripts/setup-rp-demandes.mjs) : le bot écrit
 - /je-veux-rp [categorie] : tire au hasard un RP proposé dont le chroniqueur est prêt ; « Un autre » retire sans
   retomber sur le même (ID exclu dans le custom_id).
 - /rp-a-trier (admins) : message public qui mentionne les auteurs de RP sans catégorie, bouton « Trier mes RP » ; le
-  bouton ouvre en privé la liste de ses RP à trier, un menu des 5 catégories par RP (5 par page, sans état mémoire).
+  bouton ouvre en privé la liste de ses RP à trier, un menu des catégories par RP (5 par page, sans état mémoire).
 - Boucle (1 min) : annonces des fiches modifiées depuis le site (statut, chroniqueur, titre…) remises à jour ;
   une fiche annulée laisse une annonce grisée et barrée, sans boutons.
 
@@ -51,6 +51,7 @@ CATEGORIES = {
     "bavard": ("RP bavard", 0x8FB8E6, "💬"),
     "wtf": ("RP wtf am I doin'", 0xE98FB0, "🌀"),
     "magie": ("RP maaaagic", 0xB9A0F2, "✨"),
+    "bagarre": ("RP bagarr", 0xE0665A, "👊"),  # orthographe de K (13/11/2026)
 }
 
 
@@ -390,7 +391,7 @@ def vue_gestion(fiche: dict) -> dict:
 
 
 def menu_categories(custom_id: str, actuelle=None, texte: str = "Choisir la catégorie") -> dict:
-    """Menu déroulant des 5 catégories (la catégorie actuelle cochée)."""
+    """Menu déroulant des catégories (la catégorie actuelle cochée)."""
     return {"type": 3, "custom_id": custom_id, "placeholder": texte[:150], "min_values": 1, "max_values": 1,
             "options": [{"label": lib, "value": cle, "emoji": {"name": emo}, "default": cle == actuelle}
                         for cle, (lib, _c, emo) in CATEGORIES.items()]}
