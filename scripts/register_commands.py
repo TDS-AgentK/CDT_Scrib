@@ -269,6 +269,11 @@ COMMANDS = [
         "name": "je-veux-rp", "description": "Tirer au hasard un RP proposé dont le chroniqueur est prêt",
         "options": [{"type": 3, "name": "categorie", "description": "Seulement cette catégorie (facultatif)", "required": False, "choices": CATEGORIES_RP}],
     },
+    {
+        # Admins : demande aux auteurs de choisir la catégorie de leurs RP importés (bouton « Trier mes RP »).
+        "name": "rp-a-trier", "description": "Admin : poster le rappel « Registre des RP : à vous de trier ! » dans ce salon",
+        "default_member_permissions": "8",
+    },
 ]
 
 

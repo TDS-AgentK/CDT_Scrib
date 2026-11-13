@@ -87,7 +87,7 @@ async def startup():
         # scripts/register_commands.py à la main.
         from scripts.register_commands import COMMANDS
         for nom in ("session", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent",
-                    "proposer-rp", "je-veux-rp"):
+                    "proposer-rp", "je-veux-rp", "rp-a-trier"):
             try:
                 commande = next(c for c in COMMANDS if c["name"] == nom)
                 if os.getenv("GUILD_ID"):

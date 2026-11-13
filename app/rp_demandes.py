@@ -13,6 +13,8 @@ Collection `rp_demandes` du site (scripts/setup-rp-demandes.mjs) : le bot écrit
   Jouée, Annuler ; l'annonce est mise à jour aussitôt.
 - /je-veux-rp [categorie] : tire au hasard un RP proposé dont le chroniqueur est prêt ; « Un autre » retire sans
   retomber sur le même (ID exclu dans le custom_id).
+- /rp-a-trier (admins) : message public qui mentionne les auteurs de RP sans catégorie, bouton « Trier mes RP » ; le
+  bouton ouvre en privé la liste de ses RP à trier, un menu des 5 catégories par RP (5 par page, sans état mémoire).
 - Boucle (1 min) : annonces des fiches modifiées depuis le site (statut, chroniqueur, titre…) remises à jour ;
   une fiche annulée laisse une annonce grisée et barrée, sans boutons.
 
@@ -60,8 +62,13 @@ def lien_site(fiche_id: str = "") -> str:
     return f"{site()}/liste-des-rp" + (f"#{fiche_id}" if fiche_id else "")
 
 
+# RP importés de l'ancienne liste YAGPDB (scripts/import-rp-yagpdb.mjs du site) : sans catégorie tant que l'auteur ne
+# l'a pas choisie (bouton « Trier mes RP » de /rp-a-trier, sélecteur « Trier » de Gérer, ou page du site).
+A_CHOISIR = ("Catégorie à choisir", 0xD8C58F, "📜")
+
+
 def categorie(cle) -> tuple[str, int, str]:
-    return CATEGORIES.get(cle) or CATEGORIES["decouverte"]
+    return CATEGORIES.get(cle) or A_CHOISIR
 
 
 def url_illustration(fiche: dict) -> str:
@@ -371,11 +378,22 @@ def vue_gestion(fiche: dict) -> dict:
         boutons.append({"type": 2, "style": 2, "label": "Remettre en proposée", "custom_id": f"eco:rp:a:{fid}:rouvrir", "emoji": {"name": "↩️"}})
     if statut != "annulee":
         boutons.append({"type": 2, "style": 4, "label": "Annuler", "custom_id": f"eco:rp:a:{fid}:annuler", "emoji": {"name": "✖️"}})
+    lignes = [{"type": 1, "components": boutons}] if boutons else []
+    if statut != "annulee":
+        lignes.append({"type": 1, "components": [menu_categories(f"eco:rp:s:{fid}", fiche.get("categorie"), "Trier : choisir la catégorie")]})
     etat = {"proposee": "⏳ en cours de création" if not fiche.get("chroniqueur_pret") else "✅ chroniqueur prêt",
             "jouee": "🎲 joué", "annulee": "❌ annulé"}.get(statut, statut)
     return {"embeds": [{"title": f"Gérer « {str(fiche.get('titre') or 'RP')[:200]} »", "color": categorie(fiche.get("categorie"))[1],
-                        "description": f"État : {etat}.\nL'entrée de chronologie se relie sur la page Liste des RP du site."}],
-            "components": [{"type": 1, "components": boutons}] if boutons else [], "flags": 1 << 6}
+                        "description": f"État : {etat}.\nCatégorie : {categorie(fiche.get('categorie'))[0]}.\n"
+                                       "L'entrée de chronologie se relie sur la page Liste des RP du site."}],
+            "components": lignes, "flags": 1 << 6}
+
+
+def menu_categories(custom_id: str, actuelle=None, texte: str = "Choisir la catégorie") -> dict:
+    """Menu déroulant des 5 catégories (la catégorie actuelle cochée)."""
+    return {"type": 3, "custom_id": custom_id, "placeholder": texte[:150], "min_values": 1, "max_values": 1,
+            "options": [{"label": lib, "value": cle, "emoji": {"name": emo}, "default": cle == actuelle}
+                        for cle, (lib, _c, emo) in CATEGORIES.items()]}
 
 
 ACTIONS = {"pret": {"chroniqueur_pret": True}, "encours": {"chroniqueur_pret": False}, "jouee": {"statut": "jouee"},
@@ -392,18 +410,89 @@ async def lire_fiche(pb, fiche_id: str) -> dict | None:
 
 async def appliquer(eco, membre, fiche_id: str, action: str) -> tuple[bool, str, dict | None]:
     """Action du message de gestion : fiche mise à jour, puis annonce Discord."""
-    if action not in ACTIONS:
+    cle = action[4:] if action.startswith("cat:") else ""
+    if action not in ACTIONS and cle not in CATEGORIES:
         return False, "Action inconnue.", None
     fiche = await lire_fiche(eco.pb, fiche_id)
     if not fiche:
         return False, "Ce RP n'existe plus.", None
     if not peut_gerer(membre, fiche):
         return False, "Seuls l'auteur du RP et les administrateurs peuvent le gérer.", None
-    fiche = await eco.pb.maj(COLLECTION, fiche_id, ACTIONS[action])
+    fiche = await eco.pb.maj(COLLECTION, fiche_id, {"categorie": cle} if cle else ACTIONS[action])
     complet = await _avec_expand(eco.pb, fiche)
     if await editer_annonce(complet):
         await eco.pb.maj(COLLECTION, fiche_id, {"discord_etat": signature(complet)})
-    return True, TEXTES[action], complet
+    return True, f"Catégorie : {categorie(cle)[0]}" if cle else TEXTES[action], complet
+
+
+# ---------------------------------------------------------------- /rp-a-trier et « Trier mes RP »
+
+FILTRE_A_TRIER = 'categorie="" && (statut="proposee" || statut="jouee")'
+
+
+async def a_trier(pb, discord_id: str | None = None) -> list[dict]:
+    """RP sans catégorie (tous, ou ceux d'un auteur), par titre."""
+    filtre = FILTRE_A_TRIER + (f' && auteur_discord_id="{echapper(discord_id)}"' if discord_id else "")
+    return sorted(await pb.lister(COLLECTION, filtre), key=lambda f: _norm(f.get("titre")))
+
+
+def message_a_trier(fiches: list[dict]) -> dict:
+    """Message public de /rp-a-trier : mentions des auteurs et nombre de RP à trier, bouton « Trier mes RP »."""
+    compte: dict[str, int] = {}
+    sans_compte = 0
+    for f in fiches:
+        if str(f.get("auteur_discord_id") or "").isdigit():
+            compte[f["auteur_discord_id"]] = compte.get(f["auteur_discord_id"], 0) + 1
+        else:
+            sans_compte += 1
+    lignes = [f"<@{uid}> : {n} RP" for uid, n in sorted(compte.items(), key=lambda x: -x[1])]
+    if sans_compte:
+        lignes.append(f"Sans compte Discord relié : {sans_compte} RP (à trier sur le site par un admin)")
+    noms = ", ".join(lib.replace("RP ", "") for lib, _c, _e in CATEGORIES.values())
+    description = ("Vos RP de l'ancienne liste sont maintenant sur la **Liste des RP** du site. Il reste à choisir la "
+                   f"catégorie de chacun : {noms}.\nCliquez sur **Trier mes RP** : vos RP s'affichent en privé, un menu par RP.")
+    embed = {"title": "Registre des RP : à vous de trier !", "color": A_CHOISIR[1], "url": lien_site(),
+             "description": description,
+             "fields": [{"name": f"RP à trier ({len(fiches)})", "value": "\n".join(lignes)[:1024] or "Tout est trié, merci !", "inline": False}],
+             "footer": {"text": "Aussi possible sur la Liste des RP du site, dans le détail de chaque RP"}}
+    return {"content": " ".join(f"<@{uid}>" for uid in compte)[:1900], "embeds": [embed],
+            "components": [{"type": 1, "components": [
+                {"type": 2, "style": 1, "label": "Trier mes RP", "custom_id": "eco:rp:tri:0", "emoji": {"name": "📜"}},
+                {"type": 2, "style": 5, "label": "Liste des RP", "url": lien_site()}]}],
+            "allowed_mentions": {"users": list(compte)[:100]}}
+
+
+def vue_tri(fiches: list[dict], page: int = 0, merci: str = "") -> dict:
+    """Message privé « Trier mes RP » : un menu des catégories par RP ; 5 par page (4 et une rangée de pages au-delà)."""
+    if not fiches:
+        return {"embeds": [{"title": "Rien à trier, merci !", "color": 0x3BA55C,
+                            "description": (merci + "\n" if merci else "") + "Tous vos RP ont une catégorie."}], "components": []}
+    par_page = 5 if len(fiches) <= 5 else 4
+    pages = (len(fiches) + par_page - 1) // par_page
+    page = max(0, min(page, pages - 1))
+    morceau = fiches[page * par_page:(page + 1) * par_page]
+    lignes = [{"type": 1, "components": [menu_categories(f"eco:rp:c:{f['id']}:{page}", None, f"{i + 1 + page * par_page}. {f.get('titre') or 'RP'}")]}
+              for i, f in enumerate(morceau)]
+    if pages > 1:
+        lignes.append({"type": 1, "components": [
+            {"type": 2, "style": 2, "label": "◀", "custom_id": f"eco:rp:tri:{page - 1}", "disabled": page == 0},
+            {"type": 2, "style": 2, "label": f"Page {page + 1}/{pages}", "custom_id": "eco:rien", "disabled": True},
+            {"type": 2, "style": 2, "label": "▶", "custom_id": f"eco:rp:tri:{page + 1}", "disabled": page >= pages - 1}]})
+    liste = "\n".join(f"**{i + 1 + page * par_page}.** {f.get('titre') or 'RP'}" for i, f in enumerate(morceau))
+    return {"embeds": [{"title": f"Vos RP à trier ({len(fiches)})", "color": A_CHOISIR[1],
+                        "description": (merci + "\n\n" if merci else "") + liste + "\n\nChoisissez la catégorie dans le menu de chaque RP."}],
+            "components": lignes}
+
+
+async def trier(eco, membre, fiche_id: str, cle: str, page: int) -> dict:
+    """Choix d'une catégorie dans « Trier mes RP » : enregistré, puis la liste restante (avec remerciement)."""
+    ok, txt, fiche = await appliquer(eco, membre, fiche_id, f"cat:{cle}")
+    reste = await a_trier(eco.pb, str(membre.id))
+    if not ok:
+        return vue_tri(reste, page, f"⚠️ {txt}")
+    merci = f"Merci ! « {fiche.get('titre')} » → **{categorie(cle)[0]}**. " + (
+        f"Encore {len(reste)} RP à trier." if reste else "")
+    return vue_tri(reste, page, merci)
 
 
 async def _avec_expand(pb, fiche: dict) -> dict:

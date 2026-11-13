@@ -245,6 +245,85 @@ class SynchroTest(unittest.TestCase):
         self.assertEqual(pb.fiches["a" * 15]["discord_etat"], rp.signature(f))
 
 
+class TriTest(unittest.TestCase):
+    def _a_trier(self, n, auteur="42"):
+        return [_fiche(f"t{i:014d}", titre=f"RP {i:02d}", categorie="", auteur_discord_id=auteur) for i in range(n)]
+
+    def test_sans_categorie_affiche_a_choisir(self):
+        e = rp.embed_annonce(_fiche(categorie=""))
+        self.assertIn("Catégorie à choisir", e["author"]["name"])
+        self.assertEqual(e["color"], rp.A_CHOISIR[1])
+
+    def test_message_public_mentionne_les_auteurs(self):
+        fiches = self._a_trier(3, "42") + self._a_trier(1, "7") + self._a_trier(1, "")
+        m = rp.message_a_trier(fiches)
+        e = m["embeds"][0]
+        self.assertEqual(e["title"], "Registre des RP : à vous de trier !")
+        self.assertIn("<@42> : 3 RP", e["fields"][0]["value"])
+        self.assertIn("<@7> : 1 RP", e["fields"][0]["value"])
+        self.assertIn("Sans compte Discord relié : 1 RP", e["fields"][0]["value"])
+        self.assertEqual(set(m["allowed_mentions"]["users"]), {"42", "7"})
+        self.assertEqual(m["components"][0]["components"][0]["custom_id"], "eco:rp:tri:0")
+        for nom in ("découverte", "aventure", "bavard", "wtf am I doin'", "maaaagic"):
+            self.assertIn(nom, e["description"])
+
+    def test_vue_tri_paginee(self):
+        cinq = rp.vue_tri(self._a_trier(5))
+        self.assertEqual(len(cinq["components"]), 5)  # 5 menus, pas de pages
+        dix = self._a_trier(10)
+        v = rp.vue_tri(dix, 1)
+        self.assertEqual(len(v["components"]), 5)  # 4 menus + rangée de pages
+        self.assertEqual(v["components"][0]["components"][0]["custom_id"], "eco:rp:c:t00000000000004:1")
+        self.assertEqual(len(v["components"][0]["components"][0]["options"]), 5)
+        nav = v["components"][-1]["components"]
+        self.assertEqual((nav[0]["custom_id"], nav[1]["label"], nav[2]["custom_id"]), ("eco:rp:tri:0", "Page 2/3", "eco:rp:tri:2"))
+        self.assertEqual(rp.vue_tri([])["embeds"][0]["title"], "Rien à trier, merci !")
+        for rangee in v["components"]:
+            for c in rangee["components"]:
+                self.assertLessEqual(len(c.get("custom_id", "")), 100)
+
+    def test_choix_enregistre_et_remercie(self):
+        appels = []
+
+        async def faux_discord(methode, chemin, corps=None):
+            appels.append(chemin)
+            return {}
+        ancien, rp._discord = rp._discord, faux_discord
+        self.addCleanup(setattr, rp, "_discord", ancien)
+        fiches = self._a_trier(2)
+        pb = FauxPb(fiches)
+
+        async def premier(collection, filtre):
+            fid = filtre.split('id="')[1].split('"')[0]
+            return dict(pb.fiches[fid]) if fid in pb.fiches else None
+
+        async def requete(methode, chemin, params=None):
+            return dict(pb.fiches[chemin.rsplit("/", 1)[1]])
+
+        async def lister(collection, filtre=None, tri=None, expand=None):
+            return [dict(f) for f in pb.fiches.values() if f["categorie"] == "" and f["auteur_discord_id"] == "42"]
+        pb.premier, pb.requete, pb.lister = premier, requete, lister
+        eco = SimpleNamespace(pb=pb)
+        auteur = SimpleNamespace(id=42, guild_permissions=SimpleNamespace(administrator=False))
+        v = asyncio.run(rp.trier(eco, auteur, "t00000000000000", "aventure", 0))
+        self.assertEqual(pb.fiches["t00000000000000"]["categorie"], "aventure")
+        self.assertEqual(appels, ["/channels/111/messages/222"])  # annonce Discord remise à jour
+        self.assertIn("Merci ! « RP 00 » → **RP aventure**. Encore 1 RP à trier.", v["embeds"][0]["description"])
+        v = asyncio.run(rp.trier(eco, auteur, "t00000000000001", "magie", 0))
+        self.assertEqual(v["embeds"][0]["title"], "Rien à trier, merci !")
+        # Un autre joueur ne peut pas trier les RP de quelqu'un d'autre.
+        pb.fiches["t00000000000001"]["categorie"] = ""
+        autre = SimpleNamespace(id=7, guild_permissions=SimpleNamespace(administrator=False))
+        v = asyncio.run(rp.trier(eco, autre, "t00000000000001", "wtf", 0))
+        self.assertEqual(pb.fiches["t00000000000001"]["categorie"], "")
+
+    def test_gerer_contient_le_menu_trier(self):
+        v = rp.vue_gestion(_fiche(categorie=""))
+        menu = v["components"][-1]["components"][0]
+        self.assertEqual((menu["type"], menu["custom_id"]), (3, "eco:rp:s:rp0000000000001"))
+        self.assertTrue(menu["placeholder"].startswith("Trier"))
+
+
 class CommandesTest(unittest.TestCase):
     def test_commandes_declarees_et_dans_info(self):
         par_nom = {c["name"]: c for c in COMMANDS}

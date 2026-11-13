@@ -18,7 +18,7 @@ log = logging.getLogger("cdt_scrib.eco_interactions")
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
              "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
              "session", "recompense", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent",
-             "proposer-rp", "je-veux-rp"}
+             "proposer-rp", "je-veux-rp", "rp-a-trier"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -252,6 +252,14 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             await _modifier(app_id, jeton, [eco_vues.resultat(True, "C'est enregistré.")])
             return await _webhook("POST", f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}",
                                   {"content": f"{membre.mention} {txt}", "allowed_mentions": {"parse": ["users"]}})
+        if nom == "rp-a-trier":
+            # Liste des RP : message public dans ce salon, posté par le bot (admins seulement).
+            if not rp_demandes.est_admin(membre):
+                return await _modifier(app_id, jeton, [eco_vues.erreur("Réservé aux administrateurs.")])
+            corps = rp_demandes.message_a_trier(await rp_demandes.a_trier(eco.pb))
+            ok = await rp_demandes._discord("POST", f"/channels/{payload.get('channel_id')}/messages", corps) is not None
+            return await _modifier(app_id, jeton, [eco_vues.resultat(ok, "Message « Registre des RP : à vous de trier ! » posté." if ok
+                                                                     else "Impossible de poster ici (permissions du bot ?).")])
         if nom == "je-veux-rp":
             cle = opt.get("categorie") or ""
             vue = rp_demandes.vue_tirage(await rp_demandes.candidats(eco.pb, cle), cle)
@@ -291,7 +299,7 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             await _modifier(app_id, jeton, [eco_vues.erreur("Une erreur est survenue : préviens un admin avec l'heure de ta commande.")])
 
     _en_fond(taches, travail_sur)
-    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie", "recompense", "halloween-admin") else {}}
+    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie", "recompense", "halloween-admin", "rp-a-trier") else {}}
 
 
 async def _vue_echange(eco, e: dict, de, vers, statut: str | None = None) -> tuple[dict, list]:
@@ -347,7 +355,7 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
     if cid == "eco:shop":
         return _maj_v2(await eco_vues.vue_boutique(eco, membre, valeurs[0]))
     if morceaux[1] == "rp":
-        return await _rp_clic(eco, payload, membre, taches, app_id, morceaux)
+        return await _rp_clic(eco, payload, membre, taches, app_id, morceaux, valeurs)
     if morceaux[1] == "hal":
         return await _halloween_clic(eco, payload, membre, taches, app_id, morceaux)
     if morceaux[1] == "av":
@@ -469,7 +477,7 @@ async def _poster_salon(channel_id, corps: dict) -> bool:
         return False
 
 
-async def _rp_clic(eco, payload, membre, taches, app_id, morceaux) -> dict:
+async def _rp_clic(eco, payload, membre, taches, app_id, morceaux, valeurs=()) -> dict:
     """Liste des RP : g = « Gérer » sous l'annonce (privé, auteur et admins), a = action du message de gestion,
     t = « Un autre » de /je-veux-rp (eco:rp:t:<catégorie ou ->:<ID exclu>)."""
     action, jeton = morceaux[2], payload["token"]
@@ -489,6 +497,30 @@ async def _rp_clic(eco, payload, membre, taches, app_id, morceaux) -> dict:
             vue["embeds"][0]["description"] = f"✅ {txt}\n" + vue["embeds"][0]["description"]
             await _modifier(app_id, jeton, vue["embeds"], vue["components"])
         _en_fond(taches, appliquer)
+        return {"type": DIFFERE_MAJ}
+    if action == "tri":
+        # « Trier mes RP » : bouton du message public (nouveau message privé) ou pages du message privé (mis à jour).
+        page = int(morceaux[3]) if len(morceaux) > 3 and morceaux[3].lstrip("-").isdigit() else 0
+        prive = bool((payload.get("message") or {}).get("flags", 0) & PRIVE)
+
+        async def tri():
+            vue = rp_demandes.vue_tri(await rp_demandes.a_trier(eco.pb, str(membre.id)), page)
+            await _modifier(app_id, jeton, vue["embeds"], vue["components"])
+        _en_fond(taches, tri)
+        return {"type": DIFFERE_MAJ} if prive else {"type": DIFFERE, "data": {"flags": PRIVE}}
+    if action in ("c", "s") and len(morceaux) > 3 and valeurs:
+        # c = menu de « Trier mes RP » (eco:rp:c:<id>:<page>), s = menu « Trier » du message Gérer (eco:rp:s:<id>).
+        async def choix():
+            if action == "c":
+                vue = await rp_demandes.trier(eco, membre, morceaux[3], valeurs[0], int(morceaux[4]) if len(morceaux) > 4 and morceaux[4].isdigit() else 0)
+                return await _modifier(app_id, jeton, vue["embeds"], vue["components"])
+            ok, txt, fiche = await rp_demandes.appliquer(eco, membre, morceaux[3], f"cat:{valeurs[0]}")
+            if not ok:
+                return await _modifier(app_id, jeton, [eco_vues.erreur(txt)])
+            vue = rp_demandes.vue_gestion(fiche)
+            vue["embeds"][0]["description"] = f"✅ {txt}\n" + vue["embeds"][0]["description"]
+            await _modifier(app_id, jeton, vue["embeds"], vue["components"])
+        _en_fond(taches, choix)
         return {"type": DIFFERE_MAJ}
     if action == "t" and len(morceaux) > 4:
         cle = "" if morceaux[3] == "-" else morceaux[3]
