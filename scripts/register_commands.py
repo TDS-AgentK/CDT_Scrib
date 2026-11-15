@@ -25,6 +25,9 @@ CATEGORIES_RP = [{"name": "RP découverte", "value": "decouverte"}, {"name": "RP
                  {"name": "RP bavard", "value": "bavard"}, {"name": "RP wtf am I doin'", "value": "wtf"},
                  {"name": "RP maaaagic", "value": "magie"}, {"name": "RP bagarr", "value": "bagarre"}]
 
+# Commandes retirées : supprimées de Discord au démarrage du bot (app/main.py), sinon elles resteraient affichées.
+COMMANDES_RETIREES = {"rp-a-trier"}
+
 COMMANDS = [
     {"name": "info", "description": "Résumé de toutes les commandes du bot", "options": []},
     {
@@ -270,9 +273,14 @@ COMMANDS = [
         "options": [{"type": 3, "name": "categorie", "description": "Seulement cette catégorie (facultatif)", "required": False, "choices": CATEGORIES_RP}],
     },
     {
-        # Admins : demande aux auteurs de choisir la catégorie de leurs RP importés (bouton « Trier mes RP »).
-        "name": "rp-a-trier", "description": "Admin : poster le rappel « Registre des RP : à vous de trier ! » dans ce salon",
-        "default_member_permissions": "8",
+        # Liste des RP : modifier un de ses RP (tous pour un admin), y compris ceux importés sans annonce Discord.
+        "name": "modifier-rp", "description": "Modifier un de vos RP de la Liste des RP (titre, résumé, personnage, catégorie…)",
+        "options": [
+            {"type": 3, "name": "rp", "description": "Le RP à modifier", "required": True, "autocomplete": True},
+            {"type": 3, "name": "categorie", "description": "Nouvelle catégorie (facultatif)", "required": False, "choices": CATEGORIES_RP},
+            {"type": 5, "name": "chroniqueur-pret", "description": "Un chroniqueur est prêt à le mener (facultatif)", "required": False},
+            {"type": 11, "name": "illustration", "description": "Nouvelle image d'illustration (remplace l'ancienne)", "required": False},
+        ],
     },
 ]
 

@@ -9,12 +9,17 @@ Collection `rp_demandes` du site (scripts/setup-rp-demandes.mjs) : le bot écrit
   l'adresse, et la fenêtre porte son ID (« b<id> »). Les brouillons abandonnés sont effacés au bout de 24 h.
   À l'envoi : fiche complétée (auteur retrouvé par ID Discord), image téléversée dans la fiche, annonce postée dans le
   salon réglé sur le site (eco_reglages.salon_rp_annonces, sinon le salon de la commande), lien noté sur la fiche.
-- Bouton « Gérer » de l'annonce (auteur et admins) : réponse privée avec Chroniqueur prêt / En cours de création,
-  Jouée, Annuler ; l'annonce est mise à jour aussitôt.
+- Bouton « Gérer » de l'annonce (auteur et admins) : réponse privée avec Modifier, Chroniqueur prêt / En cours de
+  création, Jouée, Annuler et le menu Catégorie ; l'annonce est mise à jour aussitôt.
+- « Modifier » et /modifier-rp rp [categorie] [chroniqueur-pret] [illustration] (K, 15/11/2026) : fenêtre préremplie
+  (Titre, De quoi ça parle ?, Personnage), réservée à l'auteur (même ID Discord, ou fiche joueur reliée) et aux admins.
+  /modifier-rp sert aussi aux RP importés sans annonce. Options et illustration voyagent dans le custom_id
+  (« eco:rpe:<id>:<cat|->:<0|1|->:<ref> ») ; une adresse d'image trop longue est gardée sur la fiche
+  (illustration_source, ref « f ») le temps de remplir la fenêtre.
 - /je-veux-rp [categorie] : tire au hasard un RP proposé dont le chroniqueur est prêt ; « Un autre » retire sans
   retomber sur le même (ID exclu dans le custom_id).
-- /rp-a-trier (admins) : message public qui mentionne les auteurs de RP sans catégorie, bouton « Trier mes RP » ; le
-  bouton ouvre en privé la liste de ses RP à trier, un menu des catégories par RP (5 par page, sans état mémoire).
+- « Trier mes RP » : bouton des messages postés par l'ancienne commande /rp-a-trier (retirée le 15/11/2026, K) ;
+  il ouvre en privé ses RP sans catégorie, un menu des catégories par RP. Gardé pour les messages déjà postés.
 - Boucle (1 min) : annonces des fiches modifiées depuis le site (statut, chroniqueur, titre…) remises à jour ;
   une fiche annulée laisse une annonce grisée et barrée, sans boutons.
 
@@ -64,7 +69,7 @@ def lien_site(fiche_id: str = "") -> str:
 
 
 # RP importés de l'ancienne liste YAGPDB (scripts/import-rp-yagpdb.mjs du site) : sans catégorie tant que l'auteur ne
-# l'a pas choisie (bouton « Trier mes RP » de /rp-a-trier, sélecteur « Trier » de Gérer, ou page du site).
+# l'a pas choisie (menu Catégorie de Gérer, /modifier-rp, ou page du site).
 A_CHOISIR = ("Catégorie à choisir", 0xD8C58F, "📜")
 
 
@@ -246,6 +251,16 @@ def est_admin(membre) -> bool:
     return str(getattr(membre, "id", "")) in ADMINS
 
 
+async def autorise(eco, membre, fiche: dict) -> bool:
+    """Auteur ou admin : même ID Discord que l'auteur, ou fiche joueur du membre = auteur de la fiche (RP importés)."""
+    if peut_gerer(membre, fiche):
+        return True
+    if not fiche.get("auteur") or not hasattr(eco, "joueur_de"):
+        return False
+    joueur = await eco.joueur_de(membre)
+    return bool(joueur) and joueur.get("id") == fiche["auteur"]
+
+
 def peut_gerer(membre, fiche: dict) -> bool:
     return est_admin(membre) or (bool(fiche.get("auteur_discord_id")) and str(membre.id) == str(fiche["auteur_discord_id"]))
 
@@ -370,18 +385,20 @@ def vue_gestion(fiche: dict) -> dict:
     """Message privé de gestion d'un RP (auteur et admins)."""
     fid, statut = fiche["id"], fiche.get("statut") or "proposee"
     boutons = []
+    if statut != "annulee":
+        boutons.append({"type": 2, "style": 1, "label": "Modifier", "custom_id": f"eco:rp:m:{fid}", "emoji": {"name": "✏️"}})
     if statut == "proposee":
         boutons.append({"type": 2, "style": 2, "label": "En cours de création", "custom_id": f"eco:rp:a:{fid}:encours", "emoji": {"name": "⏳"}}
                        if fiche.get("chroniqueur_pret") else
                        {"type": 2, "style": 3, "label": "Chroniqueur prêt", "custom_id": f"eco:rp:a:{fid}:pret", "emoji": {"name": "✅"}})
-        boutons.append({"type": 2, "style": 1, "label": "Jouée", "custom_id": f"eco:rp:a:{fid}:jouee", "emoji": {"name": "🎲"}})
+        boutons.append({"type": 2, "style": 2, "label": "Jouée", "custom_id": f"eco:rp:a:{fid}:jouee", "emoji": {"name": "🎲"}})
     elif statut == "jouee":
         boutons.append({"type": 2, "style": 2, "label": "Remettre en proposée", "custom_id": f"eco:rp:a:{fid}:rouvrir", "emoji": {"name": "↩️"}})
     if statut != "annulee":
         boutons.append({"type": 2, "style": 4, "label": "Annuler", "custom_id": f"eco:rp:a:{fid}:annuler", "emoji": {"name": "✖️"}})
     lignes = [{"type": 1, "components": boutons}] if boutons else []
     if statut != "annulee":
-        lignes.append({"type": 1, "components": [menu_categories(f"eco:rp:s:{fid}", fiche.get("categorie"), "Trier : choisir la catégorie")]})
+        lignes.append({"type": 1, "components": [menu_categories(f"eco:rp:s:{fid}", fiche.get("categorie"), "Catégorie")]})
     etat = {"proposee": "⏳ en cours de création" if not fiche.get("chroniqueur_pret") else "✅ chroniqueur prêt",
             "jouee": "🎲 joué", "annulee": "❌ annulé"}.get(statut, statut)
     return {"embeds": [{"title": f"Gérer « {str(fiche.get('titre') or 'RP')[:200]} »", "color": categorie(fiche.get("categorie"))[1],
@@ -417,7 +434,7 @@ async def appliquer(eco, membre, fiche_id: str, action: str) -> tuple[bool, str,
     fiche = await lire_fiche(eco.pb, fiche_id)
     if not fiche:
         return False, "Ce RP n'existe plus.", None
-    if not peut_gerer(membre, fiche):
+    if not await autorise(eco, membre, fiche):
         return False, "Seuls l'auteur du RP et les administrateurs peuvent le gérer.", None
     fiche = await eco.pb.maj(COLLECTION, fiche_id, {"categorie": cle} if cle else ACTIONS[action])
     complet = await _avec_expand(eco.pb, fiche)
@@ -426,7 +443,7 @@ async def appliquer(eco, membre, fiche_id: str, action: str) -> tuple[bool, str,
     return True, f"Catégorie : {categorie(cle)[0]}" if cle else TEXTES[action], complet
 
 
-# ---------------------------------------------------------------- /rp-a-trier et « Trier mes RP »
+# ---------------------------------------------------------------- « Trier mes RP » (messages de l'ancienne /rp-a-trier)
 
 FILTRE_A_TRIER = 'categorie="" && (statut="proposee" || statut="jouee")'
 
@@ -435,32 +452,6 @@ async def a_trier(pb, discord_id: str | None = None) -> list[dict]:
     """RP sans catégorie (tous, ou ceux d'un auteur), par titre."""
     filtre = FILTRE_A_TRIER + (f' && auteur_discord_id="{echapper(discord_id)}"' if discord_id else "")
     return sorted(await pb.lister(COLLECTION, filtre), key=lambda f: _norm(f.get("titre")))
-
-
-def message_a_trier(fiches: list[dict]) -> dict:
-    """Message public de /rp-a-trier : mentions des auteurs et nombre de RP à trier, bouton « Trier mes RP »."""
-    compte: dict[str, int] = {}
-    sans_compte = 0
-    for f in fiches:
-        if str(f.get("auteur_discord_id") or "").isdigit():
-            compte[f["auteur_discord_id"]] = compte.get(f["auteur_discord_id"], 0) + 1
-        else:
-            sans_compte += 1
-    lignes = [f"<@{uid}> : {n} RP" for uid, n in sorted(compte.items(), key=lambda x: -x[1])]
-    if sans_compte:
-        lignes.append(f"Sans compte Discord relié : {sans_compte} RP (à trier sur le site par un admin)")
-    noms = ", ".join(lib.replace("RP ", "") for lib, _c, _e in CATEGORIES.values())
-    description = ("Vos RP de l'ancienne liste sont maintenant sur la **Liste des RP** du site. Il reste à choisir la "
-                   f"catégorie de chacun : {noms}.\nCliquez sur **Trier mes RP** : vos RP s'affichent en privé, un menu par RP.")
-    embed = {"title": "Registre des RP : à vous de trier !", "color": A_CHOISIR[1], "url": lien_site(),
-             "description": description,
-             "fields": [{"name": f"RP à trier ({len(fiches)})", "value": "\n".join(lignes)[:1024] or "Tout est trié, merci !", "inline": False}],
-             "footer": {"text": "Aussi possible sur la Liste des RP du site, dans le détail de chaque RP"}}
-    return {"content": " ".join(f"<@{uid}>" for uid in compte)[:1900], "embeds": [embed],
-            "components": [{"type": 1, "components": [
-                {"type": 2, "style": 1, "label": "Trier mes RP", "custom_id": "eco:rp:tri:0", "emoji": {"name": "📜"}},
-                {"type": 2, "style": 5, "label": "Liste des RP", "url": lien_site()}]}],
-            "allowed_mentions": {"users": list(compte)[:100]}}
 
 
 def vue_tri(fiches: list[dict], page: int = 0, merci: str = "") -> dict:
@@ -494,6 +485,120 @@ async def trier(eco, membre, fiche_id: str, cle: str, page: int) -> dict:
     merci = f"Merci ! « {fiche.get('titre')} » → **{categorie(cle)[0]}**. " + (
         f"Encore {len(reste)} RP à trier." if reste else "")
     return vue_tri(reste, page, merci)
+
+
+# ---------------------------------------------------------------- « Modifier » et /modifier-rp
+
+def id_modif(fiche_id: str, cle: str | None = None, pret: bool | None = None, ref: str = "") -> str:
+    """« eco:rpe:<id>:<cat|->:<0|1|->:<ref> » ; ref = « u<adresse> » si elle tient, « f » (adresse sur la fiche) ou vide."""
+    return f"eco:rpe:{fiche_id}:{cle if cle in CATEGORIES else '-'}:{'-' if pret is None else int(bool(pret))}:{ref}"
+
+
+def lire_modif(custom_id: str) -> tuple[str, str | None, bool | None, str]:
+    """(ID de la fiche, catégorie ou None, chroniqueur prêt ou None, ref de l'illustration)."""
+    m = custom_id.split(":", 5) + [""] * 6
+    cle = m[3] if m[3] in CATEGORIES else None
+    pret = None if m[4] not in ("0", "1") else m[4] == "1"
+    return m[2], cle, pret, m[5]
+
+
+def fenetre_modif(fiche: dict, cle: str | None = None, pret: bool | None = None, ref: str = "") -> dict:
+    """Fenêtre « Modifier le RP » préremplie (titre, résumé, personnage)."""
+    def champ(cid, label, style, valeur, maxi, requis, mini=0):
+        c = {"type": 4, "custom_id": cid, "label": label, "style": style, "required": requis, "max_length": maxi}
+        if mini:
+            c["min_length"] = mini
+        if valeur:  # Discord refuse une valeur vide : champ laissé vide plutôt que prérempli
+            c["value"] = valeur[:maxi]
+        return {"type": 1, "components": [c]}
+    return {
+        "custom_id": id_modif(fiche["id"], cle, pret, ref)[:100], "title": "Modifier le RP",
+        "components": [
+            champ("titre", "Titre", 1, str(fiche.get("titre") or ""), 100, True, 2),
+            champ("resume", "De quoi ça parle ?", 2, str(fiche.get("resume") or ""), 4000, False),
+            champ("personnage", "Personnage (facultatif)", 1, nom_personnage(fiche), 100, False),
+        ],
+    }
+
+
+async def ouvrir_modif(eco, membre, fiche_id: str, cle: str | None = None, pret: bool | None = None, url: str = "") -> dict:
+    """Réponse immédiate à « Modifier » ou /modifier-rp : la fenêtre préremplie (type 9), ou un refus privé."""
+    fiche = await lire_fiche(eco.pb, fiche_id)
+    if not fiche or fiche.get("statut") == "annulee":
+        return _prive("Ce RP n'existe plus.")
+    if not await autorise(eco, membre, fiche):
+        return _prive("Seuls l'auteur du RP et les administrateurs peuvent le modifier.")
+    ref = ""
+    if url:
+        if len(id_modif(fiche_id, cle, pret, "u" + url)) <= 100:
+            ref = "u" + url
+        else:  # adresse trop longue pour le custom_id : gardée sur la fiche jusqu'à l'envoi de la fenêtre
+            await eco.pb.maj(COLLECTION, fiche_id, {"illustration_source": url})
+            ref = "f"
+    return {"type": 9, "data": fenetre_modif(await _avec_expand(eco.pb, fiche), cle, pret, ref)}
+
+
+async def envoyer_modif(eco, membre, payload: dict) -> tuple[bool, str]:
+    """Fenêtre « Modifier le RP » envoyée : fiche mise à jour (droits revérifiés), illustration, annonce Discord."""
+    fiche_id, cle, pret, ref = lire_modif(payload["data"].get("custom_id", ""))
+    pb = eco.pb
+    fiche = await lire_fiche(pb, fiche_id)
+    if not fiche or fiche.get("statut") == "annulee":
+        return False, "Ce RP n'existe plus."
+    if not await autorise(eco, membre, fiche):
+        return False, "Seuls l'auteur du RP et les administrateurs peuvent le modifier."
+    v = valeurs_fenetre(payload["data"])
+    titre, resume, tape = v.get("titre", "")[:200], v.get("resume", "")[:4000], v.get("personnage", "")[:200]
+    if len(titre) < 2:
+        return False, "Il faut un titre."
+    champs = {"titre": titre, "resume": resume}
+    if cle:
+        champs["categorie"] = cle
+    if pret is not None:
+        champs["chroniqueur_pret"] = pret
+    complet = await _avec_expand(pb, fiche)
+    if tape != nom_personnage(complet):
+        # Personnage : parmi ceux du joueur auteur du RP (même si c'est un admin qui modifie), sinon le nom tapé.
+        auteur = ((complet.get("expand") or {}).get("auteur") or {}).get("pseudo") or ""
+        persos = await pb.lister("personnages", f'joueur="{echapper(auteur)}"') if (tape and auteur) else []
+        perso = choisir_personnage(tape, persos)
+        champs.update(personnage=perso["id"] if perso else "", personnage_nom="" if perso else tape)
+    url = ref[1:] if ref.startswith("u") else (fiche.get("illustration_source") or "" if ref == "f" else "")
+    if ref == "f":
+        champs["illustration_source"] = ""
+    fiche = await pb.maj(COLLECTION, fiche_id, champs)
+    image_ratee = False
+    if url:
+        fichier = await _telecharger(url)
+        if fichier:
+            ext = {"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp"}[fichier[1]]
+            try:
+                await pb.envoyer_fichier(COLLECTION, fiche_id, "illustration", f"illustration.{ext}", fichier[0], fichier[1])
+            except Exception:
+                log.exception("Illustration du RP %s non téléversée", fiche_id)
+                image_ratee = True
+        else:
+            image_ratee = True
+    complet = await _avec_expand(pb, fiche)
+    if await editer_annonce(complet):
+        await pb.maj(COLLECTION, fiche_id, {"discord_etat": signature(complet)})
+    suite = " (l'illustration n'a pas pu être récupérée)" if image_ratee else ""
+    return True, f"RP **{titre}** modifié{suite}. Voir : {lien_site(fiche_id)}"
+
+
+async def choix_modifier(eco, membre, tape: str) -> list[dict]:
+    """Autocomplétion de /modifier-rp : les RP du membre (tous pour un admin), sauf annulés et brouillons."""
+    filtre = 'statut!="annulee" && statut!="brouillon"'
+    if not est_admin(membre):
+        conditions = [f'auteur_discord_id="{echapper(membre.id)}"']
+        joueur = await eco.joueur_de(membre) if hasattr(eco, "joueur_de") else None
+        if joueur:
+            conditions.append(f'auteur="{echapper(joueur["id"])}"')
+        filtre += " && (" + " || ".join(conditions) + ")"
+    t = _norm(tape)
+    fiches = [f for f in await eco.pb.lister(COLLECTION, filtre) if t in _norm(f.get("titre"))]
+    fiches.sort(key=lambda f: _norm(f.get("titre")))
+    return [{"name": f"{categorie(f.get('categorie'))[2]} {f.get('titre') or 'RP'}"[:100], "value": f["id"]} for f in fiches[:25]]
 
 
 async def _avec_expand(pb, fiche: dict) -> dict:

@@ -18,7 +18,7 @@ log = logging.getLogger("cdt_scrib.eco_interactions")
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
              "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
              "session", "recompense", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent",
-             "proposer-rp", "je-veux-rp", "rp-a-trier"}
+             "proposer-rp", "je-veux-rp", "modifier-rp"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -134,6 +134,16 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
     if nom == "avent":
         # Calendrier de l'Avent des Fêtes de Lanjis (app/avent.py) : le même que la page /avent du site.
         return {"type": MESSAGE, "data": await avent.vue_calendrier(eco, membre)}
+    if nom == "modifier-rp":
+        # Liste des RP : fenêtre « Modifier le RP » préremplie (auteur et admins), options appliquées à l'envoi.
+        url = ""
+        if opt.get("illustration"):
+            piece = ((data.get("resolved") or {}).get("attachments") or {}).get(str(opt["illustration"])) or {}
+            if str(piece.get("content_type") or "").split(";")[0] not in rp_demandes.TYPES_IMAGE or int(piece.get("size") or 0) > rp_demandes.IMAGE_MAX:
+                return {"type": MESSAGE, "data": {"embeds": [eco_vues.erreur("L'illustration doit être une image (PNG, JPEG, GIF ou WebP) de 10 Mo au plus.")], "flags": PRIVE}}
+            url = piece.get("url") or ""
+        pret = opt.get("chroniqueur-pret")
+        return await rp_demandes.ouvrir_modif(eco, membre, str(opt.get("rp") or ""), opt.get("categorie"), None if pret is None else bool(pret), url)
     if nom == "proposer-rp":
         # Liste des RP (app/rp_demandes.py) : la fenêtre « Proposer un RP » s'ouvre tout de suite (pas de réponse différée).
         return await rp_demandes.commande_proposer(eco, membre, data)
@@ -252,14 +262,6 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             await _modifier(app_id, jeton, [eco_vues.resultat(True, "C'est enregistré.")])
             return await _webhook("POST", f"https://discord.com/api/v10/webhooks/{app_id}/{jeton}",
                                   {"content": f"{membre.mention} {txt}", "allowed_mentions": {"parse": ["users"]}})
-        if nom == "rp-a-trier":
-            # Liste des RP : message public dans ce salon, posté par le bot (admins seulement).
-            if not rp_demandes.est_admin(membre):
-                return await _modifier(app_id, jeton, [eco_vues.erreur("Réservé aux administrateurs.")])
-            corps = rp_demandes.message_a_trier(await rp_demandes.a_trier(eco.pb))
-            ok = await rp_demandes._discord("POST", f"/channels/{payload.get('channel_id')}/messages", corps) is not None
-            return await _modifier(app_id, jeton, [eco_vues.resultat(ok, "Message « Registre des RP : à vous de trier ! » posté." if ok
-                                                                     else "Impossible de poster ici (permissions du bot ?).")])
         if nom == "je-veux-rp":
             cle = opt.get("categorie") or ""
             vue = rp_demandes.vue_tirage(await rp_demandes.candidats(eco.pb, cle), cle)
@@ -299,7 +301,7 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             await _modifier(app_id, jeton, [eco_vues.erreur("Une erreur est survenue : préviens un admin avec l'heure de ta commande.")])
 
     _en_fond(taches, travail_sur)
-    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie", "recompense", "halloween-admin", "rp-a-trier") else {}}
+    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie", "recompense", "halloween-admin") else {}}
 
 
 async def _vue_echange(eco, e: dict, de, vers, statut: str | None = None) -> tuple[dict, list]:
@@ -498,6 +500,9 @@ async def _rp_clic(eco, payload, membre, taches, app_id, morceaux, valeurs=()) -
             await _modifier(app_id, jeton, vue["embeds"], vue["components"])
         _en_fond(taches, appliquer)
         return {"type": DIFFERE_MAJ}
+    if action == "m" and len(morceaux) > 3:
+        # « Modifier » du message Gérer : fenêtre préremplie.
+        return await rp_demandes.ouvrir_modif(eco, membre, morceaux[3])
     if action == "tri":
         # « Trier mes RP » : bouton du message public (nouveau message privé) ou pages du message privé (mis à jour).
         page = int(morceaux[3]) if len(morceaux) > 3 and morceaux[3].lstrip("-").isdigit() else 0
@@ -625,6 +630,17 @@ async def _fenetre(eco, payload, membre, taches, app_id) -> dict:
                     precision = (c.get("value") or "").strip()
         _en_fond(taches, _achat_ros, eco, payload, membre, app_id, morceaux[2], morceaux[3], precision)
         return {"type": DIFFERE, "data": {"flags": PRIVE}}
+    if morceaux[1] == "rpe":
+        # Fenêtre « Modifier le RP » (app/rp_demandes.py) : fiche, illustration et annonce en arrière-plan.
+        async def modifier():
+            try:
+                ok, txt = await rp_demandes.envoyer_modif(eco, membre, payload)
+            except Exception:
+                log.exception("Modification de RP")
+                ok, txt = False, "La modification n'a pas pu être enregistrée : réessayez dans un instant."
+            await _modifier(app_id, payload["token"], [eco_vues.resultat(ok, txt)])
+        _en_fond(taches, modifier)
+        return {"type": DIFFERE, "data": {"flags": PRIVE}}
     if morceaux[1] == "rpm":
         # Fenêtre « Proposer un RP » (app/rp_demandes.py) : fiche, illustration et annonce en arrière-plan.
         async def proposer():
@@ -699,6 +715,9 @@ async def _autocompletion(eco, payload) -> dict:
             choix = [{"name": n[:100], "value": i} for i, n in vus.items() if tape in n.lower()]
         else:
             choix = [{"name": eco.rostheim.nom_court(c)[:100], "value": c["id"]} for _d, c in couples if tape in eco.rostheim.nom_court(c).lower()]
+    elif data["name"] == "modifier-rp" and focus["name"] == "rp":
+        membre = await _membre(eco, payload)
+        choix = await rp_demandes.choix_modifier(eco, membre, tape) if membre else []
     elif data["name"] == "attaque":
         membre = await _membre(eco, payload)
         valeurs = {o["name"]: o.get("value") for o in options}

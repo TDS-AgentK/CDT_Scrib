@@ -162,9 +162,11 @@ class GestionTest(unittest.TestCase):
 
     def test_boutons_de_gestion(self):
         ids = lambda f: [b["custom_id"].split(":")[-1] for b in rp.vue_gestion(f)["components"][0]["components"]]
-        self.assertEqual(ids(_fiche(chroniqueur_pret=False)), ["pret", "jouee", "annuler"])
-        self.assertEqual(ids(_fiche(chroniqueur_pret=True)), ["encours", "jouee", "annuler"])
-        self.assertEqual(ids(_fiche(statut="jouee")), ["rouvrir", "annuler"])
+        m = "rp0000000000001"  # bouton « Modifier » : eco:rp:m:<id>
+        self.assertEqual(ids(_fiche(chroniqueur_pret=False)), [m, "pret", "jouee", "annuler"])
+        self.assertEqual(ids(_fiche(chroniqueur_pret=True)), [m, "encours", "jouee", "annuler"])
+        self.assertEqual(ids(_fiche(statut="jouee")), [m, "rouvrir", "annuler"])
+        self.assertEqual(rp.vue_gestion(_fiche())["components"][0]["components"][0]["label"], "Modifier")
         self.assertEqual(rp.vue_gestion(_fiche())["flags"], 1 << 6)
 
     def test_action_refusee_a_un_autre_joueur(self):
@@ -254,19 +256,6 @@ class TriTest(unittest.TestCase):
         self.assertIn("Catégorie à choisir", e["author"]["name"])
         self.assertEqual(e["color"], rp.A_CHOISIR[1])
 
-    def test_message_public_mentionne_les_auteurs(self):
-        fiches = self._a_trier(3, "42") + self._a_trier(1, "7") + self._a_trier(1, "")
-        m = rp.message_a_trier(fiches)
-        e = m["embeds"][0]
-        self.assertEqual(e["title"], "Registre des RP : à vous de trier !")
-        self.assertIn("<@42> : 3 RP", e["fields"][0]["value"])
-        self.assertIn("<@7> : 1 RP", e["fields"][0]["value"])
-        self.assertIn("Sans compte Discord relié : 1 RP", e["fields"][0]["value"])
-        self.assertEqual(set(m["allowed_mentions"]["users"]), {"42", "7"})
-        self.assertEqual(m["components"][0]["components"][0]["custom_id"], "eco:rp:tri:0")
-        for nom in ("découverte", "aventure", "bavard", "wtf am I doin'", "maaaagic", "bagarr"):
-            self.assertIn(nom, e["description"])
-
     def test_vue_tri_paginee(self):
         cinq = rp.vue_tri(self._a_trier(5))
         self.assertEqual(len(cinq["components"]), 5)  # 5 menus, pas de pages
@@ -318,11 +307,144 @@ class TriTest(unittest.TestCase):
         v = asyncio.run(rp.trier(eco, autre, "t00000000000001", "wtf", 0))
         self.assertEqual(pb.fiches["t00000000000001"]["categorie"], "")
 
-    def test_gerer_contient_le_menu_trier(self):
+    def test_gerer_contient_le_menu_categorie(self):
         v = rp.vue_gestion(_fiche(categorie=""))
         menu = v["components"][-1]["components"][0]
-        self.assertEqual((menu["type"], menu["custom_id"]), (3, "eco:rp:s:rp0000000000001"))
-        self.assertTrue(menu["placeholder"].startswith("Trier"))
+        self.assertEqual((menu["type"], menu["custom_id"], menu["placeholder"]), (3, "eco:rp:s:rp0000000000001", "Catégorie"))
+
+
+class PbModif:
+    """Base factice pour « Modifier » : fiches rp_demandes (avec expand), personnages, envois de fichiers."""
+    def __init__(self, fiches, joueurs=(), persos=()):
+        self.fiches = {f["id"]: dict(f) for f in fiches}
+        self.joueurs = {j["id"]: j for j in joueurs}
+        self.persos = list(persos)
+        self.majs, self.fichiers, self.filtres = [], [], []
+
+    async def premier(self, collection, filtre):
+        fid = filtre.split('id="')[1].split('"')[0]
+        return dict(self.fiches[fid]) if fid in self.fiches and self.fiches[fid]["statut"] != "brouillon" else None
+
+    async def requete(self, methode, chemin, params=None):
+        f = dict(self.fiches[chemin.rsplit("/", 1)[1]])
+        f["expand"] = {k: v for k, v in (("auteur", self.joueurs.get(f.get("auteur"))),
+                                          ("personnage", next((x for x in self.persos if x["id"] == f.get("personnage")), None))) if v}
+        return f
+
+    async def maj(self, collection, id_, donnees):
+        self.majs.append((id_, donnees))
+        self.fiches[id_].update(donnees)
+        return dict(self.fiches[id_])
+
+    async def lister(self, collection, filtre=None, tri=None, expand=None):
+        self.filtres.append((collection, filtre))
+        if collection == "personnages":
+            pseudo = filtre.split('joueur="')[1].rstrip('"')
+            return [p for p in self.persos if p["joueur"] == pseudo]
+        return [dict(f) for f in self.fiches.values() if f["statut"] not in ("annulee", "brouillon")]
+
+    async def envoyer_fichier(self, collection, id_, champ, nom, contenu, type_mime):
+        self.fichiers.append((id_, nom, type_mime))
+        self.fiches[id_][champ] = nom
+        return dict(self.fiches[id_])
+
+
+def _membre(id_, admin=False):
+    return SimpleNamespace(id=id_, guild_permissions=SimpleNamespace(administrator=admin))
+
+
+class ModifierTest(unittest.TestCase):
+    def setUp(self):
+        self.annonces = []
+
+        async def faux_discord(methode, chemin, corps=None):
+            self.annonces.append((methode, chemin, corps))
+            return {}
+        ancien, rp._discord = rp._discord, faux_discord
+        self.addCleanup(setattr, rp, "_discord", ancien)
+        # RP importé : auteur relié à la fiche joueur de Kyanite, mais sans ID Discord noté sur le RP.
+        self.importe = _fiche("imp000000000001", titre="La Bête", resume="Une fête de village…", categorie="",
+                              auteur="jKy", auteur_discord_id="", auteur_nom="Kyanite", message_discord="")
+        self.annonce = _fiche()  # proposé sur Discord par l'ID 42, annonce 111/222
+        self.pb = PbModif([self.importe, self.annonce], joueurs=[{"id": "jKy", "pseudo": "Kyanite"}],
+                          persos=[{"id": "pAli", "prenom": "Aliénor", "joueur": "Kyanite"}])
+
+        async def joueur_de(m):
+            return {"id": "jKy", "pseudo": "Kyanite"} if m.id == 286482667023892480 else None
+        self.eco = SimpleNamespace(pb=self.pb, joueur_de=joueur_de)
+
+    def soumettre(self, membre, custom_id, titre, resume="", perso=""):
+        payload = {"data": {"custom_id": custom_id, "components": [
+            {"type": 1, "components": [{"custom_id": "titre", "value": titre}]},
+            {"type": 1, "components": [{"custom_id": "resume", "value": resume}]},
+            {"type": 1, "components": [{"custom_id": "personnage", "value": perso}]}]}}
+        return asyncio.run(rp.envoyer_modif(self.eco, membre, payload))
+
+    def test_autorisations(self):
+        ky, auteur42 = _membre(286482667023892480), _membre(42)
+        autre, admin = _membre(7), _membre(8, admin=True)
+        a = lambda m, f: asyncio.run(rp.autorise(self.eco, m, f))
+        self.assertTrue(a(ky, self.importe))       # auteur par sa fiche joueur
+        self.assertTrue(a(auteur42, self.annonce))  # auteur par son ID Discord
+        self.assertFalse(a(autre, self.importe))   # autre joueur : non
+        self.assertFalse(a(autre, self.annonce))
+        self.assertTrue(a(admin, self.importe))    # admin : oui
+
+    def test_fenetre_preremplie(self):
+        rep_ = asyncio.run(rp.ouvrir_modif(self.eco, _membre(42), "rp0000000000001", "bavard", True))
+        self.assertEqual(rep_["type"], 9)
+        f = rep_["data"]
+        self.assertEqual(f["custom_id"], "eco:rpe:rp0000000000001:bavard:1:")
+        valeurs = {r["components"][0]["custom_id"]: r["components"][0].get("value") for r in f["components"]}
+        self.assertEqual(valeurs, {"titre": "La crypte qui chante", "resume": "Une crypte, des voix.", "personnage": None})
+        refus = asyncio.run(rp.ouvrir_modif(self.eco, _membre(7), "rp0000000000001"))
+        self.assertEqual(refus["type"], 4)
+        self.assertEqual(self.pb.majs, [])
+
+    def test_illustration_longue_gardee_sur_la_fiche(self):
+        rep_ = asyncio.run(rp.ouvrir_modif(self.eco, _membre(42), "rp0000000000001", url=LONGUE))
+        self.assertTrue(rep_["data"]["custom_id"].endswith(":-:-:f"))
+        self.assertEqual(self.pb.fiches["rp0000000000001"]["illustration_source"], LONGUE)
+        self.assertEqual(rp.lire_modif("eco:rpe:abc:magie:0:uhttps://x/y.png"), ("abc", "magie", False, "uhttps://x/y.png"))
+        self.assertEqual(rp.lire_modif("eco:rpe:abc:-:-:"), ("abc", None, None, ""))
+
+    def test_envoi_met_a_jour_fiche_et_annonce(self):
+        async def telecharger(url):
+            return (b"png", "image/png")
+        ancien, rp._telecharger = rp._telecharger, telecharger
+        self.addCleanup(setattr, rp, "_telecharger", ancien)
+        ok, txt = self.soumettre(_membre(42), "eco:rpe:rp0000000000001:bagarre:0:uhttps://x/y.png", "La crypte qui hurle", "Plus fort.", "Odile")
+        self.assertTrue(ok, txt)
+        f = self.pb.fiches["rp0000000000001"]
+        self.assertEqual((f["titre"], f["resume"], f["categorie"], f["chroniqueur_pret"], f["personnage_nom"]),
+                         ("La crypte qui hurle", "Plus fort.", "bagarre", False, "Odile"))
+        self.assertEqual(self.pb.fichiers, [("rp0000000000001", "illustration.png", "image/png")])
+        self.assertEqual(self.annonces[-1][:2], ("PATCH", "/channels/111/messages/222"))  # annonce remise à jour
+        self.assertEqual(f["discord_etat"], rp.signature(asyncio.run(self.pb.requete("GET", "/x/rp0000000000001"))))
+
+    def test_rp_importe_modifie_par_son_auteur_sans_annonce(self):
+        ok, _ = self.soumettre(_membre(286482667023892480), "eco:rpe:imp000000000001:magie:1:", "La Bête", "Une fête…", "alienor")
+        self.assertTrue(ok)
+        f = self.pb.fiches["imp000000000001"]
+        self.assertEqual((f["categorie"], f["chroniqueur_pret"], f["personnage"], f["personnage_nom"]), ("magie", True, "pAli", ""))
+        self.assertEqual(self.annonces, [])  # pas d'annonce Discord pour un RP importé
+
+    def test_envoi_refuse_a_un_autre_joueur(self):
+        ok, txt = self.soumettre(_membre(7), "eco:rpe:imp000000000001:-:-:", "Piraté")
+        self.assertFalse(ok)
+        self.assertEqual(self.pb.fiches["imp000000000001"]["titre"], "La Bête")
+
+    def test_autocompletion_limitee_a_ses_rp(self):
+        async def joueur_de(m):
+            return {"id": "jRa", "pseudo": "Ràlas"} if m.id == 333 else None
+        self.eco.joueur_de = joueur_de
+        miens = asyncio.run(rp.choix_modifier(self.eco, _membre(333), ""))
+        filtre = self.pb.filtres[-1][1]
+        self.assertIn('auteur_discord_id="333"', filtre)  # ses RP proposés sur Discord…
+        self.assertIn('auteur="jRa"', filtre)  # … et ceux reliés à sa fiche joueur (RP importés)
+        self.assertTrue(all(len(c["name"]) <= 100 for c in miens))
+        asyncio.run(rp.choix_modifier(self.eco, _membre(8, admin=True), "bête"))
+        self.assertEqual(self.pb.filtres[-1][1], 'statut!="annulee" && statut!="brouillon"')  # admin : tous
 
 
 class CommandesTest(unittest.TestCase):
@@ -336,6 +458,15 @@ class CommandesTest(unittest.TestCase):
         texte = str(info.vue_info())
         self.assertIn("/proposer-rp", texte)
         self.assertIn("/je-veux-rp", texte)
+        self.assertIn("/modifier-rp", texte)
+        # /rp-a-trier retirée : plus déclarée, et effacée de Discord au démarrage (COMMANDES_RETIREES).
+        self.assertNotIn("rp-a-trier", par_nom)
+        self.assertNotIn("rp-a-trier", texte)
+        from scripts.register_commands import COMMANDES_RETIREES
+        self.assertIn("rp-a-trier", COMMANDES_RETIREES)
+        m = par_nom["modifier-rp"]
+        self.assertEqual([o["name"] for o in m["options"]], ["rp", "categorie", "chroniqueur-pret", "illustration"])
+        self.assertTrue(m["options"][0]["autocomplete"])
 
 
 if __name__ == "__main__":

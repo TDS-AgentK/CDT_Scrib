@@ -83,11 +83,26 @@ async def startup():
             statut_lunes.start()
         synchro_listes()
         # /session, /attaque (fiches de jeu), /boite-a-role, /info et Halloween (/halloween, /bonbons, /halloween-admin), /avent,
-        # /proposer-rp et /je-veux-rp (Liste des RP) : déclarées ici, sans toucher aux autres commandes ni relancer
+        # /proposer-rp, /je-veux-rp et /modifier-rp (Liste des RP) : déclarées ici, sans toucher aux autres commandes ni relancer
         # scripts/register_commands.py à la main.
-        from scripts.register_commands import COMMANDS
+        from scripts.register_commands import COMMANDES_RETIREES, COMMANDS
+        # Commandes retirées (ex. /rp-a-trier, 15/11/2026) : effacées de Discord, sinon elles resteraient dans la liste.
+        try:
+            if os.getenv("GUILD_ID"):
+                declarees = await gateway.http.get_guild_commands(DISCORD_APPLICATION_ID, os.getenv("GUILD_ID"))
+            else:
+                declarees = await gateway.http.get_global_commands(DISCORD_APPLICATION_ID)
+            for c in declarees:
+                if c.get("name") in COMMANDES_RETIREES:
+                    if os.getenv("GUILD_ID"):
+                        await gateway.http.delete_guild_command(DISCORD_APPLICATION_ID, os.getenv("GUILD_ID"), c["id"])
+                    else:
+                        await gateway.http.delete_global_command(DISCORD_APPLICATION_ID, c["id"])
+                    log.info("Commande retirée effacée de Discord : /%s", c["name"])
+        except Exception:
+            log.exception("Nettoyage des commandes retirées")
         for nom in ("session", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent",
-                    "proposer-rp", "je-veux-rp", "rp-a-trier"):
+                    "proposer-rp", "je-veux-rp", "modifier-rp"):
             try:
                 commande = next(c for c in COMMANDS if c["name"] == nom)
                 if os.getenv("GUILD_ID"):
