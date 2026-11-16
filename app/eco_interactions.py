@@ -685,6 +685,12 @@ async def _autocompletion(eco, payload) -> dict:
             o = objets.get(l.get("objet"))
             if o and tape in o["nom"].lower():
                 choix.append({"name": f'{o["nom"]} — {l["prix_vente"]} Or (stock {l["stock"]})'[:100], "value": o["id"]})
+    elif focus["name"] == "soir" and data["name"] == "dispos":
+        # /dispos heures : ce soir, demain, puis les jours suivants avec leur date (valeur : AAAA-MM-JJ).
+        from datetime import datetime
+        for nom, valeur in disponibilites.choix_soirs(datetime.now(disponibilites.PARIS).date()):
+            if tape in nom.lower():
+                choix.append({"name": nom, "value": valeur})
     elif focus["name"] == "modele" and data["name"] == "loterie":
         for m in await eco.pb.lister("eco_loterie_modeles", None, tri="nom"):
             if tape in (m.get("nom") or "").lower():
@@ -774,9 +780,12 @@ async def _dispos_heures(eco, payload, taches, soir_iso, soir_nom, plage) -> dic
     except ValueError as e:
         return {"type": MESSAGE, "data": {"content": f"Heures invalides : {e}", "flags": PRIVE}}
     aujourdhui = datetime.now(disponibilites.PARIS).date()
-    soir = date.fromisoformat(soir_iso) if soir_iso else disponibilites.soir_choisi(soir_nom, aujourdhui)
-    if soir is None:
-        soir = await eco.dispos.meilleur_soir_courant(aujourdhui) or aujourdhui
+    # Par défaut : ce soir (heure de Paris). Option « soir » : une date (autocomplétion) ou un nom de jour.
+    try:
+        soir = date.fromisoformat(soir_iso or soir_nom or "")
+    except ValueError:
+        soir = disponibilites.soir_choisi(soir_nom, aujourdhui) if soir_nom else None
+    soir = soir or aujourdhui
     sid = cfg["salon_seances_id"] or int(payload["channel_id"])
     salon = eco.client.get_channel(sid) or await eco.client.fetch_channel(sid)
     _en_fond(taches, eco.dispos.poster_heures, salon, soir, heures[0], heures[-1], cfg["pas"])

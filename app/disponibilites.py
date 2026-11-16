@@ -7,7 +7,7 @@ les votes (par jour, le nombre de votants, une barre et les pseudos, une ⭐ au 
 classement change, et en pied « N réponses sur M »). Le compteur de réactions de Discord inclut le +1 du bot : normal.
 
 Sondage des heures : toujours lancé à la main, avec /dispos heures (jamais par une tâche planifiée). Soir par défaut :
-le meilleur soir de la semaine ; créneaux par défaut de 19:00 à 21:00, toutes les 30 min (une horloge par créneau). Un
+ce soir (heure de Paris), ou un autre soir au choix ; créneaux par défaut de 19:00 à 21:00, toutes les 30 min (une horloge par créneau). Un
 seul vote par joueur : l'heure à partir de laquelle il est là (une autre réaction retire l'ancienne). Le compte est
 cumulé : dispo à 19:00, il compte aussi pour 19:30, 20:00… Chaque ligne donne le total et nomme les nouveaux arrivants ;
 ⭐ à l'heure où tout le monde est là.
@@ -300,6 +300,16 @@ def lire_embed_heures(embed: dict) -> tuple[date, list[str]] | None:
         return None
     soir = datetime.fromisoformat(str(embed["timestamp"]).replace("Z", "+00:00")).astimezone(PARIS).date()
     return soir, creneaux(m[1], m[2], int(m[3]))
+
+
+def choix_soirs(aujourdhui: date, n: int = 7) -> list[tuple[str, str]]:
+    """Choix du soir de /dispos heures : « Ce soir (Lun. 16) », « Demain (Mar. 17) », puis « Mer. 18 »… (valeur ISO)."""
+    out = []
+    for i in range(n):
+        d = aujourdhui + timedelta(days=i)
+        nom = f"Ce soir ({jour_court(d)})" if i == 0 else f"Demain ({jour_court(d)})" if i == 1 else jour_court(d)
+        out.append((nom, d.isoformat()))
+    return out
 
 
 def soir_choisi(nom: str | None, aujourdhui: date) -> date | None:

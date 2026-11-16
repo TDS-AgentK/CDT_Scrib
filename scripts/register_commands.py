@@ -28,8 +28,6 @@ CATEGORIES_RP = [{"name": "RP découverte", "value": "decouverte"}, {"name": "RP
 # Commandes retirées : supprimées de Discord au démarrage du bot (app/main.py), sinon elles resteraient affichées.
 COMMANDES_RETIREES = {"rp-a-trier"}
 
-# Soirs proposés pour /dispos heures (app/disponibilites.py).
-SOIRS = [{"name": j, "value": j} for j in ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]]
 
 COMMANDS = [
     {
@@ -39,7 +37,7 @@ COMMANDS = [
             {"type": 1, "name": "jours", "description": "Poster ici le sondage des jours de la semaine prochaine (essai, sans mention)"},
             {"type": 1, "name": "heures", "description": "Sondage « à partir de quelle heure ? » d'un soir, dans #séances",
              "options": [
-                 {"type": 3, "name": "soir", "description": "Soir (par défaut : le meilleur soir de la semaine)", "choices": SOIRS},
+                 {"type": 3, "name": "soir", "description": "Soir (par défaut : ce soir)", "autocomplete": True},
                  {"type": 3, "name": "debut", "description": "Première heure (par défaut 19:00)"},
                  {"type": 3, "name": "fin", "description": "Dernière heure (par défaut 21:00)"},
              ]},

@@ -77,6 +77,10 @@ class Heures(unittest.TestCase):
         self.assertIn("Tout le monde est là à partir de **20:00**.", e["description"])
         self.assertEqual(d.lire_embed_heures(e), (date(2026, 11, 17), heures))
 
+    def test_choix_des_soirs(self):
+        c = d.choix_soirs(date(2026, 11, 16), 4)
+        self.assertEqual(c, [("Ce soir (Lun. 16)", "2026-11-16"), ("Demain (Mar. 17)", "2026-11-17"), ("Mer. 18", "2026-11-18"), ("Jeu. 19", "2026-11-19")])
+
     def test_soir_choisi(self):
         self.assertEqual(d.soir_choisi("Mardi", date(2026, 11, 16)), date(2026, 11, 17))
         self.assertEqual(d.soir_choisi("Lundi", date(2026, 11, 16)), date(2026, 11, 16))
