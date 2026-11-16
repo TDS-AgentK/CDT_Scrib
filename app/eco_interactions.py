@@ -18,7 +18,7 @@ log = logging.getLogger("cdt_scrib.eco_interactions")
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
              "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
              "session", "recompense", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent",
-             "proposer-rp", "je-veux-rp", "modifier-rp", "dispos"}
+             "proposer-rp", "je-veux-rp", "modifier-rp", "dispos", "infoadmin"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -127,7 +127,15 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
     if nom == "dispos":
         return await _dispos_commande(eco, payload, membre, taches)
     if nom == "info":
-        return {"type": MESSAGE, "data": {"embeds": [info.vue_info(eco.prefixe)], "flags": PRIVE}}
+        # Sans les commandes admin (/infoadmin) ni celles des événements fermés (Halloween, Avent).
+        from app import commandes_saison
+        return {"type": MESSAGE, "data": {"embeds": [info.vue_info(eco.prefixe, await commandes_saison.cachees(eco))], "flags": PRIVE}}
+    if nom == "infoadmin":
+        # Commande cachée aux non-admins dans Discord ; droits vérifiés ici aussi (administrateur, gérants Halloween, loteries).
+        if not await info.est_admin(eco, membre):
+            return {"type": MESSAGE, "data": {"content": "Commande réservée aux administrateurs.", "flags": PRIVE}}
+        from app import commandes_saison
+        return {"type": MESSAGE, "data": {"embeds": [info.vue_infoadmin(await commandes_saison.cachees(eco))], "flags": PRIVE}}
     if nom == "halloween":
         # Boutique d'Halloween (app/halloween.py), payée en bonbons.
         return {"type": MESSAGE, "data": await halloween.vue(eco, membre)}

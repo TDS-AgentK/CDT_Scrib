@@ -1,5 +1,7 @@
-"""/info : résumé de toutes les commandes du bot, construit depuis scripts/register_commands.py (les descriptions
-restent donc à jour toutes seules). Une commande qui n'est rangée dans aucune rubrique apparaît dans « Autres »."""
+"""/info : résumé des commandes du bot, construit depuis scripts/register_commands.py (les descriptions restent donc à jour
+toutes seules). Une commande qui n'est rangée dans aucune rubrique apparaît dans « Autres ».
+/info ne montre pas les commandes admin (liste à part : /infoadmin, cachée aux non-admins) ni celles des événements
+fermés (Halloween, Avent : app/commandes_saison.py)."""
 from app import eco_vues
 
 RUBRIQUES = [
@@ -12,6 +14,15 @@ RUBRIQUES = [
     ("🎭 Liste des RP", ["proposer-rp", "je-veux-rp", "modifier-rp"]),
     ("🛡️ Administration", ["dropadmin", "loterie"]),
 ]
+
+# Commandes réservées aux admins : seulement dans /infoadmin.
+ADMIN = {"dropadmin", "loterie", "halloween-admin", "infoadmin"}
+
+
+async def est_admin(eco, membre) -> bool:
+    """Administrateurs du serveur, gérants d'Halloween et administrateurs de loterie."""
+    from app import halloween
+    return await halloween.est_admin(eco, membre)
 
 # Ajoutée sous la rubrique des fiches : deux sortes de fiches cohabitent (app/fiches_site.py).
 NOTE_FICHES = ("*Les fiches créées ici (et celles qui existaient déjà) restent sur le bot : on les modifie avec /fiche modifier. "
@@ -39,17 +50,31 @@ def _champs(titre: str, lignes: list[str]) -> list[dict]:
     return champs
 
 
-def vue_info(prefixe: str = "??") -> dict:
+def _rubriques(garder, note: bool) -> list[dict]:
+    """Champs des rubriques, avec les seules commandes retenues par `garder(nom)`."""
     from scripts.register_commands import COMMANDS
     par_nom = {c["name"]: c for c in COMMANDS}
     ranges = {n for _t, noms in RUBRIQUES for n in noms}
     champs = []
     for titre, noms in RUBRIQUES:
-        lignes = [_ligne(par_nom[n]) for n in noms if n in par_nom]
-        champs += _champs(titre, lignes + ([NOTE_FICHES] if "fiche" in noms else []))
-    autres = [_ligne(c) for c in COMMANDS if c["name"] not in ranges and c["name"] != "info"]
+        lignes = [_ligne(par_nom[n]) for n in noms if n in par_nom and garder(n)]
+        if lignes:
+            champs += _champs(titre, lignes + ([NOTE_FICHES] if note and "fiche" in noms else []))
+    autres = [_ligne(c) for c in COMMANDS if c["name"] not in ranges and c["name"] not in ("info", "infoadmin") and garder(c["name"])]
     if autres:
         champs += _champs("✨ Autres", autres)
+    return champs
+
+
+def vue_infoadmin(cachees: set[str] = frozenset()) -> dict:
+    """/infoadmin : les commandes admin seulement (événements fermés exclus), même présentation que /info."""
+    champs = _rubriques(lambda n: n in ADMIN and n not in cachees and n != "infoadmin", note=False)
+    return {"title": "Commandes du Scribe : administration", "color": eco_vues.OR_DEFAUT, "fields": champs[:25],
+            "description": "Réservées aux administrateurs. Tapez `/` puis le nom pour voir leurs options."}
+
+
+def vue_info(prefixe: str = "??", cachees: set[str] = frozenset()) -> dict:
+    champs = _rubriques(lambda n: n not in ADMIN and n not in cachees, note=True)
     champs.append({"name": "⌨️ Commandes à taper", "inline": False, "value": (
         f"`{prefixe}rp @partenaires` après un RP · `{prefixe}niveau` · `{prefixe}classement` · `{prefixe}inventaire` · "
         f"`{prefixe}boutique` · `{prefixe}acheter <numéro ou nom>`")})

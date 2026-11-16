@@ -105,7 +105,8 @@ async def startup():
                     log.info("Commande retirée effacée de Discord : /%s", c["name"])
         except Exception:
             log.exception("Nettoyage des commandes retirées")
-        for nom in ("session", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent",
+        # Halloween et Avent : déclarés seulement pendant leur événement (app/commandes_saison.py, boucle ci-dessous).
+        for nom in ("session", "attaque", "boite-a-role", "info", "infoadmin",
                     "proposer-rp", "je-veux-rp", "modifier-rp", "dispos"):
             try:
                 commande = next(c for c in COMMANDS if c["name"] == nom)
@@ -180,6 +181,9 @@ async def startup():
     asyncio.create_task(rp_demandes.boucle(economie))
     # Sondages de disponibilités : dimanche 08:00 envoi, vendredi 18:00 rappel, samedi 12:00 clôture (DISPO_ACTIF=1).
     asyncio.create_task(economie.dispos.boucle())
+    # Commandes saisonnières (Halloween, Avent) : déclarées ou effacées de Discord selon que l'événement est ouvert.
+    from app import commandes_saison
+    asyncio.create_task(commandes_saison.boucle(gateway, economie, DISCORD_APPLICATION_ID))
 
 
 def fiches_site_lecture():

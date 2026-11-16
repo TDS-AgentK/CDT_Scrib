@@ -44,6 +44,8 @@ COMMANDS = [
         ],
     },
     {"name": "info", "description": "Résumé de toutes les commandes du bot", "options": []},
+    # Visible seulement des administrateurs dans le menu des commandes (permission « Administrateur ») ; vérifiée aussi par le bot.
+    {"name": "infoadmin", "description": "Commandes réservées aux administrateurs", "options": [], "default_member_permissions": "8"},
     {
         "name": "fiche",
         "description": "Gérer les fiches de personnage",
