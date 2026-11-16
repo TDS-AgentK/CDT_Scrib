@@ -11,14 +11,14 @@ import os
 import discord
 import httpx
 
-from app import avent, combat, drop, eco_actions, eco_vues, emblemes, halloween, info, jets_site, loteries, receleur, ros_boutique, rp_demandes, sessions_jeu
+from app import avent, combat, disponibilites, drop, eco_actions, eco_vues, emblemes, halloween, info, jets_site, loteries, receleur, ros_boutique, rp_demandes, sessions_jeu
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
              "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
              "session", "recompense", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent",
-             "proposer-rp", "je-veux-rp", "modifier-rp"}
+             "proposer-rp", "je-veux-rp", "modifier-rp", "dispos"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -124,6 +124,8 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
     nom, opt = data["name"], _options(data)
     if nom == "boutique":
         return {"type": MESSAGE, "data": await eco_vues.vue_choix_boutique(eco, membre)}
+    if nom == "dispos":
+        return await _dispos_commande(eco, payload, membre, taches)
     if nom == "info":
         return {"type": MESSAGE, "data": {"embeds": [info.vue_info(eco.prefixe)], "flags": PRIVE}}
     if nom == "halloween":
@@ -356,6 +358,9 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
         return _maj_v2(eco_vues.boutique_fermee())
     if cid == "eco:shop":
         return _maj_v2(await eco_vues.vue_boutique(eco, membre, valeurs[0]))
+    if morceaux[1] == "dispo":
+        # Bouton de la clôture du sondage des jours : lance le sondage des heures du meilleur soir dans #séances.
+        return await _dispos_heures(eco, payload, taches, morceaux[3], None, None)
     if morceaux[1] == "rp":
         return await _rp_clic(eco, payload, membre, taches, app_id, morceaux, valeurs)
     if morceaux[1] == "hal":
@@ -744,3 +749,38 @@ async def _autocompletion(eco, payload) -> dict:
                 choix.append({"name": f'{d.get("monnaie_nom")} ({d.get("nom")})'[:100], "value": f'monnaie:{d["id"]}'})
         choix = [c for c in choix if tape in c["name"].lower()]
     return {"type": AUTOCOMPLETE, "data": {"choices": choix[:25]}}
+
+
+# ---------------------------------------------------------------- disponibilités (app/disponibilites.py)
+
+async def _dispos_commande(eco, payload, membre, taches) -> dict:
+    """/dispos jours : sondage des jours de la semaine prochaine, posté dans ce salon (essai, sans mention) ;
+    /dispos heures : sondage des heures d'un soir dans #séances (sinon dans ce salon)."""
+    sous = (payload["data"].get("options") or [{}])[0]
+    opt = {o["name"]: o.get("value") for o in sous.get("options", [])}
+    if sous.get("name") == "jours":
+        from datetime import datetime
+        salon = eco.client.get_channel(int(payload["channel_id"])) or await eco.client.fetch_channel(int(payload["channel_id"]))
+        lundi = disponibilites.lundi_suivant(datetime.now(disponibilites.PARIS).date())
+        _en_fond(taches, eco.dispos.poster_jours, salon, lundi, False)
+        return {"type": MESSAGE, "data": {"content": f"Sondage des disponibilités {disponibilites.periode(lundi)} posté ici.", "flags": PRIVE}}
+    return await _dispos_heures(eco, payload, taches, None, opt.get("soir"), (opt.get("debut"), opt.get("fin")))
+
+
+async def _dispos_heures(eco, payload, taches, soir_iso, soir_nom, plage) -> dict:
+    from datetime import date, datetime
+    cfg = disponibilites.reglages()
+    debut, fin = (plage or (None, None))
+    debut, fin = debut or cfg["debut"], fin or cfg["fin"]
+    try:
+        heures = disponibilites.creneaux(debut, fin, cfg["pas"])
+    except ValueError as e:
+        return {"type": MESSAGE, "data": {"content": f"Heures invalides : {e}", "flags": PRIVE}}
+    aujourdhui = datetime.now(disponibilites.PARIS).date()
+    soir = date.fromisoformat(soir_iso) if soir_iso else disponibilites.soir_choisi(soir_nom, aujourdhui)
+    if soir is None:
+        soir = await eco.dispos.meilleur_soir_courant(aujourdhui) or aujourdhui
+    sid = cfg["salon_seances_id"] or int(payload["channel_id"])
+    salon = eco.client.get_channel(sid) or await eco.client.fetch_channel(sid)
+    _en_fond(taches, eco.dispos.poster_heures, salon, soir, heures[0], heures[-1], cfg["pas"])
+    return {"type": MESSAGE, "data": {"content": f"Sondage des heures du {disponibilites.jour_long(soir).lower()} lancé dans <#{sid}>.", "flags": PRIVE}}

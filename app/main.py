@@ -70,6 +70,10 @@ async def startup():
     # Journal des rôles ajoutés / retirés (bot, staff, boosts), arrivées et départs : onglet Journal de la page Économie.
     from app import journal
     journal.brancher(gateway, economie)
+    # Sondages de disponibilités (jours et heures) : réactions suivies, envoi / rappel / clôture automatiques.
+    from app import disponibilites
+    economie.dispos = disponibilites.Disponibilites(economie)
+    disponibilites.brancher(gateway, economie.dispos)
 
     @gateway.event
     async def on_ready():
@@ -102,7 +106,7 @@ async def startup():
         except Exception:
             log.exception("Nettoyage des commandes retirées")
         for nom in ("session", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent",
-                    "proposer-rp", "je-veux-rp", "modifier-rp"):
+                    "proposer-rp", "je-veux-rp", "modifier-rp", "dispos"):
             try:
                 commande = next(c for c in COMMANDS if c["name"] == nom)
                 if os.getenv("GUILD_ID"):
@@ -174,6 +178,8 @@ async def startup():
     # Liste des RP (/proposer-rp) : annonces Discord remises à jour quand la fiche change sur le site (~1 min).
     from app import rp_demandes
     asyncio.create_task(rp_demandes.boucle(economie))
+    # Sondages de disponibilités : dimanche 08:00 envoi, vendredi 18:00 rappel, samedi 12:00 clôture (DISPO_ACTIF=1).
+    asyncio.create_task(economie.dispos.boucle())
 
 
 def fiches_site_lecture():
