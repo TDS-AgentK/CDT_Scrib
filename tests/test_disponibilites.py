@@ -19,11 +19,9 @@ class Dates(unittest.TestCase):
         self.assertEqual(d.periode(date(2025, 12, 29)), "du 29 décembre 2025 au 4 janvier 2026")
         self.assertEqual(d.jour_court(LUNDI), "Lun. 16")
 
-    def test_cloture_et_rappel(self):
-        c = d.moment(LUNDI, (5, 12, 0))
-        self.assertEqual((c.weekday(), c.day, c.hour), (5, 21, 12))
-        r = d.moment(LUNDI, (4, 18, 0))
-        self.assertEqual((r.weekday(), r.day, r.hour), (4, 20, 18))
+    def test_heure_de_l_envoi(self):
+        e = d.moment(date(2026, 11, 9), (6, 8, 0))  # dimanche 15 à 08:00, pour la semaine du 16
+        self.assertEqual((e.weekday(), e.day, e.hour), (6, 15, 8))
 
 
 class Jours(unittest.TestCase):
@@ -41,17 +39,19 @@ class Jours(unittest.TestCase):
     def test_embed_et_relecture(self):
         par_jour, pas_dispo, rep = d.etat_jours(self.REACTIONS, BOT)
         noms = {10: "Kelora", 11: "Fyb", 12: "Ràlas", 13: "Kyanite"}
-        e = d.embed_jours(LUNDI, par_jour, pas_dispo, noms, 4, d.moment(LUNDI, (5, 12, 0)))
+        e = d.embed_jours(LUNDI, par_jour, pas_dispo, noms, 4)
         self.assertEqual(e["title"], "Inquisiteur des présences")
         self.assertIn("Vos disponibilités du 16 au 22 novembre", e["description"])
         self.assertIn("**Mar. 17** ⭐ · 3", e["description"])
         self.assertIn("Kelora, Fyb, Ràlas", e["description"])
-        self.assertEqual(e["footer"]["text"], "4 réponses sur 4 · clôture samedi 21 à 12:00")
-        self.assertEqual(d.lire_embed_jours(e), (LUNDI, False, False))
-        clos = d.embed_jours(LUNDI, par_jour, pas_dispo, noms, 4, d.moment(LUNDI, (5, 12, 0)), clos=True, rappel=True)
-        self.assertEqual(d.lire_embed_jours(clos), (LUNDI, True, True))
+        self.assertEqual(e["footer"]["text"], "4 réponses sur 4")  # ni rappel ni clôture
+        self.assertEqual(d.lire_embed_jours(e), (LUNDI, False))
+        ancien = d.embed_jours(LUNDI, par_jour, pas_dispo, noms, 4, clos=True)  # sondage clôturé avant le 16/11 : figé
+        self.assertEqual(d.lire_embed_jours(ancien), (LUNDI, True))
         self.assertIsNone(d.lire_embed_jours({"title": "Autre chose"}))
-        self.assertIn("Meilleur soir : **Mardi 17**", d.texte_cloture(LUNDI, par_jour, noms))
+        # L'étoile suit le classement : un vote de plus pour jeudi la déplace.
+        par_jour[3] = [10, 11, 12, 13]
+        self.assertIn("**Jeu. 19** ⭐", d.embed_jours(LUNDI, par_jour, pas_dispo, noms, 4)["description"])
 
 
 class Heures(unittest.TestCase):
@@ -100,14 +100,37 @@ class Reglages(unittest.TestCase):
             self.assertEqual(cfg["salon_id"], 333)
             self.assertEqual(cfg["role_id"], 222)  # vide sur le site : variable d'environnement
             self.assertEqual(cfg["envoi"], (0, 9, 30))  # lundi 0 accepté
-            self.assertEqual(cfg["rappel"], (4, 18, 0))
-            self.assertEqual(cfg["cloture"], (6, 12, 0))
+            self.assertNotIn("rappel", cfg)
+            self.assertNotIn("cloture", cfg)
             self.assertEqual((cfg["debut"], cfg["fin"], cfg["pas"]), ("20:00", "21:00", 60))
         perms = SimpleNamespace(manage_messages=False, add_reactions=True, send_messages=True, embed_links=True, read_message_history=True)
         self.assertEqual(d.texte_verif(perms, "séances", datetime(2026, 11, 16, 20, 0)), "Il manque au bot dans #séances : Gérer les messages.")
         perms.manage_messages = True
         self.assertTrue(d.texte_verif(perms, "séances", datetime(2026, 11, 16, 20, 0)).startswith("ok dans #séances"))
 
+
+
+class MiseAJour(unittest.TestCase):
+    def test_votes_regroupes(self):
+        """Plusieurs votes rapprochés : une seule modification du message, après ~2 s."""
+        import asyncio
+        from unittest import mock
+
+        async def scenario():
+            dispos = d.Disponibilites.__new__(d.Disponibilites)
+            dispos._taches, dispos._verrous = {}, {}
+            appels = []
+
+            async def maj(salon, mid):
+                await asyncio.sleep(0.05)
+                appels.append(mid)
+            dispos._mettre_a_jour = maj
+            for _ in range(5):
+                dispos._planifier(None, 42)
+                await asyncio.sleep(0.01)
+            await asyncio.sleep(0.2)
+            return appels
+        self.assertEqual(asyncio.run(scenario()), [42])
 
 
 if __name__ == "__main__":

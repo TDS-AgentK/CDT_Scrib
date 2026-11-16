@@ -1,29 +1,29 @@
 """Sondages de disponibilités (remplacent les sondages YAGPDB ; version A validée par K le 16/11/2026).
 
-Sondage des jours : posté chaque dimanche à 08:00 (heure de Paris) dans #disponibilités, pour la semaine du lendemain
-(lundi au dimanche). Le bot ajoute les réactions 1️⃣ à 7️⃣ et ❌ (« pas dispo cette semaine ») ; l'embed est remis à jour à
-chaque réaction : par jour, le nombre de votants, une barre et les pseudos, une ⭐ au meilleur soir, et en pied
-« N réponses sur M · clôture samedi 21 à 12:00 ». Le compteur de réactions de Discord inclut le +1 du bot : normal.
-Le vendredi à 18:00, rappel en message privé aux joueurs qui n'ont pas répondu ; le samedi à 12:00, clôture : un
-message annonce le meilleur soir, avec un bouton qui lance le sondage des heures.
+Sondage de la semaine (« Inquisiteur des présences ») : seul envoi automatique, chaque dimanche à 08:00 (heure de
+Paris, réglable) dans #disponibilités, pour la semaine du lendemain (lundi au dimanche). Le bot ajoute les réactions 1️⃣ à
+7️⃣ et ❌ (« pas dispo cette semaine »). Ni rappel ni clôture (K, 16/11/2026) : le sondage reste ouvert et son embed suit
+les votes (par jour, le nombre de votants, une barre et les pseudos, une ⭐ au meilleur soir, qui se déplace si le
+classement change, et en pied « N réponses sur M »). Le compteur de réactions de Discord inclut le +1 du bot : normal.
 
-Sondage des heures : /dispos heures (ou le bouton), dans #séances. Soir par défaut : le meilleur soir de la semaine ;
-créneaux par défaut de 19:00 à 21:00, toutes les 30 min (une horloge par créneau). Un seul vote par joueur : l'heure
-à partir de laquelle il est là (une autre réaction retire l'ancienne). Le compte est cumulé : dispo à 19:00, il compte
-aussi pour 19:30, 20:00… Chaque ligne donne le total et nomme les nouveaux arrivants ; ⭐ à l'heure où tout le monde
-est là.
+Sondage des heures : toujours lancé à la main, avec /dispos heures (jamais par une tâche planifiée). Soir par défaut :
+le meilleur soir de la semaine ; créneaux par défaut de 19:00 à 21:00, toutes les 30 min (une horloge par créneau). Un
+seul vote par joueur : l'heure à partir de laquelle il est là (une autre réaction retire l'ancienne). Le compte est
+cumulé : dispo à 19:00, il compte aussi pour 19:30, 20:00… Chaque ligne donne le total et nomme les nouveaux arrivants ;
+⭐ à l'heure où tout le monde est là.
 
-Aucun état en mémoire n'est nécessaire : tout se relit sur le message (date dans l'horodatage de l'embed, créneaux
-dans son pied, votes dans les réactions, rappel et clôture notés dans le pied). Un redémarrage ne perd donc rien.
+Mise à jour à chaque vote (ajout ou retrait de réaction), regroupée sur ~2 s par message pour rester sous les limites de
+Discord. Événements « raw » : ils arrivent même pour les messages absents du cache (après un redémarrage), et le message
+est relu sur Discord. Aucun état en mémoire n'est nécessaire : tout se relit sur le message (date dans l'horodatage de
+l'embed, créneaux dans son pied, votes dans les réactions). Un redémarrage ne perd donc rien.
 
 Réglages : page /gestion/disponibilites du site (eco_reglages, fiche « general », champs dispo_*), relus toutes les
 3 minutes : un changement s'applique sans redéployer. Champ vide (ou champs absents de la base) : variables
 d'environnement ci-dessous, puis valeurs par défaut. Le bot y écrit aussi dispo_verif (ses droits dans #séances).
-  DISPO_ACTIF=1               envoi, rappel et clôture automatiques (sinon seulement les commandes manuelles) ;
+  DISPO_ACTIF=1               envoi automatique du sondage de la semaine (sinon seulement les commandes manuelles) ;
   DISPO_SALON_ID              salon #disponibilités ; DISPO_SALON_SEANCES_ID : salon #séances (sondage des heures) ;
-  DISPO_ROLE_ID               rôle des joueurs (« sur M », rappel) ; DISPO_MENTION=1 : mentionner ce rôle à l'envoi ;
+  DISPO_ROLE_ID               rôle des joueurs (« sur M ») ; DISPO_MENTION=1 : mentionner ce rôle à l'envoi ;
   DISPO_ENVOI="6 08:00"       jour (0 = lundi … 6 = dimanche) et heure de l'envoi ;
-  DISPO_RAPPEL="4 18:00", DISPO_CLOTURE="5 12:00"   jours comptés depuis le lundi de la semaine sondée ;
   DISPO_HEURES="19:00-21:00/30"                     créneaux par défaut du sondage des heures.
 """
 from __future__ import annotations
@@ -46,7 +46,8 @@ PAS_DISPO = "❌"
 TITRE_JOURS = "Inquisiteur des présences"
 SUFFIXE_HEURES = " : à partir de quelle heure ?"
 COULEUR = 0x8A2F22
-COULEUR_CLOS = 0x5A4A36
+COULEUR_CLOS = 0x5A4A36  # anciens sondages clôturés (avant le 16/11/2026), restés figés
+DELAI_MAJ_S = 2  # votes regroupés avant de modifier le message
 LARGEUR_BARRE = 10
 MAX_CRENEAUX = 20  # Discord n'accepte pas plus de 20 réactions différentes sur un message
 
@@ -68,8 +69,6 @@ def reglages() -> dict:
         "role_id": int(os.getenv("DISPO_ROLE_ID") or 0) or None,
         "mention": os.getenv("DISPO_MENTION") == "1",
         "envoi": _jour_heure(os.getenv("DISPO_ENVOI", ""), (6, 8, 0)),
-        "rappel": _jour_heure(os.getenv("DISPO_RAPPEL", ""), (4, 18, 0)),
-        "cloture": _jour_heure(os.getenv("DISPO_CLOTURE", ""), (5, 12, 0)),
         "debut": debut, "fin": fin, "pas": pas,
     }
 
@@ -88,7 +87,7 @@ def reglages_depuis(fiche: dict | None) -> dict:
     for cle, champ in (("salon_id", "dispo_salon_id"), ("salon_seances_id", "dispo_seances_id"), ("role_id", "dispo_role_id")):
         if not _vide(fiche.get(champ)) and str(fiche[champ]).isdigit():
             cfg[cle] = int(fiche[champ])
-    for cle in ("envoi", "rappel", "cloture"):
+    for cle in ("envoi",):
         j, h, m = cfg[cle]
         if not _vide(fiche.get(f"dispo_{cle}_jour")):
             j = int(fiche[f"dispo_{cle}_jour"])
@@ -180,8 +179,8 @@ def barre(n: int, total: int, largeur: int = LARGEUR_BARRE) -> str:
 
 
 def embed_jours(lundi: date, par_jour: list[list[int]], pas_dispo: list[int], noms: dict[int, str],
-                attendus: int | None, cloture: datetime, clos: bool = False, rappel: bool = False) -> dict:
-    """Embed du sondage des jours (dict Discord)."""
+                attendus: int | None, clos: bool = False) -> dict:
+    """Embed du sondage de la semaine (dict Discord)."""
     repondants = {u for l in par_jour for u in l} | set(pas_dispo)
     total_barre = attendus or max([len(l) for l in par_jour] + [1])
     best = meilleur_soir(par_jour)
@@ -198,36 +197,22 @@ def embed_jours(lundi: date, par_jour: list[list[int]], pas_dispo: list[int], no
     else:
         lignes.append(f"{PAS_DISPO} Pas dispo cette semaine")
     reponses = f"{len(repondants)} réponse{'s' if len(repondants) > 1 else ''}" + (f" sur {attendus}" if attendus else "")
-    fin = cloture.astimezone(PARIS)
-    pied = (f"Clôturé · {reponses}" if clos
-            else f"{reponses} · clôture {JOURS[fin.weekday()].lower()} {fin.day} à {fin:%H:%M}") + (" · rappel envoyé" if rappel else "")
     return {
         "title": TITRE_JOURS,
         "description": f"**Vos disponibilités {periode(lundi)}**\nRéagissez avec les soirs où vous êtes là.\n\n" + "\n".join(lignes),
         "color": COULEUR_CLOS if clos else COULEUR,
-        "footer": {"text": pied},
+        "footer": {"text": f"Clôturé · {reponses}" if clos else reponses},
         # La semaine sondée, relue après un redémarrage.
         "timestamp": datetime.combine(lundi, datetime.min.time(), PARIS).isoformat(),
     }
 
 
-def lire_embed_jours(embed: dict) -> tuple[date, bool, bool] | None:
-    """(lundi, clos, rappel envoyé) d'un embed de sondage des jours, None si ce n'en est pas un."""
+def lire_embed_jours(embed: dict) -> tuple[date, bool] | None:
+    """(lundi, clos) d'un embed de sondage de la semaine, None si ce n'en est pas un. « Clos » : ancien sondage clôturé."""
     if embed.get("title") != TITRE_JOURS or not embed.get("timestamp"):
         return None
     lundi = datetime.fromisoformat(str(embed["timestamp"]).replace("Z", "+00:00")).astimezone(PARIS).date()
-    pied = (embed.get("footer") or {}).get("text", "")
-    return lundi, pied.startswith("Clôturé"), "rappel envoyé" in pied
-
-
-def texte_cloture(lundi: date, par_jour: list[list[int]], noms: dict[int, str]) -> str:
-    best = meilleur_soir(par_jour)
-    if best is None:
-        return f"**Clôture des disponibilités {periode(lundi)}** : personne n'a répondu."
-    d = lundi + timedelta(days=best)
-    qui = ", ".join(noms.get(u, "?") for u in par_jour[best])
-    return (f"**Clôture des disponibilités {periode(lundi)}**\n⭐ Meilleur soir : **{jour_long(d)}** "
-            f"({len(par_jour[best])} : {qui}).\nLe bouton ci-dessous lance le sondage des heures dans #séances.")
+    return lundi, (embed.get("footer") or {}).get("text", "").startswith("Clôturé")
 
 
 # ---------------------------------------------------------------- sondage des heures (calcul pur)
@@ -328,7 +313,7 @@ def soir_choisi(nom: str | None, aujourdhui: date) -> date | None:
 # ---------------------------------------------------------------- Discord
 
 class Disponibilites:
-    """Sondages sur le serveur : envoi, mise à jour à chaque réaction, rappel, clôture."""
+    """Sondages sur le serveur : envoi du sondage de la semaine, mise à jour à chaque vote."""
 
     def __init__(self, eco):
         self.eco = eco
@@ -336,6 +321,7 @@ class Disponibilites:
         self._verrous: dict[int, asyncio.Lock] = {}
         self._vus: dict[str, int] = {}  # « semaine AAAA-MM-JJ » → id du message, pour ne pas relire le salon à chaque tour
         self._cfg: tuple[float, dict] | None = None
+        self._taches: dict[int, asyncio.Task] = {}  # mise à jour en attente, par message
 
     async def cfg(self) -> dict:
         """Réglages du site (relus toutes les 3 min), variables d'environnement en secours."""
@@ -397,7 +383,7 @@ class Disponibilites:
     async def poster_jours(self, salon, lundi: date, mention: bool = False):
         cfg = await self.cfg()
         attendus = len(self._joueurs(salon.guild, cfg)) or None
-        embed = embed_jours(lundi, [[] for _ in range(7)], [], {}, attendus, moment(lundi, cfg["cloture"]))
+        embed = embed_jours(lundi, [[] for _ in range(7)], [], {}, attendus)
         import discord
         contenu = f"<@&{cfg['role_id']}>" if mention and cfg["role_id"] else None
         message = await salon.send(content=contenu, embed=discord.Embed.from_dict(embed),
@@ -424,44 +410,14 @@ class Disponibilites:
                     return m
         return None
 
-    async def rafraichir_jours(self, message, lu: tuple[date, bool, bool]):
+    async def rafraichir_jours(self, message, lundi: date):
         import discord
         cfg = await self.cfg()
-        lundi, clos, rappel = lu
         par_jour, pas_dispo, repondants = etat_jours(await self._reactions(message), self.client.user.id)
         attendus = len(self._joueurs(message.guild, cfg)) or None
-        embed = embed_jours(lundi, par_jour, pas_dispo, self._noms(message.guild, repondants), attendus,
-                            moment(lundi, cfg["cloture"]), clos, rappel)
+        embed = embed_jours(lundi, par_jour, pas_dispo, self._noms(message.guild, repondants), attendus)
         await message.edit(embed=discord.Embed.from_dict(embed))
         return par_jour, repondants
-
-    async def rappeler(self, message, lu):
-        cfg = await self.cfg()
-        lundi = lu[0]
-        _, repondants = await self.rafraichir_jours(message, lu)
-        manquants = [m for m in self._joueurs(message.guild, cfg) if m.id not in repondants]
-        for m in manquants:
-            try:
-                await m.send(f"🦉 L'Inquisiteur des présences attend encore ta réponse pour la semaine {periode(lundi)} : "
-                             f"{message.jump_url}")
-            except Exception:
-                log.info("Rappel des disponibilités : message privé refusé par %s", m)
-        await self.rafraichir_jours(message, (lundi, False, True))
-        log.info("Rappel des disponibilités envoyé à %d joueur(s)", len(manquants))
-
-    async def cloturer(self, message, lu):
-        import discord
-        lundi = lu[0]
-        par_jour, repondants = await self.rafraichir_jours(message, (lundi, True, lu[2]))
-        best = meilleur_soir(par_jour)
-        vue = None
-        if best is not None:
-            soir = lundi + timedelta(days=best)
-            vue = discord.ui.View(timeout=None)
-            vue.add_item(discord.ui.Button(label=f"Sondage des heures du {jour_long(soir).lower()}", emoji="🕖",
-                                           style=discord.ButtonStyle.primary, custom_id=f"eco:dispo:heures:{soir.isoformat()}"))
-        await message.channel.send(texte_cloture(lundi, par_jour, self._noms(message.guild, repondants)), view=vue)
-        log.info("Sondage des jours %s clôturé", periode(lundi))
 
     # ---- sondage des heures
     async def poster_heures(self, salon, soir: date, debut: str, fin: str, pas: int):
@@ -490,7 +446,7 @@ class Disponibilites:
 
     # ---- réactions
     async def reaction(self, payload, ajout: bool):
-        """Réaction ajoutée ou retirée sur un message du bot : remise à jour du sondage concerné."""
+        """Vote ajouté ou retiré sur un message du bot : mise à jour du sondage, regroupée sur ~2 s."""
         emoji = str(payload.emoji)
         if not (emoji in EMOJIS_JOURS or emoji == PAS_DISPO or 0x1F550 <= ord(emoji[0]) <= 0x1F567):
             return
@@ -500,38 +456,56 @@ class Disponibilites:
         if auteur is not None and auteur != self.client.user.id:
             return
         salon = self.client.get_channel(payload.channel_id)
-        if salon is None:
-            return
-        async with self._verrou(payload.message_id):
-            message = await salon.fetch_message(payload.message_id)
-            if message.author.id != self.client.user.id or not message.embeds:
-                return
-            e = message.embeds[0].to_dict()
-            lu = lire_embed_jours(e)
-            if lu:
-                if not lu[1]:  # clôturé : figé
-                    await self.rafraichir_jours(message, lu)
-                return
-            lh = lire_embed_heures(e)
-            if not lh:
-                return
-            soir, heures = lh
-            if ajout and emoji in {horloge(h) for h in heures}:
-                # Un seul vote : les autres horloges de ce joueur sont retirées.
-                for h in heures:
-                    if horloge(h) != emoji:
-                        r = next((x for x in message.reactions if str(x.emoji) == horloge(h)), None)
-                        if r and r.count > 1:
-                            try:
-                                await message.remove_reaction(horloge(h), payload.member or await self.client.fetch_user(payload.user_id))
-                            except Exception:
-                                log.warning("Sondage des heures : impossible de retirer une réaction (droit « Gérer les messages » ?)")
+        if salon is None:  # salon absent du cache (fil, redémarrage) : relu sur Discord
+            salon = await self.client.fetch_channel(payload.channel_id)
+        if ajout and 0x1F550 <= ord(emoji[0]) <= 0x1F567:
+            # Sondage des heures, un seul vote : les autres horloges de ce joueur sont retirées tout de suite.
+            async with self._verrou(payload.message_id):
                 message = await salon.fetch_message(payload.message_id)
-            import discord
-            arrivee = arrivees(await self._reactions(message), heures, self.client.user.id)
-            attendus = len(self._joueurs(message.guild, await self.cfg())) or None
-            await message.edit(embed=discord.Embed.from_dict(
-                embed_heures(soir, heures, arrivee, self._noms(message.guild, arrivee), attendus)))
+                if message.author.id == self.client.user.id and message.embeds:
+                    lh = lire_embed_heures(message.embeds[0].to_dict())
+                    if lh and emoji in {horloge(h) for h in lh[1]}:
+                        for h in lh[1]:
+                            r = next((x for x in message.reactions if str(x.emoji) == horloge(h)), None)
+                            if horloge(h) != emoji and r and r.count > 1:
+                                try:
+                                    await message.remove_reaction(horloge(h), payload.member or discord_objet(payload.user_id))
+                                except Exception:
+                                    log.warning("Sondage des heures : impossible de retirer une réaction (droit « Gérer les messages » ?)")
+        self._planifier(salon, payload.message_id)
+
+    def _planifier(self, salon, mid: int):
+        """Une seule mise à jour par message dans les ~2 s qui suivent le dernier vote."""
+        ancienne = self._taches.get(mid)
+        if ancienne and not ancienne.done():
+            ancienne.cancel()
+        self._taches[mid] = asyncio.create_task(self._mettre_a_jour(salon, mid))
+
+    async def _mettre_a_jour(self, salon, mid: int):
+        await asyncio.sleep(DELAI_MAJ_S)
+        self._taches.pop(mid, None)  # désormais, un nouveau vote programme une autre mise à jour sans annuler celle-ci
+        try:
+            async with self._verrou(mid):
+                message = await salon.fetch_message(mid)
+                if message.author.id != self.client.user.id or not message.embeds:
+                    return
+                e = message.embeds[0].to_dict()
+                lu = lire_embed_jours(e)
+                if lu:
+                    if not lu[1]:  # ancien sondage clôturé : figé
+                        await self.rafraichir_jours(message, lu[0])
+                    return
+                lh = lire_embed_heures(e)
+                if not lh:
+                    return
+                import discord
+                soir, heures = lh
+                arrivee = arrivees(await self._reactions(message), heures, self.client.user.id)
+                attendus = len(self._joueurs(message.guild, await self.cfg())) or None
+                await message.edit(embed=discord.Embed.from_dict(
+                    embed_heures(soir, heures, arrivee, self._noms(message.guild, arrivee), attendus)))
+        except Exception:
+            log.exception("Disponibilités : mise à jour du sondage %s", mid)
 
     # ---- planification
     async def tour(self, maintenant: datetime):
@@ -542,25 +516,12 @@ class Disponibilites:
         if not salon:
             return
         aujourdhui = maintenant.date()
-        # Envoi : le jour et l'heure réglés, pour la semaine qui suit.
+        # Seul envoi automatique : le sondage de la semaine, au jour et à l'heure réglés, pour la semaine qui suit.
         j, h, m = cfg["envoi"]
         if aujourdhui.weekday() == j and (maintenant.hour, maintenant.minute) >= (h, m):
             lundi = lundi_suivant(aujourdhui)
             if not await self.trouver_jours(salon, lundi):
                 await self.poster_jours(salon, lundi, cfg["mention"])
-        # Rappel et clôture du sondage de la semaine en cours.
-        lundi = aujourdhui - timedelta(days=aujourdhui.weekday())
-        message = await self.trouver_jours(salon, lundi)
-        if not message:
-            return
-        lu = lire_embed_jours(message.embeds[0].to_dict())
-        if not lu or lu[1]:
-            return
-        async with self._verrou(message.id):
-            if maintenant >= moment(lundi, cfg["cloture"]):
-                await self.cloturer(message, lu)
-            elif maintenant >= moment(lundi, cfg["rappel"]) and not lu[2]:
-                await self.rappeler(message, lu)
 
     async def boucle(self):
         await self.client.wait_until_ready()
@@ -588,3 +549,9 @@ def brancher(client, dispos: Disponibilites):
 
     for fn in (on_raw_reaction_add, on_raw_reaction_remove):
         client.event(fn)
+
+
+def discord_objet(uid: int):
+    """Utilisateur réduit à son identifiant (retrait d'une réaction sans relire le membre)."""
+    import discord
+    return discord.Object(id=uid)

@@ -358,9 +358,6 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
         return _maj_v2(eco_vues.boutique_fermee())
     if cid == "eco:shop":
         return _maj_v2(await eco_vues.vue_boutique(eco, membre, valeurs[0]))
-    if morceaux[1] == "dispo":
-        # Bouton de la clôture du sondage des jours : lance le sondage des heures du meilleur soir dans #séances.
-        return await _dispos_heures(eco, payload, taches, morceaux[3], None, None)
     if morceaux[1] == "rp":
         return await _rp_clic(eco, payload, membre, taches, app_id, morceaux, valeurs)
     if morceaux[1] == "hal":
