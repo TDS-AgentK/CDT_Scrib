@@ -16,7 +16,9 @@ est là.
 Aucun état en mémoire n'est nécessaire : tout se relit sur le message (date dans l'horodatage de l'embed, créneaux
 dans son pied, votes dans les réactions, rappel et clôture notés dans le pied). Un redémarrage ne perd donc rien.
 
-Réglages (variables d'environnement, en attendant une page de réglages sur le site) :
+Réglages : page /gestion/disponibilites du site (eco_reglages, fiche « general », champs dispo_*), relus toutes les
+3 minutes : un changement s'applique sans redéployer. Champ vide (ou champs absents de la base) : variables
+d'environnement ci-dessous, puis valeurs par défaut. Le bot y écrit aussi dispo_verif (ses droits dans #séances).
   DISPO_ACTIF=1               envoi, rappel et clôture automatiques (sinon seulement les commandes manuelles) ;
   DISPO_SALON_ID              salon #disponibilités ; DISPO_SALON_SEANCES_ID : salon #séances (sondage des heures) ;
   DISPO_ROLE_ID               rôle des joueurs (« sur M », rappel) ; DISPO_MENTION=1 : mentionner ce rôle à l'envoi ;
@@ -57,6 +59,7 @@ def _jour_heure(valeur: str, defaut: tuple[int, int, int]) -> tuple[int, int, in
 
 
 def reglages() -> dict:
+    """Réglages des variables d'environnement (secours)."""
     debut, fin, pas = plage(os.getenv("DISPO_HEURES", ""))
     return {
         "actif": os.getenv("DISPO_ACTIF") == "1",
@@ -69,6 +72,50 @@ def reglages() -> dict:
         "cloture": _jour_heure(os.getenv("DISPO_CLOTURE", ""), (5, 12, 0)),
         "debut": debut, "fin": fin, "pas": pas,
     }
+
+
+def _vide(v) -> bool:
+    return v is None or v == ""
+
+
+def reglages_depuis(fiche: dict | None) -> dict:
+    """Réglages du site (eco_reglages « general », champs dispo_*) complétés par les variables d'environnement."""
+    cfg = reglages()
+    if not fiche or "dispo_actif" not in fiche:
+        return cfg
+    cfg["actif"] = bool(fiche.get("dispo_actif"))
+    cfg["mention"] = bool(fiche.get("dispo_mention"))
+    for cle, champ in (("salon_id", "dispo_salon_id"), ("salon_seances_id", "dispo_seances_id"), ("role_id", "dispo_role_id")):
+        if not _vide(fiche.get(champ)) and str(fiche[champ]).isdigit():
+            cfg[cle] = int(fiche[champ])
+    for cle in ("envoi", "rappel", "cloture"):
+        j, h, m = cfg[cle]
+        if not _vide(fiche.get(f"dispo_{cle}_jour")):
+            j = int(fiche[f"dispo_{cle}_jour"])
+        hm = re.fullmatch(r"(\d{1,2}):(\d{2})", str(fiche.get(f"dispo_{cle}_heure") or ""))
+        if hm:
+            h, m = int(hm[1]), int(hm[2])
+        cfg[cle] = (j, h, m)
+    if re.fullmatch(r"\d{1,2}:\d{2}", str(fiche.get("dispo_heure_debut") or "")):
+        cfg["debut"] = str(fiche["dispo_heure_debut"]).zfill(5)
+    if re.fullmatch(r"\d{1,2}:\d{2}", str(fiche.get("dispo_heure_fin") or "")):
+        cfg["fin"] = str(fiche["dispo_heure_fin"]).zfill(5)
+    if fiche.get("dispo_pas") in (30, 60):
+        cfg["pas"] = int(fiche["dispo_pas"])
+    cfg["_fiche_id"] = fiche.get("id")
+    cfg["_verif"] = fiche.get("dispo_verif") or ""
+    return cfg
+
+
+def texte_verif(perms, nom_salon: str, quand: datetime) -> str:
+    """Droits du bot utiles au sondage des heures, pour la page de réglages du site."""
+    utiles = [("manage_messages", "Gérer les messages"), ("add_reactions", "Ajouter des réactions"),
+              ("send_messages", "Envoyer des messages"), ("embed_links", "Intégrer des liens"),
+              ("read_message_history", "Voir les anciens messages")]
+    manque = [libelle for attr, libelle in utiles if not getattr(perms, attr, False)]
+    if manque:
+        return f"Il manque au bot dans #{nom_salon} : {', '.join(manque)}."
+    return f"ok dans #{nom_salon} (vérifié le {quand:%d/%m à %H:%M})"
 
 
 def plage(valeur: str) -> tuple[str, str, int]:
@@ -288,6 +335,38 @@ class Disponibilites:
         self.client = eco.client
         self._verrous: dict[int, asyncio.Lock] = {}
         self._vus: dict[str, int] = {}  # « semaine AAAA-MM-JJ » → id du message, pour ne pas relire le salon à chaque tour
+        self._cfg: tuple[float, dict] | None = None
+
+    async def cfg(self) -> dict:
+        """Réglages du site (relus toutes les 3 min), variables d'environnement en secours."""
+        import time
+        if self._cfg and time.monotonic() - self._cfg[0] < 180:
+            return self._cfg[1]
+        try:
+            fiche = await self.eco.pb.premier("eco_reglages", 'cle="general"')
+        except Exception:
+            log.warning("Disponibilités : réglages du site illisibles, variables d'environnement utilisées")
+            fiche = None
+        cfg = reglages_depuis(fiche)
+        self._cfg = (time.monotonic(), cfg)
+        await self._verifier(cfg)
+        return cfg
+
+    async def _verifier(self, cfg: dict):
+        """Note dans les réglages du site si le bot a les droits utiles dans le salon des séances."""
+        if not cfg.get("_fiche_id") or not cfg.get("salon_seances_id"):
+            return
+        try:
+            salon = await self._salon(cfg["salon_seances_id"])
+            if not salon or not getattr(salon, "guild", None):
+                return
+            texte = texte_verif(salon.permissions_for(salon.guild.me), salon.name, datetime.now(PARIS))
+            # Écrit seulement si l'état change (la date seule ne suffit pas).
+            if texte.split(" (")[0] != str(cfg.get("_verif", "")).split(" (")[0]:
+                await self.eco.pb.maj("eco_reglages", cfg["_fiche_id"], {"dispo_verif": texte})
+                cfg["_verif"] = texte
+        except Exception:
+            log.exception("Disponibilités : vérification des droits dans le salon des séances")
 
     def _verrou(self, mid: int) -> asyncio.Lock:
         return self._verrous.setdefault(mid, asyncio.Lock())
@@ -316,7 +395,7 @@ class Disponibilites:
 
     # ---- sondage des jours
     async def poster_jours(self, salon, lundi: date, mention: bool = False):
-        cfg = reglages()
+        cfg = await self.cfg()
         attendus = len(self._joueurs(salon.guild, cfg)) or None
         embed = embed_jours(lundi, [[] for _ in range(7)], [], {}, attendus, moment(lundi, cfg["cloture"]))
         import discord
@@ -347,7 +426,7 @@ class Disponibilites:
 
     async def rafraichir_jours(self, message, lu: tuple[date, bool, bool]):
         import discord
-        cfg = reglages()
+        cfg = await self.cfg()
         lundi, clos, rappel = lu
         par_jour, pas_dispo, repondants = etat_jours(await self._reactions(message), self.client.user.id)
         attendus = len(self._joueurs(message.guild, cfg)) or None
@@ -357,7 +436,7 @@ class Disponibilites:
         return par_jour, repondants
 
     async def rappeler(self, message, lu):
-        cfg = reglages()
+        cfg = await self.cfg()
         lundi = lu[0]
         _, repondants = await self.rafraichir_jours(message, lu)
         manquants = [m for m in self._joueurs(message.guild, cfg) if m.id not in repondants]
@@ -388,7 +467,7 @@ class Disponibilites:
     async def poster_heures(self, salon, soir: date, debut: str, fin: str, pas: int):
         import discord
         heures = creneaux(debut, fin, pas)
-        attendus = len(self._joueurs(salon.guild, reglages())) or None
+        attendus = len(self._joueurs(salon.guild, await self.cfg())) or None
         message = await salon.send(embed=discord.Embed.from_dict(embed_heures(soir, heures, {}, {}, attendus)))
         for h in heures:
             await message.add_reaction(horloge(h))
@@ -396,7 +475,7 @@ class Disponibilites:
 
     async def meilleur_soir_courant(self, aujourdhui: date) -> date | None:
         """Meilleur soir du dernier sondage des jours (semaine en cours, sinon la suivante)."""
-        salon = await self._salon(reglages()["salon_id"])
+        salon = await self._salon((await self.cfg())["salon_id"])
         if not salon:
             return None
         lundi = aujourdhui - timedelta(days=aujourdhui.weekday())
@@ -450,13 +529,13 @@ class Disponibilites:
                 message = await salon.fetch_message(payload.message_id)
             import discord
             arrivee = arrivees(await self._reactions(message), heures, self.client.user.id)
-            attendus = len(self._joueurs(message.guild, reglages())) or None
+            attendus = len(self._joueurs(message.guild, await self.cfg())) or None
             await message.edit(embed=discord.Embed.from_dict(
                 embed_heures(soir, heures, arrivee, self._noms(message.guild, arrivee), attendus)))
 
     # ---- planification
     async def tour(self, maintenant: datetime):
-        cfg = reglages()
+        cfg = await self.cfg()
         if not cfg["actif"]:
             return
         salon = await self._salon(cfg["salon_id"])

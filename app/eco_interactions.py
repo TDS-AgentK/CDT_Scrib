@@ -769,7 +769,7 @@ async def _dispos_commande(eco, payload, membre, taches) -> dict:
 
 async def _dispos_heures(eco, payload, taches, soir_iso, soir_nom, plage) -> dict:
     from datetime import date, datetime
-    cfg = disponibilites.reglages()
+    cfg = await eco.dispos.cfg()
     debut, fin = (plage or (None, None))
     debut, fin = debut or cfg["debut"], fin or cfg["fin"]
     try:

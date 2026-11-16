@@ -83,5 +83,32 @@ class Heures(unittest.TestCase):
         self.assertIsNone(d.soir_choisi(None, date(2026, 11, 16)))
 
 
+class Reglages(unittest.TestCase):
+    def test_site_puis_variables(self):
+        from types import SimpleNamespace
+        from unittest import mock
+        with mock.patch.dict("os.environ", {"DISPO_ACTIF": "1", "DISPO_SALON_ID": "111", "DISPO_ROLE_ID": "222"}, clear=False):
+            self.assertEqual(d.reglages_depuis(None)["salon_id"], 111)  # champs absents : variables d'environnement
+            self.assertTrue(d.reglages_depuis({"id": "x"})["actif"])  # base sans les champs dispo_* : idem
+            fiche = {"id": "x", "dispo_actif": False, "dispo_salon_id": "333", "dispo_seances_id": "", "dispo_role_id": "",
+                     "dispo_mention": True, "dispo_envoi_jour": 0, "dispo_envoi_heure": "09:30", "dispo_rappel_jour": None,
+                     "dispo_rappel_heure": "", "dispo_cloture_jour": 6, "dispo_cloture_heure": "", "dispo_heure_debut": "20:00",
+                     "dispo_heure_fin": "", "dispo_pas": 60}
+            cfg = d.reglages_depuis(fiche)
+            self.assertFalse(cfg["actif"])
+            self.assertTrue(cfg["mention"])
+            self.assertEqual(cfg["salon_id"], 333)
+            self.assertEqual(cfg["role_id"], 222)  # vide sur le site : variable d'environnement
+            self.assertEqual(cfg["envoi"], (0, 9, 30))  # lundi 0 accepté
+            self.assertEqual(cfg["rappel"], (4, 18, 0))
+            self.assertEqual(cfg["cloture"], (6, 12, 0))
+            self.assertEqual((cfg["debut"], cfg["fin"], cfg["pas"]), ("20:00", "21:00", 60))
+        perms = SimpleNamespace(manage_messages=False, add_reactions=True, send_messages=True, embed_links=True, read_message_history=True)
+        self.assertEqual(d.texte_verif(perms, "séances", datetime(2026, 11, 16, 20, 0)), "Il manque au bot dans #séances : Gérer les messages.")
+        perms.manage_messages = True
+        self.assertTrue(d.texte_verif(perms, "séances", datetime(2026, 11, 16, 20, 0)).startswith("ok dans #séances"))
+
+
+
 if __name__ == "__main__":
     unittest.main()
