@@ -44,7 +44,7 @@ MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août
 EMOJIS_JOURS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
 PAS_DISPO = "❌"
 TITRE_JOURS = "Inquisiteur des présences"
-SUFFIXE_HEURES = " : à partir de quelle heure ?"
+TITRE_HEURES = "À partir de quelle heure ?"
 COULEUR = 0x8A2F22
 COULEUR_CLOS = 0x5A4A36  # anciens sondages clôturés (avant le 16/11/2026), restés figés
 DELAI_MAJ_S = 2  # votes regroupés avant de modifier le message
@@ -173,6 +173,12 @@ def meilleur_soir(par_jour: list[list[int]]) -> int | None:
     return meilleur if par_jour[meilleur] else None
 
 
+def meilleurs_soirs(par_jour: list[list[int]]) -> set[int]:
+    """Tous les jours à égalité au maximum de votants (étoile sur chacun) ; aucun si personne n'a voté."""
+    top = max(len(l) for l in par_jour)
+    return {i for i, l in enumerate(par_jour) if top and len(l) == top}
+
+
 def barre(n: int, total: int, largeur: int = LARGEUR_BARRE) -> str:
     plein = round(largeur * n / total) if total else 0
     return "▰" * plein + "▱" * (largeur - plein)
@@ -183,12 +189,12 @@ def embed_jours(lundi: date, par_jour: list[list[int]], pas_dispo: list[int], no
     """Embed du sondage de la semaine (dict Discord)."""
     repondants = {u for l in par_jour for u in l} | set(pas_dispo)
     total_barre = attendus or max([len(l) for l in par_jour] + [1])
-    best = meilleur_soir(par_jour)
+    meilleurs = meilleurs_soirs(par_jour)
     lignes = []
     for i in range(7):
         d = lundi + timedelta(days=i)
         votants = par_jour[i]
-        etoile = " ⭐" if i == best else ""
+        etoile = " ⭐" if i in meilleurs else ""
         qui = ", ".join(noms.get(u, "?") for u in votants)
         lignes.append(f"{EMOJIS_JOURS[i]} **{jour_court(d)}**{etoile} · {len(votants)} {barre(len(votants), total_barre)}"
                       + (f"\n   {qui}" if qui else ""))
@@ -263,7 +269,14 @@ def arrivees(reactions: dict[str, list[int]], heures: list[str], bot_id: int | N
     return out
 
 
-def embed_heures(soir: date, heures: list[str], arrivee: dict[int, int], noms: dict[int, str], attendus: int | None) -> dict:
+def titre_heures(soir: date | None, aujourdhui: date | None = None) -> str:
+    """« À partir de quelle heure ? » pour ce soir ; « Mardi 17 : à partir de quelle heure ? » pour un autre soir."""
+    if soir is None or soir == aujourdhui:
+        return TITRE_HEURES
+    return f"{jour_long(soir)} : {TITRE_HEURES[0].lower()}{TITRE_HEURES[1:]}"
+
+
+def embed_heures(titre: str, heures: list[str], arrivee: dict[int, int], noms: dict[int, str], attendus: int | None) -> dict:
     lignes, star = [], None
     votants = len(arrivee)
     for i, h in enumerate(heures):
@@ -278,12 +291,11 @@ def embed_heures(soir: date, heures: list[str], arrivee: dict[int, int], noms: d
         lignes.append("\n" + (f"Tout le monde est là à partir de **{heures[star]}**." if tous
                               else f"Les {votants} répondants sont là à partir de **{heures[star]}**."))
     return {
-        "title": f"{jour_long(soir)}{SUFFIXE_HEURES}",
+        "title": titre,
         "description": "Un seul vote : l'heure **à partir de laquelle** vous êtes là.\n\n" + "\n".join(lignes),
         "color": COULEUR,
         "footer": {"text": f"{votants} réponse{'s' if votants > 1 else ''}" + (f" sur {attendus}" if attendus else "")
                    + f" · créneaux {heures[0]}-{heures[-1]}/{_pas(heures)}"},
-        "timestamp": datetime.combine(soir, datetime.min.time(), PARIS).isoformat(),
     }
 
 
@@ -291,15 +303,15 @@ def _pas(heures: list[str]) -> int:
     return _minutes(heures[1]) - _minutes(heures[0]) if len(heures) > 1 else 30
 
 
-def lire_embed_heures(embed: dict) -> tuple[date, list[str]] | None:
-    """(soir, créneaux) d'un embed de sondage des heures, None si ce n'en est pas un."""
-    if not str(embed.get("title", "")).endswith(SUFFIXE_HEURES) or not embed.get("timestamp"):
+def lire_embed_heures(embed: dict) -> tuple[str, list[str]] | None:
+    """(titre, créneaux) d'un embed de sondage des heures, None si ce n'en est pas un (le titre est gardé tel quel)."""
+    titre = str(embed.get("title", ""))
+    if not titre.lower().endswith(TITRE_HEURES.lower()):
         return None
     m = re.search(r"créneaux (\d{2}:\d{2})-(\d{2}:\d{2})/(\d+)", (embed.get("footer") or {}).get("text", ""))
     if not m:
         return None
-    soir = datetime.fromisoformat(str(embed["timestamp"]).replace("Z", "+00:00")).astimezone(PARIS).date()
-    return soir, creneaux(m[1], m[2], int(m[3]))
+    return titre, creneaux(m[1], m[2], int(m[3]))
 
 
 def choix_soirs(aujourdhui: date, n: int = 7) -> list[tuple[str, str]]:
@@ -434,7 +446,8 @@ class Disponibilites:
         import discord
         heures = creneaux(debut, fin, pas)
         attendus = len(self._joueurs(salon.guild, await self.cfg())) or None
-        message = await salon.send(embed=discord.Embed.from_dict(embed_heures(soir, heures, {}, {}, attendus)))
+        titre = titre_heures(soir, datetime.now(PARIS).date())
+        message = await salon.send(embed=discord.Embed.from_dict(embed_heures(titre, heures, {}, {}, attendus)))
         for h in heures:
             await message.add_reaction(horloge(h))
         return message
@@ -509,11 +522,11 @@ class Disponibilites:
                 if not lh:
                     return
                 import discord
-                soir, heures = lh
+                titre, heures = lh
                 arrivee = arrivees(await self._reactions(message), heures, self.client.user.id)
                 attendus = len(self._joueurs(message.guild, await self.cfg())) or None
                 await message.edit(embed=discord.Embed.from_dict(
-                    embed_heures(soir, heures, arrivee, self._noms(message.guild, arrivee), attendus)))
+                    embed_heures(titre, heures, arrivee, self._noms(message.guild, arrivee), attendus)))
         except Exception:
             log.exception("Disponibilités : mise à jour du sondage %s", mid)
 

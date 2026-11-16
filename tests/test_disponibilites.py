@@ -49,6 +49,11 @@ class Jours(unittest.TestCase):
         ancien = d.embed_jours(LUNDI, par_jour, pas_dispo, noms, 4, clos=True)  # sondage clôturé avant le 16/11 : figé
         self.assertEqual(d.lire_embed_jours(ancien), (LUNDI, True))
         self.assertIsNone(d.lire_embed_jours({"title": "Autre chose"}))
+        # Égalité au maximum : étoile sur chacun des soirs concernés.
+        egalite = [[10], [10, 11], [10, 11], [10, 11], [], [], [10]]
+        desc = d.embed_jours(LUNDI, egalite, [], noms, 4)["description"]
+        self.assertEqual(desc.count("⭐"), 3)
+        self.assertNotIn("⭐", d.embed_jours(LUNDI, [[] for _ in range(7)], [], noms, 4)["description"])
         # L'étoile suit le classement : un vote de plus pour jeudi la déplace.
         par_jour[3] = [10, 11, 12, 13]
         self.assertIn("**Jeu. 19** ⭐", d.embed_jours(LUNDI, par_jour, pas_dispo, noms, 4)["description"])
@@ -68,14 +73,16 @@ class Heures(unittest.TestCase):
         reactions = {"🕖": [BOT, 10], "🕢": [BOT], "🕗": [BOT, 11, 10], "🕣": [BOT], "🕘": [BOT]}
         arrivee = d.arrivees(reactions, heures, BOT)
         self.assertEqual(arrivee, {10: 0, 11: 2})  # deux réactions restantes : la plus tôt compte
-        e = d.embed_heures(date(2026, 11, 17), heures, arrivee, {10: "Kelora", 11: "Fyb"}, 2)
-        self.assertEqual(e["title"], "Mardi 17 : à partir de quelle heure ?")
+        e = d.embed_heures(d.titre_heures(date(2026, 11, 16), date(2026, 11, 16)), heures, arrivee, {10: "Kelora", 11: "Fyb"}, 2)
+        self.assertEqual(e["title"], "À partir de quelle heure ?")  # ce soir : ni date ni horodatage
+        self.assertNotIn("timestamp", e)
+        self.assertEqual(d.titre_heures(date(2026, 11, 17), date(2026, 11, 16)), "Mardi 17 : à partir de quelle heure ?")
         lignes = e["description"].splitlines()
         self.assertTrue(any(l.startswith("🕖 **19:00** · 1") and "+ Kelora" in l for l in lignes))
         self.assertTrue(any(l.startswith("🕢 **19:30** · 1") and "+" not in l for l in lignes))
         self.assertTrue(any(l.startswith("🕗 **20:00** ⭐ · 2") and "+ Fyb" in l for l in lignes))
         self.assertIn("Tout le monde est là à partir de **20:00**.", e["description"])
-        self.assertEqual(d.lire_embed_heures(e), (date(2026, 11, 17), heures))
+        self.assertEqual(d.lire_embed_heures(e), ("À partir de quelle heure ?", heures))
 
     def test_choix_des_soirs(self):
         c = d.choix_soirs(date(2026, 11, 16), 4)
