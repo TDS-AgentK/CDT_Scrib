@@ -176,6 +176,10 @@ async def startup():
     from app import combat
     # Tout passe par la base partagée (comme Rostheim) : aucune variable à poser.
     asyncio.create_task(combat.boucle(gateway, pocketbase))
+    # Duels de Personus (/duel et duels lancés sur le site) : cartes postées et mises à jour depuis personus_duel_annonces.
+    # Tout passe par la base partagée, comme les combats : aucune variable à poser.
+    from app import personus_duels
+    asyncio.create_task(personus_duels.boucle(gateway, pocketbase))
     # Liste des RP (/proposer-rp) : annonces Discord remises à jour quand la fiche change sur le site (~1 min).
     from app import rp_demandes
     asyncio.create_task(rp_demandes.boucle(economie))

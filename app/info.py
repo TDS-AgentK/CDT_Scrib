@@ -11,6 +11,7 @@ RUBRIQUES = [
     ("🏰 Rostheim", ["recompense", "boite-a-role"]),
     ("🎃 Halloween", ["halloween", "bonbons", "halloween-admin"]),
     ("⚔️ Jeu de rôle (fiches du site)", ["session", "attaque"]),
+    ("🐦‍⬛ Personus", ["duel"]),
     ("🎭 Liste des RP", ["proposer-rp", "je-veux-rp", "modifier-rp"]),
     ("🛡️ Administration", ["dropadmin", "loterie"]),
 ]

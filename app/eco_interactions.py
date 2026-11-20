@@ -11,14 +11,14 @@ import os
 import discord
 import httpx
 
-from app import avent, combat, disponibilites, drop, eco_actions, eco_vues, emblemes, halloween, info, jets_site, loteries, receleur, ros_boutique, rp_demandes, sessions_jeu
+from app import avent, combat, disponibilites, drop, eco_actions, eco_vues, emblemes, halloween, info, jets_site, loteries, personus_duels, receleur, ros_boutique, rp_demandes, sessions_jeu
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
              "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
              "session", "recompense", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent",
-             "proposer-rp", "je-veux-rp", "modifier-rp", "dispos", "infoadmin"}
+             "proposer-rp", "je-veux-rp", "modifier-rp", "dispos", "infoadmin", "duel"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -210,6 +210,23 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
         if nom == "dropadmin":
             ok, txt = await drop.lancer_admin(eco, membre, opt.get("objet"), int(opt.get("quantite") or 1), int(opt.get("or") or 0), int(opt.get("duree") or 0), payload.get("channel_id"))
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+        if nom == "duel":
+            # Duel de Personus (app/personus_duels.py) : demande déposée dans la base, le site crée le défi « à confirmer »,
+            # le bot répond en public avec le récapitulatif et le bouton « Confirmer le défi » ; cette réponse devient la
+            # carte du duel, mise à jour ensuite à chaque étape (file personus_duel_annonces).
+            sous = data["options"][0]
+            o = _options(sous)
+            adversaire = o.get("adversaire") if sous["name"] == "joueur" else None
+            try:
+                duel_id = await personus_duels.deposer(eco.pb, "creer", membre.id, ouvert=sous["name"] == "ouvert",
+                                                       adversaire_discord_id=str(adversaire or ""), salon_id=str(payload.get("channel_id") or ""))
+            except RuntimeError as e:
+                return await _modifier(app_id, jeton, [eco_vues.erreur(str(e))])
+            corps = personus_duels.carte_a_confirmer(duel_id, membre.id, adversaire)
+            await _modifier(app_id, jeton, corps["embeds"], corps["components"], contenu=corps["content"])
+            original = await _original(app_id, jeton)
+            await eco.pb.maj("personus_duels", duel_id, {"salon_id": str(payload.get("channel_id") or ""), "message_id": original})
+            return
         if nom == "attaque":
             # Combat des fiches de jeu (app/combat.py) : demande déposée dans la base, le site arbitre, le bot affiche.
             try:
@@ -342,6 +359,20 @@ async def _combat_bouton(eco, payload, membre, app_id, combat_id, choix):
     await eco.pb.maj("combats", combat_id, {"discord_poste": complet["statut"]})
 
 
+async def _duel_action(eco, payload, membre, app_id, duel_id, action, montant):
+    """Bouton ou fenêtre d'un duel de Personus : demande déposée dans la base, réponse privée (fait ou erreur du site)."""
+    extra = {"montant": montant} if montant is not None else {}
+    try:
+        await personus_duels.deposer(eco.pb, action, membre.id, duel=duel_id, **extra)
+    except RuntimeError as e:
+        return await _modifier(app_id, payload["token"], [eco_vues.erreur(str(e))])
+    textes = {"confirmer": "Défi confirmé : la carte du duel se met à jour.", "accepter": "Duel accepté ! Les mises sont posées : jouez sur le site (24 h).",
+              "refuser": "Défi refusé : rien n'a été prélevé.", "retirer": "Vous vous êtes retiré du défi : rien n'a été prélevé.",
+              "surencherir": f"Mise relevée à {montant} PO : à votre adversaire de répondre (48 h)."}
+    await _modifier(app_id, payload["token"], [eco_vues.resultat(True, textes.get(action, "C'est fait."))],
+                    [{"type": 1, "components": [{"type": 2, "style": 5, "label": "Ouvrir le duel sur le site", "url": personus_duels.lien_duel(duel_id)}]}])
+
+
 async def _jet_bouton(eco, payload, membre, app_id, jet_id, choix):
     """Bouton sous un jet du site : demande déposée sur le jet, le site l'applique, puis le message est mis à jour."""
     jeton = payload["token"]
@@ -372,6 +403,21 @@ async def _composant(eco, payload, membre, taches, app_id) -> dict:
         return await _halloween_clic(eco, payload, membre, taches, app_id, morceaux)
     if morceaux[1] == "av":
         return await _avent_clic(eco, payload, membre, taches, app_id, morceaux, valeurs)
+    if morceaux[1] == "pdu":
+        # Duel de Personus : Confirmer (le défiant), Accepter / Refuser, Surenchérir (fenêtre « Nouvelle mise »), Retirer.
+        # Le site décide (qui a la main, bourses, relances) ; la carte se met à jour par la file des annonces.
+        duel_id, code = morceaux[2], morceaux[3]
+        if code == "sur":
+            try:
+                bornes, mise = await personus_duels.bornes_pour(eco.pb, duel_id, membre.id)
+            except RuntimeError as e:
+                return {"type": MESSAGE, "data": {"embeds": [eco_vues.erreur(str(e))], "flags": PRIVE}}
+            return {"type": FENETRE, "data": personus_duels.fenetre_surenchere(duel_id, bornes, mise)}
+        action = {"conf": "confirmer", "acc": "accepter", "ref": "refuser", "ret": "retirer"}.get(code)
+        if not action:
+            return {"type": DIFFERE_MAJ}
+        _en_fond(taches, _duel_action, eco, payload, membre, app_id, duel_id, action, None)
+        return {"type": DIFFERE, "data": {"flags": PRIVE}}
     if morceaux[1] == "cbt":
         # Combat : accepter / refuser (défenseur, éventuellement avec un objet du menu), voter en cas d'égalité,
         # Try again / Échec critique après les jets.
@@ -639,6 +685,22 @@ async def _fenetre(eco, payload, membre, taches, app_id) -> dict:
                 if c.get("custom_id") == "precision":
                     precision = (c.get("value") or "").strip()
         _en_fond(taches, _achat_ros, eco, payload, membre, app_id, morceaux[2], morceaux[3], precision)
+        return {"type": DIFFERE, "data": {"flags": PRIVE}}
+    if morceaux[1] == "pdm":
+        # Fenêtre « Relever la mise » d'un duel de Personus : montant vérifié ici puis par le site.
+        texte = ""
+        for rangee in data.get("components", []):
+            for c in rangee.get("components", []):
+                if c.get("custom_id") == "montant":
+                    texte = (c.get("value") or "").strip()
+        try:
+            bornes, mise = await personus_duels.bornes_pour(eco.pb, morceaux[2], membre.id)
+        except RuntimeError as e:
+            return {"type": MESSAGE, "data": {"embeds": [eco_vues.erreur(str(e))], "flags": PRIVE}}
+        montant = personus_duels.montant_valide(texte, bornes, mise)
+        if montant is None:
+            return {"type": MESSAGE, "data": {"embeds": [eco_vues.erreur(f"Mise invalide : de {bornes[0]} à {bornes[1]} PO, par {personus_duels.PAS}.")], "flags": PRIVE}}
+        _en_fond(taches, _duel_action, eco, payload, membre, app_id, morceaux[2], "surencherir", montant)
         return {"type": DIFFERE, "data": {"flags": PRIVE}}
     if morceaux[1] == "rpe":
         # Fenêtre « Modifier le RP » (app/rp_demandes.py) : fiche, illustration et annonce en arrière-plan.

@@ -230,6 +230,16 @@ COMMANDS = [
         }],
     },
     {
+        # Duels de Personus (app/personus_duels.py) : le site arbitre (mises, surenchère, résultat), on joue sur le site.
+        "name": "duel", "description": "Défier un joueur au Personus : 100 PO chacun, le gagnant prend les deux mises",
+        "options": [
+            {"type": 1, "name": "joueur", "description": "Défier un joueur précis", "options": [
+                {"type": 6, "name": "adversaire", "description": "Le joueur défié", "required": True},
+            ]},
+            {"type": 1, "name": "ouvert", "description": "Défi ouvert : le premier joueur qui accepte joue"},
+        ],
+    },
+    {
         # Combat des fiches de jeu (app/combat.py) : le site arbitre, le joueur de la cible accepte ou refuse.
         "name": "attaque", "description": "Attaquer un personnage avec une arme ou un sort de votre fiche de jeu",
         "options": [
