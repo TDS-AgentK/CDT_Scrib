@@ -87,7 +87,7 @@ async def startup():
             statut_lunes.start()
         synchro_listes()
         # /session, /attaque (fiches de jeu), /boite-a-role, /info et Halloween (/halloween, /bonbons, /halloween-admin), /avent,
-        # /proposer-rp, /je-veux-rp et /modifier-rp (Liste des RP) : déclarées ici, sans toucher aux autres commandes ni relancer
+        # /proposer-rp, /je-veux-rp et /modifier-rp (Liste des RP), /duel (Personus) : déclarées ici, sans toucher aux autres commandes ni relancer
         # scripts/register_commands.py à la main.
         from scripts.register_commands import COMMANDES_RETIREES, COMMANDS
         # Commandes retirées (ex. /rp-a-trier, 15/11/2026) : effacées de Discord, sinon elles resteraient dans la liste.
@@ -107,7 +107,7 @@ async def startup():
             log.exception("Nettoyage des commandes retirées")
         # Halloween et Avent : déclarés seulement pendant leur événement (app/commandes_saison.py, boucle ci-dessous).
         for nom in ("session", "attaque", "boite-a-role", "info", "infoadmin",
-                    "proposer-rp", "je-veux-rp", "modifier-rp", "dispos"):
+                    "proposer-rp", "je-veux-rp", "modifier-rp", "dispos", "duel"):
             try:
                 commande = next(c for c in COMMANDS if c["name"] == nom)
                 if os.getenv("GUILD_ID"):
