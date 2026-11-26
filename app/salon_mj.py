@@ -16,7 +16,8 @@ message = son heure) : un redémarrage du bot ne perd rien, le balayage reprend 
 Les archives périmées sont effacées par le même balayage (le fichier part avec la fiche).
 
 Réglages (variables d'environnement, facultatives sauf le salon d'archive) :
-  SALON_MJ_ARCHIVES_ID    salon où poster les liens (sans lui, les salons sont archivés sur le site mais aucun lien
+  SALON_MJ_ARCHIVES_ID    salon où poster les liens (par défaut le salon d'archives choisi par K, ARCHIVES_PAR_DEFAUT ;
+                          vide ou introuvable : les salons sont archivés sur le site mais aucun lien
                           n'est posté : le salon Discord est alors gardé, pour ne rien perdre)
   SALON_MJ_CATEGORIE_ID   catégorie des salons (sinon celle dont le nom contient « coin rp »)
 """
@@ -45,6 +46,7 @@ ARCHIVE_JOURS = 30
 INTERVALLE_S = 5 * 60
 PARIS = ZoneInfo("Europe/Paris")
 SITE_PAR_DEFAUT = "https://cdtsite-production.up.railway.app"
+ARCHIVES_PAR_DEFAUT = "1575578406710419587"  # salon d'archives choisi par K le 26/11/2026
 DISCORD_EPOCH_MS = 1420070400000
 
 IMAGE_COTE_MAX = 1600          # côté le plus long des images intégrées
@@ -438,7 +440,7 @@ async def creer(eco, membre: discord.Member, titre: str) -> str:
 async def archiver(eco, fiche: dict, salon: discord.TextChannel, maintenant: float | None = None) -> bool:
     """Archive un salon inactif. True si c'est terminé (salon supprimé), False s'il faut retenter."""
     pb = eco.pb
-    archives_id = os.getenv("SALON_MJ_ARCHIVES_ID")
+    archives_id = os.getenv("SALON_MJ_ARCHIVES_ID", ARCHIVES_PAR_DEFAUT)
     salon_archives = None
     if archives_id:
         salon_archives = eco.client.get_channel(int(archives_id))
