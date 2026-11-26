@@ -11,14 +11,14 @@ import os
 import discord
 import httpx
 
-from app import avent, combat, disponibilites, drop, eco_actions, eco_vues, emblemes, halloween, info, jets_site, loteries, personus_duels, receleur, ros_boutique, rp_demandes, sessions_jeu
+from app import avent, combat, disponibilites, drop, eco_actions, eco_vues, emblemes, halloween, info, jets_site, loteries, personus_duels, receleur, ros_boutique, rp_demandes, salon_mj, sessions_jeu
 
 log = logging.getLogger("cdt_scrib.eco_interactions")
 
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
              "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
              "session", "recompense", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent",
-             "proposer-rp", "je-veux-rp", "modifier-rp", "dispos", "infoadmin", "duel"}
+             "proposer-rp", "je-veux-rp", "modifier-rp", "dispos", "infoadmin", "duel", "salon_mj"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -210,6 +210,10 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
         if nom == "dropadmin":
             ok, txt = await drop.lancer_admin(eco, membre, opt.get("objet"), int(opt.get("quantite") or 1), int(opt.get("or") or 0), int(opt.get("duree") or 0), payload.get("channel_id"))
             return await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+        if nom == "salon_mj":
+            # Salon MJ éphémère (app/salon_mj.py) : créé en haut de « Coin RP », archivé sur le site 24 h après le dernier message.
+            txt = await salon_mj.creer(eco, membre, str(opt.get("titre") or ""))
+            return await _modifier(app_id, jeton, [eco_vues.resultat(txt.startswith("Salon "), txt)])
         if nom == "duel":
             # Duel de Personus (app/personus_duels.py) : demande déposée dans la base, le site crée le défi « à confirmer »,
             # le bot répond en public avec le récapitulatif et le bouton « Confirmer le défi » ; cette réponse devient la
@@ -328,7 +332,7 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             await _modifier(app_id, jeton, [eco_vues.erreur("Une erreur est survenue : préviens un admin avec l'heure de ta commande.")])
 
     _en_fond(taches, travail_sur)
-    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie", "recompense", "halloween-admin") else {}}
+    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie", "recompense", "halloween-admin", "salon_mj") else {}}
 
 
 async def _vue_echange(eco, e: dict, de, vers, statut: str | None = None) -> tuple[dict, list]:

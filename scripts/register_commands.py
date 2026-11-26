@@ -230,6 +230,13 @@ COMMANDS = [
         }],
     },
     {
+        # Salons MJ éphémères (app/salon_mj.py) : archivés sur le site 24 h après le dernier message, puis supprimés.
+        "name": "salon_mj", "description": "Créer un salon de RP en haut de Coin RP (archivé sur le site 24 h après le dernier message)",
+        "options": [
+            {"type": 3, "name": "titre", "description": "Titre du salon", "required": True, "max_length": 90},
+        ],
+    },
+    {
         # Duels de Personus (app/personus_duels.py) : le site arbitre (mises, surenchère, résultat), on joue sur le site.
         "name": "duel", "description": "Défier un joueur au Personus : 100 PO chacun, le gagnant prend les deux mises",
         "options": [

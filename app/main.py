@@ -107,7 +107,7 @@ async def startup():
             log.exception("Nettoyage des commandes retirées")
         # Halloween et Avent : déclarés seulement pendant leur événement (app/commandes_saison.py, boucle ci-dessous).
         for nom in ("session", "attaque", "boite-a-role", "info", "infoadmin",
-                    "proposer-rp", "je-veux-rp", "modifier-rp", "dispos", "duel"):
+                    "proposer-rp", "je-veux-rp", "modifier-rp", "dispos", "duel", "salon_mj"):
             try:
                 commande = next(c for c in COMMANDS if c["name"] == nom)
                 if os.getenv("GUILD_ID"):
@@ -180,6 +180,9 @@ async def startup():
     # Tout passe par la base partagée, comme les combats : aucune variable à poser.
     from app import personus_duels
     asyncio.create_task(personus_duels.boucle(gateway, pocketbase))
+    # Salons MJ (/salon_mj) : archivés sur le site 24 h après le dernier message, puis supprimés ; archives effacées après 30 jours.
+    from app import salon_mj
+    asyncio.create_task(salon_mj.boucle(economie))
     # Liste des RP (/proposer-rp) : annonces Discord remises à jour quand la fiche change sur le site (~1 min).
     from app import rp_demandes
     asyncio.create_task(rp_demandes.boucle(economie))
