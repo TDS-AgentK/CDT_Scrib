@@ -437,8 +437,21 @@ async def creer(eco, membre: discord.Member, titre: str) -> str:
 
 # ---------------------------------------------------------------- archivage
 
-async def archiver(eco, fiche: dict, salon: discord.TextChannel, maintenant: float | None = None) -> bool:
-    """Archive un salon inactif. True si c'est terminé (salon supprimé), False s'il faut retenter."""
+_EN_COURS: set[str] = set()  # fiches en cours d'archivage (balayage et /salon_cloture ne travaillent pas en double)
+
+
+async def archiver(eco, fiche: dict, salon: discord.TextChannel, maintenant: float | None = None, motif: str = "") -> bool:
+    """Archive un salon (inactif ou clôturé). True si c'est terminé (salon supprimé), False s'il faut retenter."""
+    if fiche["id"] in _EN_COURS:
+        return False
+    _EN_COURS.add(fiche["id"])
+    try:
+        return await _archiver(eco, fiche, salon, maintenant, motif or "Salon MJ inactif depuis 24 h : archivé sur le site")
+    finally:
+        _EN_COURS.discard(fiche["id"])
+
+
+async def _archiver(eco, fiche: dict, salon: discord.TextChannel, maintenant: float | None, motif: str) -> bool:
     pb = eco.pb
     archives_id = os.getenv("SALON_MJ_ARCHIVES_ID", ARCHIVES_PAR_DEFAUT)
     salon_archives = None
@@ -505,10 +518,60 @@ async def archiver(eco, fiche: dict, salon: discord.TextChannel, maintenant: flo
                 pass
         annonce = await salon_archives.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
         await pb.maj(COLLECTION, fiche["id"], {"annonce_id": str(annonce.id)})
-    await salon.delete(reason="Salon MJ inactif depuis 24 h : archivé sur le site")
+    await salon.delete(reason=motif)
     await pb.maj(COLLECTION, fiche["id"], {"statut": "archive", "supprime_le": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.000Z")})
     log.info("Salon MJ %s archivé et supprimé (clé %s…)", salon.id, cle[:6])
     return True
+
+
+# ---------------------------------------------------------------- /salon_cloture
+
+def peut_cloturer(fiche: dict, user_id, admin: bool) -> bool:
+    return admin or str(fiche.get("createur_discord_id")) == str(user_id)
+
+
+async def choix_cloture(eco, user_id, admin: bool, tape: str) -> list[dict]:
+    """Autocomplétion : salons ouverts que ce membre peut clôturer (les siens ; tous pour un admin)."""
+    tape = (tape or "").lower()
+    choix = []
+    for f in await eco.pb.lister(COLLECTION, filtre='statut="ouvert"', tri="-created"):
+        if peut_cloturer(f, user_id, admin) and tape in (f.get("titre") or "").lower():
+            nom = f.get("titre") or "?"
+            if admin and str(f.get("createur_discord_id")) != str(user_id):
+                nom += f" ({f.get('createur_nom') or '?'})"
+            choix.append({"name": nom[:100], "value": f["id"]})
+    return choix[:25]
+
+
+async def cloturer(eco, membre: discord.Member, admin: bool, valeur: str, salon_courant_id=None) -> str:
+    """/salon_cloture : archive le salon tout de suite (sans attendre 24 h) et le supprime. Renvoie le message du joueur.
+    `valeur` : identifiant de fiche (autocomplétion) ou titre tapé ; vide = le salon où la commande est lancée."""
+    ouverts = await eco.pb.lister(COLLECTION, filtre='statut="ouvert" || (statut="archive" && supprime_le="")')
+    valeur = (valeur or "").strip()
+    if valeur:
+        fiches = [f for f in ouverts if f["id"] == valeur] or [f for f in ouverts if (f.get("titre") or "").lower() == valeur.lower()]
+    else:
+        fiches = [f for f in ouverts if str(f.get("salon_id")) == str(salon_courant_id)]
+    fiches = [f for f in fiches if peut_cloturer(f, membre.id, admin)] or ([] if not fiches else None)
+    if fiches is None:
+        return "Seul le joueur qui a créé ce salon (ou un admin) peut le clôturer."
+    if not fiches:
+        return "Aucun salon MJ ouvert à ce nom : choisis-le dans la liste."
+    if len(fiches) > 1:
+        return "Plusieurs salons portent ce titre : choisis-le dans la liste."
+    fiche = fiches[0]
+    try:
+        salon = await eco.client.fetch_channel(int(fiche["salon_id"]))
+    except discord.NotFound:
+        await eco.pb.maj(COLLECTION, fiche["id"], {"statut": "disparu"})
+        return "Ce salon n'existe plus sur Discord."
+    if fiche["id"] in _EN_COURS:
+        return "Ce salon est déjà en cours d'archivage."
+    fini = await archiver(eco, fiche, salon, motif=f"/salon_cloture par {membre} ({membre.id})")
+    if not fini:
+        return "L'archive n'a pas pu être terminée : nouvel essai automatique dans quelques minutes."
+    fiche = next(iter(await eco.pb.lister(COLLECTION, filtre=f'id="{fiche["id"]}"')), fiche)
+    return f"Salon **{fiche.get('titre') or salon.name}** clôturé et archivé : {lien_archive(fiche.get('cle') or '')}"
 
 
 async def balayer(eco, maintenant: float | None = None) -> None:

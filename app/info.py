@@ -12,7 +12,7 @@ RUBRIQUES = [
     ("🎃 Halloween", ["halloween", "bonbons", "halloween-admin"]),
     ("⚔️ Jeu de rôle (fiches du site)", ["session", "attaque"]),
     ("🐦‍⬛ Personus", ["duel"]),
-    ("🎭 Liste des RP", ["proposer-rp", "je-veux-rp", "modifier-rp", "salon_mj"]),
+    ("🎭 Liste des RP", ["proposer-rp", "je-veux-rp", "modifier-rp", "salon_mj", "salon_cloture"]),
     ("🛡️ Administration", ["dropadmin", "loterie"]),
 ]
 

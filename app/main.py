@@ -107,7 +107,7 @@ async def startup():
             log.exception("Nettoyage des commandes retirées")
         # Halloween et Avent : déclarés seulement pendant leur événement (app/commandes_saison.py, boucle ci-dessous).
         for nom in ("session", "attaque", "boite-a-role", "info", "infoadmin",
-                    "proposer-rp", "je-veux-rp", "modifier-rp", "dispos", "duel", "salon_mj"):
+                    "proposer-rp", "je-veux-rp", "modifier-rp", "dispos", "duel", "salon_mj", "salon_cloture"):
             try:
                 commande = next(c for c in COMMANDS if c["name"] == nom)
                 if os.getenv("GUILD_ID"):

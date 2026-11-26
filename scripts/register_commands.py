@@ -237,6 +237,13 @@ COMMANDS = [
         ],
     },
     {
+        # Clôture immédiate d'un salon MJ (app/salon_mj.py) : archive sur le site, lien dans le salon d'archives, suppression.
+        "name": "salon_cloture", "description": "Clôturer un salon MJ tout de suite : archivé sur le site puis supprimé",
+        "options": [
+            {"type": 3, "name": "titre", "description": "Le salon à clôturer (sinon celui où vous êtes)", "required": False, "autocomplete": True},
+        ],
+    },
+    {
         # Duels de Personus (app/personus_duels.py) : le site arbitre (mises, surenchère, résultat), on joue sur le site.
         "name": "duel", "description": "Défier un joueur au Personus : 100 PO chacun, le gagnant prend les deux mises",
         "options": [

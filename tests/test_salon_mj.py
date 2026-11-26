@@ -26,6 +26,10 @@ class FauxPB:
 
     async def lister(self, collection, filtre=None, tri=None, expand=None):
         assert collection == salon_mj.COLLECTION
+        if filtre.startswith('id="'):
+            return [f for f in self.fiches.values() if f["id"] == filtre[4:-1]]
+        if filtre == 'statut="ouvert"':
+            return [f for f in self.fiches.values() if f["statut"] == "ouvert"]
         if filtre.startswith("expire"):
             limite = filtre.split('expire<"')[1].rstrip('"')
             return [f for f in self.fiches.values() if f.get("expire") and f["expire"] < limite]
@@ -177,6 +181,51 @@ class BalayageTest(unittest.TestCase):
         asyncio.run(salon_mj.balayer(eco, datetime(2027, 2, 1, tzinfo=timezone.utc).timestamp()))
         self.assertEqual(eco.pb.fiches["x"]["statut"], "disparu")
         self.assertEqual(eco.pb.supprimes, ["vieux"])
+
+
+class ClotureTest(unittest.TestCase):
+    def _preparer(self):
+        salon = FauxSalon(2, T0 - 60)  # actif : la clôture n'attend pas 24 h
+        archives = FauxSalon(50, T0)
+        pb = FauxPB([{"id": "b", "salon_id": "2", "statut": "ouvert", "titre": "La Tour", "createur_nom": "Fyb", "createur_discord_id": "7"}])
+        return mock.Mock(pb=pb, client=FauxClient({2: salon, 50: archives})), salon, archives
+
+    async def _deposer(self, pb, fiche_id, chemin, nom, champs):
+        return await pb.maj(salon_mj.COLLECTION, fiche_id, {**champs, "fichier": nom})
+
+    async def _lire(self, salon):
+        return []
+
+    def _cloturer(self, eco, user_id, admin, valeur, salon_courant=None):
+        membre = mock.Mock(id=user_id)
+        with mock.patch.dict(os.environ, {"SALON_MJ_ARCHIVES_ID": "50"}),              mock.patch.object(salon_mj, "deposer_archive", self._deposer), mock.patch.object(salon_mj, "lire_salon", self._lire):
+            return asyncio.run(salon_mj.cloturer(eco, membre, admin, valeur, salon_courant))
+
+    def test_createur_cloture_tout_de_suite(self):
+        eco, salon, archives = self._preparer()
+        txt = self._cloturer(eco, 7, False, "b")
+        self.assertTrue(txt.startswith("Salon **La Tour** clôturé"), txt)
+        self.assertIn(eco.pb.fiches["b"]["cle"], txt)
+        self.assertTrue(salon.supprime)
+        self.assertEqual(len(archives.envois), 1)
+
+    def test_autre_joueur_refuse_admin_accepte(self):
+        eco, salon, _ = self._preparer()
+        self.assertIn("Seul le joueur", self._cloturer(eco, 8, False, "La Tour"))
+        self.assertFalse(salon.supprime)
+        self.assertTrue(self._cloturer(eco, 8, True, "la tour").startswith("Salon "))
+        self.assertTrue(salon.supprime)
+
+    def test_sans_titre_dans_le_salon_meme(self):
+        eco, salon, _ = self._preparer()
+        self.assertIn("Aucun salon", self._cloturer(eco, 7, False, "", 999))
+        self.assertTrue(self._cloturer(eco, 7, False, "", "2").startswith("Salon "))
+
+    def test_autocompletion(self):
+        eco, _, _ = self._preparer()
+        self.assertEqual(asyncio.run(salon_mj.choix_cloture(eco, 7, False, "tour")), [{"name": "La Tour", "value": "b"}])
+        self.assertEqual(asyncio.run(salon_mj.choix_cloture(eco, 8, False, "")), [])
+        self.assertEqual(asyncio.run(salon_mj.choix_cloture(eco, 8, True, ""))[0]["name"], "La Tour (Fyb)")
 
 
 if __name__ == "__main__":

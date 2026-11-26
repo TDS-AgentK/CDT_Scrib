@@ -18,7 +18,7 @@ log = logging.getLogger("cdt_scrib.eco_interactions")
 COMMANDES = {"boutique", "argent", "niveau", "topargent", "topniveau", "inventaire",
              "payer", "donner", "vendre", "utiliser", "echanger", "receleur", "racheter", "drop", "dropadmin", "loterie",
              "session", "recompense", "attaque", "boite-a-role", "info", "halloween", "bonbons", "halloween-admin", "avent",
-             "proposer-rp", "je-veux-rp", "modifier-rp", "dispos", "infoadmin", "duel", "salon_mj"}
+             "proposer-rp", "je-veux-rp", "modifier-rp", "dispos", "infoadmin", "duel", "salon_mj", "salon_cloture"}
 MESSAGE, DIFFERE, DIFFERE_MAJ, MAJ, AUTOCOMPLETE, FENETRE = 4, 5, 6, 7, 8, 9
 PRIVE = eco_vues.PRIVE
 
@@ -214,6 +214,12 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             # Salon MJ éphémère (app/salon_mj.py) : créé en haut de « Coin RP », archivé sur le site 24 h après le dernier message.
             txt = await salon_mj.creer(eco, membre, str(opt.get("titre") or ""))
             return await _modifier(app_id, jeton, [eco_vues.resultat(txt.startswith("Salon "), txt)])
+        if nom == "salon_cloture":
+            # Clôture immédiate d'un salon MJ (le sien ; tous pour un admin) : archive sur le site puis suppression.
+            txt = await salon_mj.cloturer(eco, membre, await info.est_admin(eco, membre), str(opt.get("titre") or ""), payload.get("channel_id"))
+            ok = txt.startswith("Salon ")
+            await _modifier(app_id, jeton, [eco_vues.resultat(ok, txt)])
+            return
         if nom == "duel":
             # Duel de Personus (app/personus_duels.py) : demande déposée dans la base, le site crée le défi « à confirmer »,
             # le bot répond en public avec le récapitulatif et le bouton « Confirmer le défi » ; cette réponse devient la
@@ -332,7 +338,7 @@ async def _commande(eco, payload, membre, taches, app_id) -> dict:
             await _modifier(app_id, jeton, [eco_vues.erreur("Une erreur est survenue : préviens un admin avec l'heure de ta commande.")])
 
     _en_fond(taches, travail_sur)
-    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie", "recompense", "halloween-admin", "salon_mj") else {}}
+    return {"type": DIFFERE, "data": {"flags": PRIVE} if nom in ("vendre", "racheter", "receleur", "drop", "dropadmin", "loterie", "recompense", "halloween-admin", "salon_mj", "salon_cloture") else {}}
 
 
 async def _vue_echange(eco, e: dict, de, vers, statut: str | None = None) -> tuple[dict, list]:
@@ -753,6 +759,10 @@ async def _autocompletion(eco, payload) -> dict:
         return {"type": AUTOCOMPLETE, "data": {"choices": []}}
     tape = str(focus.get("value") or "").lower()
     choix = []
+    if data["name"] == "salon_cloture":
+        membre = await _membre(eco, payload)
+        admin = bool(membre) and await info.est_admin(eco, membre)
+        return {"type": AUTOCOMPLETE, "data": {"choices": await salon_mj.choix_cloture(eco, payload["member"]["user"]["id"], admin, tape)}}
     if focus["name"] == "objet" and data["name"] == "racheter":
         objets = {o["id"]: o for o in await eco.pb.lister("eco_objets", "actif=true")}
         for l in await eco.pb.lister("rec_objets", "actif=true && stock>0 && prix_vente>0"):
