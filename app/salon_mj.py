@@ -49,8 +49,8 @@ DISCORD_EPOCH_MS = 1420070400000
 
 IMAGE_COTE_MAX = 1600          # côté le plus long des images intégrées
 IMAGE_QUALITE = 80             # WebP
-GIF_GARDE_MAX = 3 * 1024 ** 2  # GIF animé gardé tel quel en dessous de cette taille (sinon 1re image seulement)
-FICHIER_INTEGRE_MAX = 8 * 1024 ** 2  # autres pièces jointes (PDF, texte…) intégrées en dessous de cette taille
+# Aucune limite de taille (demande de K du 26/11/2026) : GIF animés gardés tels quels, toutes les autres pièces jointes
+# (PDF, texte, son…) intégrées ; seules les images fixes sont réduites.
 EXTENSIONS_IMAGE = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
 
 
@@ -97,7 +97,7 @@ def reduire_image(contenu: bytes, cote: int = IMAGE_COTE_MAX) -> tuple[bytes, st
 
     img = Image.open(io.BytesIO(contenu))
     anime = getattr(img, "is_animated", False)
-    if anime and len(contenu) <= GIF_GARDE_MAX:
+    if anime:
         return contenu, Image.MIME.get(img.format, "image/gif")
     img.seek(0)
     img = ImageOps.exif_transpose(img) if not anime else img
@@ -248,7 +248,7 @@ def page_html(info: dict, messages: list[dict]) -> str:
             if uri:
                 bloc.append(f'<a class="fichier" href="{uri}" download="{e(nom)}">📎 {e(nom)}{poids}</a>')
             else:
-                bloc.append(f'<span class="fichier">📎 {e(nom)}{poids} — trop lourd, non conservé</span>')
+                bloc.append(f'<span class="fichier">📎 {e(nom)}{poids} — introuvable sur Discord, non conservé</span>')
         bloc.append("</div></div>")
         lignes.append("".join(bloc))
     lignes.append(f"</main><footer>Archive générée le {date_fr(info['genere'])} par le Scribe des Chroniques du Temps.</footer>")
@@ -341,10 +341,9 @@ async def lire_salon(salon: discord.TextChannel) -> list[dict]:
                         m["images"].append(uri)
                         continue
                 uri = None
-                if piece.size <= FICHIER_INTEGRE_MAX:
-                    contenu = await _telecharger(http, piece.url)
-                    if contenu:
-                        uri = data_uri(contenu, (piece.content_type or "application/octet-stream").split(";")[0])
+                contenu = await _telecharger(http, piece.url)
+                if contenu:
+                    uri = data_uri(contenu, (piece.content_type or "application/octet-stream").split(";")[0])
                 m["fichiers"].append((piece.filename, uri, piece.size))
             images_embeds = {}
             for emb in msg.embeds:
